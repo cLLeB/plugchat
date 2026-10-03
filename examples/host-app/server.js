@@ -10,11 +10,13 @@ import { createPlugChat } from '../../server/index.js';
 const here = (f) => fileURLToPath(new URL(f, import.meta.url));
 
 // The association's existing member database.
+// Different platforms know their people by different things; this one has a
+// mix, and PlugChat can find a member by any of them.
 const MEMBERS = {
-  ama: { name: 'Ama Owusu' },
-  kofi: { name: 'Kofi Mensah' },
-  esi: { name: 'Esi Appiah' },
-  yaw: { name: 'Yaw Boateng' },
+  ama: { name: 'Ama Owusu', email: 'ama@alumni.example' },
+  kofi: { name: 'Kofi Mensah', phone: '+233 24 555 0101' },
+  esi: { name: 'Esi Appiah', username: 'esi_a' },
+  yaw: { name: 'Yaw Boateng', handles: { member_no: 'AA-0042' } },
 };
 
 const chat = createPlugChat({
@@ -23,7 +25,10 @@ const chat = createPlugChat({
   dataDir: here('./data'),
 });
 // Make every member findable in chat, even before they first open it.
-for (const [id, m] of Object.entries(MEMBERS)) chat.store.upsertUser(id, m.name);
+for (const [id, { name, handles, ...rest }] of Object.entries(MEMBERS)) {
+  chat.store.upsertUser(id, name);
+  chat.store.setHandles(id, { ...rest, ...handles });
+}
 
 // The host's own session handling, reduced to a cookie for the demo.
 const sessionUser = (req) => /(?:^|;\s*)member=(\w+)/.exec(req.headers.cookie ?? '')?.[1];
@@ -40,7 +45,7 @@ const server = createServer(async (req, res) => {
     // The whole integration: confirm who is logged in, sign a short-lived token.
     const id = sessionUser(req);
     if (!MEMBERS[id]) return res.writeHead(401).end();
-    const token = chat.signToken({ sub: id, name: MEMBERS[id].name }, 600);
+    const token = chat.signToken({ sub: id, ...MEMBERS[id] }, 600);
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ token }));
   } else if (url.pathname === '/') {
     const id = sessionUser(req);

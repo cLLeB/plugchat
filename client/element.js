@@ -6,26 +6,43 @@
 //
 // All user-provided text is inserted with textContent, never as HTML.
 import { PlugChat } from './plugchat.js';
+import { CallManager } from './calls.js';
 
+const svg = (d) => `<svg viewBox="0 0 24 24">${d}</svg>`;
 const ICON = {
-  plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
-  back: '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>',
-  send: '<svg viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-3-7-7-1z"/></svg>',
-  clip: '<svg viewBox="0 0 24 24"><path d="M20 11l-8.5 8.5a5 5 0 01-7-7L13 4a3.5 3.5 0 015 5l-8.5 8.5a2 2 0 01-3-3L14 7"/></svg>',
-  lock: '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>',
-  info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>',
-  reply: '<svg viewBox="0 0 24 24"><path d="M10 8L5 12l5 4M5 12h9a5 5 0 015 5v1"/></svg>',
-  edit: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></svg>',
-  trash: '<svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg>',
-  smile: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 007 0M9 9.5v.5M15 9.5v.5"/></svg>',
-  timer: '<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>',
-  close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  plus: svg('<path d="M12 5v14M5 12h14"/>'),
+  back: svg('<path d="M15 5l-7 7 7 7"/>'),
+  next: svg('<path d="M9 5l7 7-7 7"/>'),
+  send: svg('<path d="M4 12l16-8-6 16-3-7-7-1z"/>'),
+  clip: svg('<path d="M20 11l-8.5 8.5a5 5 0 01-7-7L13 4a3.5 3.5 0 015 5l-8.5 8.5a2 2 0 01-3-3L14 7"/>'),
+  lock: svg('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>'),
+  info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>'),
+  reply: svg('<path d="M10 8L5 12l5 4M5 12h9a5 5 0 015 5v1"/>'),
+  forward: svg('<path d="M14 8l5 4-5 4M19 12h-9a5 5 0 00-5 5v1"/>'),
+  edit: svg('<path d="M4 20h4L19 9l-4-4L4 16v4z"/>'),
+  trash: svg('<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>'),
+  smile: svg('<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 007 0M9 9.5v.5M15 9.5v.5"/>'),
+  timer: svg('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/>'),
+  close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
+  pin: svg('<path d="M9 4h6l-1 6 3 3H7l3-3-1-6zM12 13v7"/>'),
+  flag: svg('<path d="M5 21V4h11l-2 4 2 4H5"/>'),
+  phone: svg('<path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/>'),
+  video: svg('<rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3"/>'),
+  mic: svg('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/>'),
+  stop: svg('<rect x="7" y="7" width="10" height="10" rx="1.5"/>'),
+  poll: svg('<path d="M5 20V10M12 20V4M19 20v-7"/>'),
+  map: svg('<path d="M12 21s7-6.2 7-11a7 7 0 10-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>'),
+  eye: svg('<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
+  mute: svg('<path d="M6 9a6 6 0 0110-4.5M18 9c0 5 2 6 2 6H9M4 4l16 16M10 20a2 2 0 004 0"/>'),
+  file: svg('<path d="M7 3h7l4 4v14H7zM14 3v4h4"/>'),
 };
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 const INLINE_IMAGES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+const PLAYABLE = /^(audio\/(webm|ogg|mpeg|mp4|wav|x-wav|aac)|video\/(mp4|webm))$/;
 const TIMERS = [[0, 'Off'], [60, '1 minute'], [3600, '1 hour'], [86400, '1 day'], [604800, '1 week']];
+const REPORT_REASONS = ['Spam', 'Harassment or bullying', 'Scam or fraud', 'Inappropriate content', 'Something else'];
 
-const CSS = `
+const STYLE = `
 :host {
   --pc-accent: #3b5bdb; --pc-accent-fg: #fff;
   --pc-bg: #fff; --pc-surface: #f5f6f8; --pc-fg: #16181d; --pc-muted: #6b7280;
@@ -44,26 +61,41 @@ const CSS = `
   }
 }
 * { box-sizing: border-box; }
-.root { display: flex; height: 100%; background: var(--pc-bg); border: 1px solid var(--pc-border); border-radius: var(--pc-radius); overflow: hidden; }
+[hidden] { display: none !important; }
+.root { display: flex; height: 100%; background: var(--pc-bg); border: 1px solid var(--pc-border); border-radius: var(--pc-radius); overflow: hidden; position: relative; }
 svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--pc-accent); outline-offset: 2px; }
 .icon { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: var(--pc-muted); flex: none; }
 .icon:hover { background: var(--pc-surface); color: var(--pc-fg); }
+.icon.on { color: var(--pc-accent); }
+.icon.rec { color: #fff; background: var(--pc-danger); }
+input[type="text"], input[type="search"], select { font: inherit; color: inherit; background: var(--pc-surface); border: 1px solid var(--pc-border); border-radius: 10px; padding: 8px 12px; width: 100%; min-width: 0; }
 
 .side { width: 300px; flex: none; display: flex; flex-direction: column; border-right: 1px solid var(--pc-border); min-width: 0; }
-.bar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; min-height: 58px; border-bottom: 1px solid var(--pc-border); }
+.bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; min-height: 58px; border-bottom: 1px solid var(--pc-border); }
 .bar h2 { margin: 0; font-size: 17px; flex: 1; }
+.find { padding: 8px 10px 2px; }
+.stories { display: flex; gap: 10px; padding: 10px 12px 6px; overflow-x: auto; flex: none; }
+.story { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 54px; flex: none; font-size: 11px; color: var(--pc-muted); }
+.story span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ring { padding: 2px; border-radius: 50%; border: 2px solid var(--pc-border); }
+.ring.new { border-color: var(--pc-accent); }
 .list { overflow-y: auto; flex: 1; padding: 6px; }
+.section { font-size: 12px; font-weight: 600; color: var(--pc-muted); padding: 10px 8px 4px; text-transform: uppercase; letter-spacing: .04em; }
+.linkrow { width: 100%; text-align: left; padding: 8px; color: var(--pc-accent); font-size: 13px; border-radius: 10px; }
+.linkrow:hover { background: var(--pc-surface); }
 .conv { display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; padding: 9px 8px; border-radius: 10px; }
 .conv:hover { background: var(--pc-surface); }
 .conv[aria-current="true"] { background: color-mix(in srgb, var(--pc-accent) 14%, transparent); }
 .conv .body { flex: 1; min-width: 0; }
-.line { display: flex; gap: 6px; align-items: baseline; }
+.line { display: flex; gap: 6px; align-items: center; }
+.line svg { width: 13px; height: 13px; color: var(--pc-muted); }
 .name { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .when { font-size: 12px; color: var(--pc-muted); flex: none; }
 .preview { color: var(--pc-muted); font-size: 13px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .badge { background: var(--pc-accent); color: var(--pc-accent-fg); border-radius: 10px; font-size: 11px; font-weight: 700; padding: 1px 7px; flex: none; }
+.badge.quiet { background: var(--pc-muted); }
 .avatar { width: 40px; height: 40px; border-radius: 50%; flex: none; display: grid; place-items: center; font-weight: 600; color: #fff; position: relative; background-size: cover; background-position: center; font-size: 15px; }
 .avatar.sm { width: 28px; height: 28px; font-size: 11px; }
 .avatar .dot { position: absolute; right: -1px; bottom: -1px; width: 12px; height: 12px; border-radius: 50%; background: #2f9e44; border: 2px solid var(--pc-bg); }
@@ -75,29 +107,46 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .bar .sub { font-size: 12px; color: var(--pc-muted); display: flex; align-items: center; gap: 4px; }
 .bar .sub svg { width: 12px; height: 12px; }
 .backbtn { display: none; }
+.pinbar { display: flex; gap: 8px; align-items: center; padding: 6px 14px; border-bottom: 1px solid var(--pc-border); font-size: 13px; width: 100%; text-align: left; color: var(--pc-muted); }
+.pinbar span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pinbar svg { width: 15px; height: 15px; color: var(--pc-accent); }
 .msgs { flex: 1; overflow-y: auto; padding: 14px 14px 6px; display: flex; flex-direction: column; gap: 2px; }
 .day, .sys { align-self: center; font-size: 12px; color: var(--pc-muted); background: var(--pc-surface); padding: 3px 10px; border-radius: 10px; margin: 8px 0; }
 .more { align-self: center; color: var(--pc-accent); font-size: 13px; padding: 6px 10px; }
-.row { display: flex; gap: 8px; align-items: flex-end; max-width: 100%; position: relative; }
+.row { display: flex; gap: 8px; align-items: flex-end; max-width: 100%; position: relative; border-radius: 12px; }
 .row.first { margin-top: 8px; }
 .row.mine { flex-direction: row-reverse; }
+.row.flash { background: color-mix(in srgb, var(--pc-accent) 16%, transparent); }
 .row .spacer { width: 28px; flex: none; }
 .col { display: flex; flex-direction: column; align-items: flex-start; max-width: min(78%, 520px); min-width: 0; }
 .mine .col { align-items: flex-end; }
 .bubble { background: var(--pc-bubble); padding: 7px 11px; border-radius: 16px; overflow-wrap: anywhere; white-space: pre-wrap; min-width: 0; max-width: 100%; }
 .mine .bubble { background: var(--pc-accent); color: var(--pc-accent-fg); }
+.bubble.mention { box-shadow: 0 0 0 2px var(--pc-accent); }
 .bubble a { color: inherit; }
 .bubble.ghost { background: none; border: 1px dashed var(--pc-border); color: var(--pc-muted); font-style: italic; }
 .sender { font-size: 12px; font-weight: 600; color: var(--pc-accent); margin-bottom: 2px; }
+.tag { font-size: 11px; opacity: .75; display: flex; align-items: center; gap: 4px; margin-bottom: 2px; font-style: italic; }
+.tag svg { width: 12px; height: 12px; }
 .quote { font-size: 12px; opacity: .8; border-left: 3px solid currentColor; padding: 1px 8px; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
 .meta { font-size: 11px; opacity: .7; margin-left: 8px; float: right; margin-top: 4px; display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
 .meta svg { width: 11px; height: 11px; }
 .pic { display: block; max-width: 240px; max-height: 240px; border-radius: 10px; margin-bottom: 4px; }
+audio, video.media { display: block; max-width: 260px; margin-bottom: 4px; border-radius: 10px; }
 .file { display: flex; gap: 8px; align-items: center; text-decoration: underline; margin-bottom: 2px; text-align: left; }
+.once { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+.poll { display: flex; flex-direction: column; gap: 6px; min-width: 200px; white-space: normal; }
+.poll .q { font-weight: 600; }
+.poll small { opacity: .75; }
+.opt { position: relative; display: flex; gap: 8px; text-align: left; padding: 6px 10px; border-radius: 10px; overflow: hidden; background: color-mix(in srgb, currentColor 10%, transparent); }
+.opt.on { box-shadow: inset 0 0 0 2px currentColor; }
+.opt .fill { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, currentColor 18%, transparent); }
+.opt .lbl { flex: 1; position: relative; }
+.opt .cnt { position: relative; font-weight: 600; }
 .reacts { display: flex; gap: 4px; flex-wrap: wrap; margin: 2px 0 4px; }
 .react { border: 1px solid var(--pc-border); background: var(--pc-bg); border-radius: 12px; padding: 0 7px; font-size: 13px; line-height: 22px; }
 .react.on { border-color: var(--pc-accent); background: color-mix(in srgb, var(--pc-accent) 14%, var(--pc-bg)); }
-.acts { display: none; align-items: center; background: var(--pc-bg); border: 1px solid var(--pc-border); border-radius: 18px; padding: 2px; align-self: center; flex: none; }
+.acts { display: none; align-items: center; background: var(--pc-bg); border: 1px solid var(--pc-border); border-radius: 18px; padding: 2px; align-self: center; flex: none; flex-wrap: wrap; max-width: 190px; }
 .row:hover .acts, .row.active .acts, .row:focus-within .acts { display: flex; }
 .acts .icon { width: 28px; height: 28px; }
 .acts svg { width: 16px; height: 16px; }
@@ -108,32 +157,53 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .banner { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-top: 1px solid var(--pc-border); font-size: 13px; color: var(--pc-muted); }
 .banner span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .banner .icon { width: 26px; height: 26px; }
-.composer { display: flex; gap: 6px; align-items: flex-end; padding: 10px 12px; border-top: 1px solid var(--pc-border); }
-textarea { flex: 1; resize: none; border: 1px solid var(--pc-border); border-radius: 18px; padding: 8px 14px; font: inherit; color: inherit; background: var(--pc-surface); max-height: 120px; min-height: 38px; }
+.composer { display: flex; gap: 4px; align-items: flex-end; padding: 10px 12px; border-top: 1px solid var(--pc-border); position: relative; }
+.menu { position: absolute; left: 10px; bottom: calc(100% - 4px); background: var(--pc-bg); border: 1px solid var(--pc-border); border-radius: 12px; padding: 4px; display: flex; flex-direction: column; min-width: 190px; box-shadow: 0 6px 24px rgba(0, 0, 0, .18); z-index: 2; }
+.menu button { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 8px; text-align: left; }
+.menu button:hover { background: var(--pc-surface); }
+.menu svg { width: 18px; height: 18px; color: var(--pc-muted); }
+textarea { flex: 1; resize: none; border: 1px solid var(--pc-border); border-radius: 18px; padding: 8px 14px; font: inherit; color: inherit; background: var(--pc-surface); max-height: 120px; min-height: 38px; min-width: 0; }
 .sendbtn { background: var(--pc-accent); color: var(--pc-accent-fg); }
 .sendbtn:hover { background: var(--pc-accent); color: var(--pc-accent-fg); filter: brightness(1.1); }
 .sendbtn:disabled { opacity: .45; cursor: default; }
 .error { color: var(--pc-danger); font-size: 13px; padding: 4px 14px; }
 
-dialog { border: 1px solid var(--pc-border); border-radius: var(--pc-radius); background: var(--pc-bg); color: var(--pc-fg); padding: 0; width: min(380px, calc(100% - 24px)); max-height: 85%; }
-dialog::backdrop { background: rgba(0, 0, 0, .4); }
+dialog { border: 1px solid var(--pc-border); border-radius: var(--pc-radius); background: var(--pc-bg); color: var(--pc-fg); padding: 0; width: min(400px, calc(100% - 24px)); max-height: 88%; }
+dialog::backdrop { background: rgba(0, 0, 0, .45); }
 dialog form, dialog .panel { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
-dialog h3 { margin: 0; font-size: 16px; display: flex; align-items: center; }
-dialog h3 span { flex: 1; }
-dialog input[type="text"], dialog input[type="search"], select { font: inherit; color: inherit; background: var(--pc-surface); border: 1px solid var(--pc-border); border-radius: 10px; padding: 8px 12px; width: 100%; }
-.people { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; }
-.person { display: flex; gap: 10px; align-items: center; padding: 6px 4px; border-radius: 8px; cursor: pointer; }
+dialog h3 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+dialog h3 span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+dialog textarea { border-radius: 10px; min-height: 80px; flex: none; }
+.people { max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; flex: none; }
+.person { display: flex; gap: 10px; align-items: center; padding: 6px 4px; border-radius: 8px; cursor: pointer; width: 100%; text-align: left; }
 .person:hover { background: var(--pc-surface); }
 .person span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .person small { color: var(--pc-muted); }
 .check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
 .check small { color: var(--pc-muted); display: block; }
-.btn { background: var(--pc-accent); color: var(--pc-accent-fg); border-radius: 10px; padding: 9px 14px; font-weight: 600; }
+.btn { background: var(--pc-accent); color: var(--pc-accent-fg); border-radius: 10px; padding: 9px 14px; font-weight: 600; text-align: center; }
 .btn:disabled { opacity: .45; cursor: default; }
 .btn.plain { background: var(--pc-surface); color: var(--pc-fg); }
 .btn.warn { background: none; color: var(--pc-danger); border: 1px solid var(--pc-border); }
+.inline { display: flex; gap: 8px; align-items: center; }
 .code { font: 600 16px/1.6 ui-monospace, Consolas, monospace; letter-spacing: 1px; background: var(--pc-surface); padding: 10px; border-radius: 10px; text-align: center; }
-label.field { font-size: 13px; color: var(--pc-muted); display: flex; flex-direction: column; gap: 4px; }
+label.field, .field { font-size: 13px; color: var(--pc-muted); display: flex; flex-direction: column; gap: 4px; }
+.storyview { min-height: 240px; display: grid; place-items: center; background: var(--pc-surface); border-radius: 10px; padding: 16px; text-align: center; font-size: 17px; overflow-wrap: anywhere; white-space: pre-wrap; gap: 10px; }
+.storyview img { max-width: 100%; max-height: 300px; border-radius: 8px; }
+.steps { display: flex; gap: 3px; }
+.steps i { flex: 1; height: 3px; border-radius: 2px; background: var(--pc-border); }
+.steps i.on { background: var(--pc-accent); }
+
+.call { position: absolute; inset: 0; background: #0d0f13; color: #fff; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+.call video.remote { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.call video.local { position: absolute; right: 14px; top: 14px; width: 28%; max-width: 160px; border-radius: 10px; background: #000; }
+.call .cinfo { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; text-shadow: 0 1px 3px #000; }
+.call .cinfo .avatar { width: 72px; height: 72px; font-size: 26px; }
+.call .cbtns { position: absolute; bottom: 22px; display: flex; gap: 14px; }
+.call .cbtns button { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .18); color: #fff; }
+.call .cbtns .off { background: #fff; color: #111; }
+.call .cbtns .hang { background: #e03131; }
+.call .cbtns .ok { background: #2f9e44; }
 
 @container (max-width: 640px) {
   .side { width: 100%; border-right: 0; }
@@ -142,7 +212,6 @@ label.field { font-size: 13px; color: var(--pc-muted); display: flex; flex-direc
   .root.open .main { display: flex; }
   .backbtn { display: inline-grid; }
 }
-@media (prefers-reduced-motion: no-preference) { .msgs { scroll-behavior: smooth; } }
 `;
 
 function h(tag, props = {}, ...kids) {
@@ -154,12 +223,16 @@ function h(tag, props = {}, ...kids) {
     else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
     else el.setAttribute(k, v === true ? '' : v);
   }
-  el.append(...kids.flat().filter((c) => c != null && c !== false));
+  el.append(...kids.flat(Infinity).filter((c) => c != null && c !== false));
   return el;
 }
 
+// Like replaceChildren, but drops null/false and flattens arrays the way h() does.
+const fill = (el, ...kids) => el.replaceChildren(...kids.flat(Infinity).filter((c) => c != null && c !== false));
+
 const hue = (s) => [...s].reduce((a, c) => (a * 31 + c.codePointAt(0)) % 360, 7);
 const initials = (name) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => [...w][0].toUpperCase()).join('') || '?';
+const first = (name) => name.split(/\s+/)[0];
 const clock = (t) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 const dayLabel = (t) => {
   const d = new Date(t), today = new Date();
@@ -169,6 +242,11 @@ const dayLabel = (t) => {
 };
 const shortWhen = (t) => (new Date(t).toDateString() === new Date().toDateString() ? clock(t) : new Date(t).toLocaleDateString([], { month: 'short', day: 'numeric' }));
 const size = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+const mmss = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
+const debounce = (fn, ms) => {
+  let t;
+  return (...a) => (clearTimeout(t), (t = setTimeout(() => fn(...a), ms)));
+};
 
 function linkify(text) {
   const out = [];
@@ -183,20 +261,28 @@ function linkify(text) {
 }
 
 class PlugChatElement extends HTMLElement {
-  static observedAttributes = ['server', 'token', 'token-url', 'peer'];
+  static observedAttributes = ['server', 'token', 'token-url', 'peer', 'peer-handle'];
 
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
     this.chat = null;
+    this.calls = null;
     this.convs = new Map();
     this.msgs = new Map(); // conversationId -> { list, more }
+    this.pins = [];
+    this.opened = new Map(); // view-once content this device was handed, kept until the thread closes
+    this.feed = [];
+    this.hits = [];
+    this.query = '';
+    this.showArchived = false;
     this.activeId = null;
     this.typing = new Map(); // conversationId -> Map<userId, timer>
     this.blobs = new Map(); // fileId -> Promise<objectURL>
     this.replyTo = null;
     this.editing = null;
     this.pendingFile = null;
+    this.viewOnce = false;
     this._getToken = null;
     this._started = false;
   }
@@ -219,16 +305,21 @@ class PlugChatElement extends HTMLElement {
 
   disconnectedCallback() {
     document.removeEventListener('visibilitychange', this._onVisible);
+    this.calls?.close();
     this.chat?.close();
-    this.chat = null;
+    this.chat = this.calls = null;
     this._started = false;
     for (const p of this.blobs.values()) p.then((u) => URL.revokeObjectURL(u), () => {});
     this.blobs.clear();
   }
 
   attributeChangedCallback(name, old, value) {
-    if (name === 'peer' && this.chat?.me && value && value !== old) this._openPeer(value);
+    if ((name === 'peer' || name === 'peer-handle') && this.chat?.me && value && value !== old) this._openPeer();
     else this._maybeStart();
+  }
+
+  _on(feature) {
+    return this.getAttribute(feature) !== 'off';
   }
 
   _tokenSource() {
@@ -241,8 +332,7 @@ class PlugChatElement extends HTMLElement {
         return (await res.json()).token;
       };
     }
-    const token = this.getAttribute('token');
-    return token ? async () => this.getAttribute('token') : null;
+    return this.getAttribute('token') ? async () => this.getAttribute('token') : null;
   }
 
   async _maybeStart() {
@@ -251,14 +341,19 @@ class PlugChatElement extends HTMLElement {
     if (this._started || !this.isConnected || !server || !getToken) return;
     this._started = true;
     try {
-      const chat = (this.chat = new PlugChat({ url: server, getToken, e2ee: this.getAttribute('e2ee') !== 'off' }));
+      const chat = (this.chat = new PlugChat({ url: server, getToken, e2ee: this._on('e2ee') }));
       this._subscribe(chat);
       await chat.connect();
+      if (this._on('calls') && CallManager.supported) {
+        this.calls = new CallManager(chat);
+        this.calls.on('incoming', (call) => this._showCall(call));
+      }
       await this._reload();
-      if (this.getAttribute('peer')) await this._openPeer(this.getAttribute('peer'));
+      this._loadStories();
+      await this._openPeer();
       this.dispatchEvent(new CustomEvent('plugchat:ready', { detail: { user: chat.me } }));
     } catch (e) {
-      this.$list.replaceChildren(h('div', { class: 'hint' }, `Chat is unavailable: ${e.message}`));
+      fill(this.$list, h('div', { class: 'hint' }, `Chat is unavailable: ${e.message}`));
       this._started = false;
     }
   }
@@ -267,15 +362,24 @@ class PlugChatElement extends HTMLElement {
 
   _build() {
     const style = h('style');
-    style.textContent = CSS;
+    style.textContent = STYLE;
     this.$list = h('div', { class: 'list', role: 'list' }, h('div', { class: 'hint' }, 'Connecting…'));
+    this.$stories = h('div', { class: 'stories', hidden: true });
     this.$main = h('section', { class: 'main' }, h('div', { class: 'hint' }, 'Select a conversation to start chatting.'));
+    const runSearch = debounce(() => this._search(), 250);
     this.$root = h('div', { class: 'root' },
       h('aside', { class: 'side' },
         h('div', { class: 'bar' },
           h('h2', {}, this.getAttribute('heading') ?? 'Chats'),
           h('button', { class: 'icon', icon: 'plus', title: 'New chat', 'aria-label': 'New chat', onclick: () => this._newChatDialog() }),
         ),
+        h('div', { class: 'find' }, h('input', { type: 'search', placeholder: 'Search chats and messages', 'aria-label': 'Search chats and messages',
+          oninput: (e) => {
+            this.query = e.target.value;
+            this._renderList();
+            runSearch();
+          } })),
+        this.$stories,
         this.$list,
       ),
       this.$main,
@@ -298,15 +402,24 @@ class PlugChatElement extends HTMLElement {
       this._announceUnread();
       if (m.senderId !== chat.me.id) this.dispatchEvent(new CustomEvent('plugchat:message', { detail: { message: m } }));
     });
-    chat.on('message.updated', (m) => this._patch(m.conversationId, m.id, () => m));
+    chat.on('message.updated', (m) => {
+      if (m.conversationId === this.activeId) {
+        this.pins = this.pins.filter((p) => p.id !== m.id);
+        if (m.pinned) this.pins.unshift(m);
+        this.pins.sort((a, b) => b.pinned.at - a.pinned.at);
+        this._renderPins();
+      }
+      this._patch(m.conversationId, m.id, () => m);
+    });
     chat.on('message.deleted', (e) => {
       const state = this.msgs.get(e.conversationId);
       if (state && e.expired) state.list = state.list.filter((m) => m.id !== e.messageId);
-      else this._patch(e.conversationId, e.messageId, (m) => ({ ...m, deleted: true, text: '', file: null, reactions: {} }));
+      else this._patch(e.conversationId, e.messageId, (m) => ({ ...m, deleted: true, text: '', file: null, reactions: {}, pinned: null }));
       const conv = this.convs.get(e.conversationId);
       if (conv?.lastMessage?.id === e.messageId) conv.lastMessage = e.expired ? null : { ...conv.lastMessage, deleted: true, text: '' };
+      this.pins = this.pins.filter((p) => p.id !== e.messageId);
       this._renderList();
-      if (e.conversationId === this.activeId) this._renderMessages();
+      if (e.conversationId === this.activeId) (this._renderPins(), this._renderMessages());
     });
     chat.on('reaction', (e) => this._patch(e.conversationId, e.messageId, (m) => ({ ...m, reactions: e.reactions })));
     chat.on('read', (e) => {
@@ -324,7 +437,8 @@ class PlugChatElement extends HTMLElement {
     chat.on('conversation', (c) => {
       this.convs.set(c.id, c);
       this._renderList();
-      if (c.id === this.activeId) this._renderHeader();
+      this._announceUnread();
+      if (c.id === this.activeId) (this._renderHeader(), this._renderComposerState());
     });
     chat.on('conversation.removed', (e) => {
       this.convs.delete(e.conversationId);
@@ -332,10 +446,12 @@ class PlugChatElement extends HTMLElement {
       if (e.conversationId === this.activeId) this._select(null);
       this._renderList();
     });
+    for (const type of ['story.new', 'story.deleted', 'story.viewed']) chat.on(type, () => this._loadStories());
     chat.on('connection', (e) => {
       if (!e.reconnected) return;
       // Catch up on whatever happened while we were offline.
       this.msgs.clear();
+      this._loadStories();
       this._reload().then(() => this.activeId && this._select(this.activeId));
     });
   }
@@ -347,7 +463,7 @@ class PlugChatElement extends HTMLElement {
   }
 
   _announceUnread() {
-    const count = [...this.convs.values()].reduce((n, c) => n + c.unread, 0);
+    const count = [...this.convs.values()].reduce((n, c) => n + (c.muted ? 0 : c.unread), 0);
     if (count === this._lastUnread) return;
     this._lastUnread = count;
     this.dispatchEvent(new CustomEvent('plugchat:unread', { detail: { count } }));
@@ -371,7 +487,10 @@ class PlugChatElement extends HTMLElement {
     return conv.type === 'group' ? conv.title : this._other(conv)?.name ?? 'Unknown';
   }
   _memberName(conv, userId) {
-    return conv.members.find((m) => m.userId === userId)?.name ?? 'Former member';
+    return conv?.members.find((m) => m.userId === userId)?.name ?? 'Former member';
+  }
+  _role(conv) {
+    return conv.members.find((m) => m.userId === this.chat.me.id)?.role;
   }
   _avatar(name, url, { small = false, online = false } = {}) {
     const el = h('div', { class: `avatar${small ? ' sm' : ''}`, 'aria-hidden': 'true' });
@@ -381,41 +500,112 @@ class PlugChatElement extends HTMLElement {
     if (online) el.append(h('span', { class: 'dot' }));
     return el;
   }
-  _preview(conv, m) {
-    if (!m) return conv.encrypted ? 'Encrypted conversation' : 'No messages yet';
+  _snippet(m) {
     if (m.deleted) return 'Message deleted';
     if (m.undecryptable) return 'Encrypted message';
-    const who = m.kind === 'system' ? '' : m.senderId === this.chat.me.id ? 'You: ' : conv.type === 'group' ? `${this._memberName(conv, m.senderId).split(' ')[0]}: ` : '';
-    return who + (m.text || (m.file ? `📎 ${m.file.name}` : ''));
+    if (m.viewOnce) return 'View-once message';
+    if (m.kind === 'poll') return `Poll: ${m.text}`;
+    if (m.kind === 'location') return 'Shared a location';
+    return m.text || (m.file ? `📎 ${m.file.name}` : '');
+  }
+  _preview(conv, m) {
+    if (!m) return conv.encrypted ? 'Encrypted conversation' : 'No messages yet';
+    const who = m.kind === 'system' ? '' : m.senderId === this.chat.me.id ? 'You: ' : conv.type === 'group' ? `${first(this._memberName(conv, m.senderId))}: ` : '';
+    return who + this._snippet(m);
   }
 
-  // ---- conversation list ----
+  // ---- conversation list, search, stories ----
 
   _renderList() {
     if (!this.chat?.me) return;
-    const convs = [...this.convs.values()].sort((a, b) => b.updatedAt - a.updatedAt);
-    if (!convs.length) return this.$list.replaceChildren(h('div', { class: 'hint' }, 'No conversations yet. Press + to start one.'));
-    this.$list.replaceChildren(...convs.map((c) => {
+    const q = this.query.trim().toLowerCase();
+    const all = [...this.convs.values()];
+    const archived = all.filter((c) => c.archived);
+    const shown = (q ? all.filter((c) => this._title(c).toLowerCase().includes(q)) : this.showArchived ? archived : all.filter((c) => !c.archived))
+      .sort((a, b) => b.pinned - a.pinned || b.updatedAt - a.updatedAt);
+
+    const nodes = [];
+    if (!q && this.showArchived) nodes.push(h('button', { class: 'linkrow', onclick: () => ((this.showArchived = false), this._renderList()) }, '← Back to chats'));
+    for (const c of shown) {
       const other = c.type === 'dm' ? this._other(c) : null;
       const title = this._title(c);
-      return h('button', { class: 'conv', role: 'listitem', 'aria-current': String(c.id === this.activeId), onclick: () => this._select(c.id) },
+      nodes.push(h('button', { class: 'conv', role: 'listitem', 'aria-current': String(c.id === this.activeId), onclick: () => this._select(c.id) },
         this._avatar(title, other?.avatar, { online: !!other && this.chat.online.has(other.userId) }),
         h('div', { class: 'body' },
-          h('div', { class: 'line' }, h('span', { class: 'name' }, title), c.lastMessage && h('span', { class: 'when' }, shortWhen(c.lastMessage.createdAt))),
+          h('div', { class: 'line' },
+            h('span', { class: 'name' }, title),
+            c.pinned && h('span', { icon: 'pin', title: 'Pinned' }),
+            c.muted && h('span', { icon: 'mute', title: 'Muted' }),
+            c.lastMessage && h('span', { class: 'when' }, shortWhen(c.lastMessage.createdAt)),
+          ),
           h('div', { class: 'line' },
             h('span', { class: 'preview' }, this._preview(c, c.lastMessage)),
-            c.unread > 0 && c.id !== this.activeId && h('span', { class: 'badge', 'aria-label': `${c.unread} unread` }, c.unread > 99 ? '99+' : String(c.unread)),
+            c.unread > 0 && c.id !== this.activeId && h('span', { class: `badge${c.muted ? ' quiet' : ''}`, 'aria-label': `${c.unread} unread` }, c.unread > 99 ? '99+' : String(c.unread)),
           ),
         ),
-      );
-    }));
+      ));
+    }
+    if (!q && !this.showArchived && archived.length) {
+      nodes.push(h('button', { class: 'linkrow', onclick: () => ((this.showArchived = true), this._renderList()) }, `Archived (${archived.length})`));
+    }
+    if (q && this.hits.length) {
+      nodes.push(h('div', { class: 'section' }, 'Messages'));
+      for (const m of this.hits) {
+        const c = this.convs.get(m.conversationId);
+        if (!c) continue;
+        nodes.push(h('button', { class: 'conv', onclick: () => this._select(c.id, m.id) },
+          this._avatar(this._title(c), null, { small: true }),
+          h('div', { class: 'body' },
+            h('div', { class: 'line' }, h('span', { class: 'name' }, this._title(c)), h('span', { class: 'when' }, shortWhen(m.createdAt))),
+            h('div', { class: 'line' }, h('span', { class: 'preview' }, `${first(this._memberName(c, m.senderId))}: ${m.text}`)),
+          )));
+      }
+    }
+    if (!nodes.length) nodes.push(h('div', { class: 'hint' }, q ? 'Nothing found.' : 'No conversations yet. Press + to start one.'));
+    fill(this.$list, ...nodes);
+  }
+
+  async _search() {
+    const q = this.query.trim();
+    if (q.length < 2) {
+      this.hits = [];
+      return this._renderList();
+    }
+    // The server cannot read encrypted chats, so those are searched here, over what this device has loaded.
+    const local = [];
+    for (const [id, state] of this.msgs) {
+      if (!this.convs.get(id)?.encrypted) continue;
+      local.push(...state.list.filter((m) => m.kind === 'text' && !m.deleted && m.text.toLowerCase().includes(q.toLowerCase())));
+    }
+    const remote = await this.chat.search(q).catch(() => []);
+    if (q !== this.query.trim()) return;
+    this.hits = [...local, ...remote].sort((a, b) => b.createdAt - a.createdAt).slice(0, 30);
+    this._renderList();
+  }
+
+  async _loadStories() {
+    if (!this.chat?.me?.features?.stories || !this._on('stories')) return;
+    this.feed = await this.chat.stories().catch(() => []);
+    const me = this.chat.me;
+    const mine = this.feed.find((g) => g.user.id === me.id);
+    const ring = (group, label, unseen, onclick) =>
+      h('button', { class: 'story', title: label, onclick }, h('span', { class: `ring${unseen ? ' new' : ''}` }, this._avatar(group.user.name, group.user.avatar)), h('span', {}, label));
+    this.$stories.hidden = false;
+    fill(this.$stories, 
+      mine ? ring(mine, 'My story', false, () => this._storyDialog(mine)) : ring({ user: me }, 'Add story', false, () => this._newStoryDialog()),
+      this.feed.filter((g) => g.user.id !== me.id).map((g) => ring(g, first(g.user.name), g.stories.some((s) => !s.seen), () => this._storyDialog(g))),
+    );
   }
 
   // ---- thread ----
 
-  async _openPeer(userId) {
+  async _openPeer() {
+    const id = this.getAttribute('peer');
+    const handle = this.getAttribute('peer-handle');
+    if (!id && !handle) return;
     try {
-      const conv = await this.chat.openDm(userId);
+      const options = { encrypted: !!this.chat.me.features?.requireEncryption };
+      const conv = id ? await this.chat.openDm(id, options) : await this.chat.openDmByHandle(handle, options);
       this.convs.set(conv.id, conv);
       await this._select(conv.id);
     } catch (e) {
@@ -423,14 +613,19 @@ class PlugChatElement extends HTMLElement {
     }
   }
 
-  async _select(id) {
+  async _select(id, focusMessageId) {
     this.activeId = id;
     this.replyTo = this.editing = this.pendingFile = null;
+    this.viewOnce = false;
+    this.pins = [];
+    this.opened.clear();
+    this._stopRecording(true);
     this.$root.classList.toggle('open', !!id);
     this._renderList();
-    if (!id) return this.$main.replaceChildren(h('div', { class: 'hint' }, 'Select a conversation to start chatting.'));
+    if (!id) return fill(this.$main, h('div', { class: 'hint' }, 'Select a conversation to start chatting.'));
 
     this.$header = h('div', { class: 'bar' });
+    this.$pins = h('button', { class: 'pinbar', hidden: true });
     this.$msgs = h('div', { class: 'msgs', role: 'log', 'aria-live': 'polite' });
     this.$typing = h('div', { class: 'typing' });
     this.$error = h('div', { class: 'error', hidden: true, role: 'alert' });
@@ -448,39 +643,52 @@ class PlugChatElement extends HTMLElement {
       this._renderBanner();
       this._onInput();
     } });
+    this.$menu = h('div', { class: 'menu', hidden: true, role: 'menu' });
+    this.$mic = h('button', { class: 'icon', icon: 'mic', type: 'button', title: 'Record a voice note', 'aria-label': 'Record a voice note',
+      hidden: !(navigator.mediaDevices && globalThis.MediaRecorder), onclick: () => this._toggleRecording() });
     this.$send = h('button', { class: 'icon sendbtn', icon: 'send', type: 'submit', title: 'Send', 'aria-label': 'Send', disabled: true });
-    this.$main.replaceChildren(
-      this.$header, this.$msgs, this.$typing, this.$error, this.$banner,
-      h('form', { class: 'composer', onsubmit: (e) => (e.preventDefault(), this._submit()) },
-        this.$file,
-        h('button', { class: 'icon', icon: 'clip', type: 'button', title: 'Attach a file', 'aria-label': 'Attach a file', onclick: () => this.$file.click() }),
-        this.$input, this.$send,
-      ),
+    this.$composer = h('form', { class: 'composer', onsubmit: (e) => (e.preventDefault(), this._submit()) },
+      this.$file, this.$menu,
+      h('button', { class: 'icon', icon: 'plus', type: 'button', title: 'Attach', 'aria-label': 'Attach', 'aria-haspopup': 'menu', onclick: () => this._toggleMenu() }),
+      this.$input, this.$mic, this.$send,
     );
+    this.$readonly = h('div', { class: 'hint', hidden: true }, 'Only admins can post in this channel.');
+    fill(this.$main, this.$header, this.$pins, this.$msgs, this.$typing, this.$error, this.$banner, this.$composer, this.$readonly);
     this._renderHeader();
+    this._renderComposerState();
+    this.chat.pins(id).then((p) => this.activeId === id && ((this.pins = p), this._renderPins()), () => {});
 
     if (!this.msgs.has(id)) {
-      this.$msgs.replaceChildren(h('div', { class: 'hint' }, 'Loading…'));
+      fill(this.$msgs, h('div', { class: 'hint' }, 'Loading…'));
       try {
         const list = await this.chat.messages(id);
         this.msgs.set(id, { list, more: list.length === 50 });
       } catch (e) {
-        if (this.activeId === id) this.$msgs.replaceChildren(h('div', { class: 'hint' }, `Could not load messages: ${e.message}`));
+        if (this.activeId === id) fill(this.$msgs, h('div', { class: 'hint' }, `Could not load messages: ${e.message}`));
         return;
       }
       if (this.activeId !== id) return;
     }
     this._renderMessages({ stick: true, instant: true });
     this._markRead();
-    this.$input.focus({ preventScroll: true });
+    if (focusMessageId) this._jumpTo(focusMessageId);
+    else this.$input.focus({ preventScroll: true });
+  }
+
+  _renderComposerState() {
+    const conv = this.convs.get(this.activeId);
+    if (!conv || !this.$composer) return;
+    const readonly = conv.announce && this._role(conv) === 'member';
+    this.$composer.hidden = readonly;
+    this.$readonly.hidden = !readonly;
   }
 
   _renderHeader() {
     const conv = this.convs.get(this.activeId);
     if (!conv || !this.$header) return;
     const other = conv.type === 'dm' ? this._other(conv) : null;
-    const status = other ? (this.chat.online.has(other.userId) ? 'Online' : 'Offline') : `${conv.members.length} members`;
-    this.$header.replaceChildren(
+    const status = other ? (this.chat.online.has(other.userId) ? 'Online' : 'Offline') : `${conv.members.length} members${conv.announce ? ' · announcements' : ''}`;
+    fill(this.$header, 
       h('button', { class: 'icon backbtn', icon: 'back', title: 'Back', 'aria-label': 'Back to conversations', onclick: () => this._select(null) }),
       this._avatar(this._title(conv), other?.avatar, { online: !!other && this.chat.online.has(other.userId) }),
       h('div', { class: 'title' },
@@ -491,14 +699,33 @@ class PlugChatElement extends HTMLElement {
           h('span', {}, conv.encrypted ? `End-to-end encrypted · ${status}` : status),
         ),
       ),
+      other && this.calls && h('button', { class: 'icon', icon: 'phone', title: 'Voice call', 'aria-label': 'Voice call', onclick: () => this._startCall(conv, other, false) }),
+      other && this.calls && h('button', { class: 'icon', icon: 'video', title: 'Video call', 'aria-label': 'Video call', onclick: () => this._startCall(conv, other, true) }),
       h('button', { class: 'icon', icon: 'info', title: 'Conversation details', 'aria-label': 'Conversation details', onclick: () => this._detailsDialog(conv) }),
     );
+  }
+
+  _renderPins() {
+    if (!this.$pins) return;
+    const top = this.pins[0];
+    this.$pins.hidden = !top;
+    if (!top) return;
+    fill(this.$pins, h('span', { icon: 'pin' }), h('span', {}, this._snippet(top)), this.pins.length > 1 && h('small', {}, `+${this.pins.length - 1}`));
+    this.$pins.onclick = () => this._jumpTo(top.id);
+  }
+
+  _jumpTo(messageId) {
+    const row = this.$msgs?.querySelector(`[data-id="${CSS.escape(messageId)}"]`);
+    if (!row) return this._error('That message is further back. Load earlier messages to see it.');
+    row.scrollIntoView({ block: 'center' });
+    row.classList.add('flash');
+    setTimeout(() => row.classList.remove('flash'), 1600);
   }
 
   _renderTyping() {
     const conv = this.convs.get(this.activeId);
     if (!conv || !this.$typing) return;
-    const names = [...(this.typing.get(conv.id)?.keys() ?? [])].map((id) => this._memberName(conv, id).split(' ')[0]);
+    const names = [...(this.typing.get(conv.id)?.keys() ?? [])].map((id) => first(this._memberName(conv, id)));
     this.$typing.textContent = names.length === 0 ? '' : names.length === 1 ? `${names[0]} is typing…` : `${names.join(', ')} are typing…`;
   }
 
@@ -533,7 +760,7 @@ class PlugChatElement extends HTMLElement {
         continue;
       }
       const mine = m.senderId === me;
-      const first = newDay || !prev || prev.senderId !== m.senderId || m.createdAt - prev.createdAt > 5 * 60_000;
+      const isFirst = newDay || !prev || prev.senderId !== m.senderId || m.createdAt - prev.createdAt > 5 * 60_000;
       const showAvatars = conv.type === 'group' && !mine;
       const name = this._memberName(conv, m.senderId);
 
@@ -542,12 +769,13 @@ class PlugChatElement extends HTMLElement {
       else if (m.undecryptable) bubble = h('div', { class: 'bubble ghost' }, 'This message was encrypted for a different device.');
       else {
         const parent = m.replyTo && byId.get(m.replyTo);
-        bubble = h('div', { class: 'bubble' },
-          showAvatars && first && h('div', { class: 'sender' }, name),
-          m.replyTo && h('div', { class: 'quote' }, parent ? `${this._memberName(conv, parent.senderId)}: ${parent.deleted ? 'Message deleted' : parent.text || parent.file?.name || ''}` : 'Earlier message'),
-          m.file && this._attachment(m),
-          linkify(m.text),
+        bubble = h('div', { class: `bubble${m.mentions?.includes(me) ? ' mention' : ''}` },
+          showAvatars && isFirst && h('div', { class: 'sender' }, name),
+          m.forwarded && h('div', { class: 'tag' }, h('span', { icon: 'forward' }), 'Forwarded'),
+          m.replyTo && h('div', { class: 'quote' }, parent ? `${this._memberName(conv, parent.senderId)}: ${this._snippet(parent)}` : 'Earlier message'),
+          this._content(m, conv, mine),
           h('span', { class: 'meta' },
+            m.pinned && h('span', { icon: 'pin', title: 'Pinned' }),
             m.expiresAt && h('span', { icon: 'timer', title: 'Disappearing message' }),
             m.editedAt && 'edited ·',
             clock(m.createdAt),
@@ -557,8 +785,8 @@ class PlugChatElement extends HTMLElement {
       }
 
       const reacts = Object.entries(m.reactions ?? {});
-      const row = h('div', { class: `row${mine ? ' mine' : ''}${first ? ' first' : ''}` },
-        showAvatars && (first ? this._avatar(name, conv.members.find((x) => x.userId === m.senderId)?.avatar, { small: true }) : h('div', { class: 'spacer' })),
+      const row = h('div', { class: `row${mine ? ' mine' : ''}${isFirst ? ' first' : ''}`, 'data-id': m.id },
+        showAvatars && (isFirst ? this._avatar(name, conv.members.find((x) => x.userId === m.senderId)?.avatar, { small: true }) : h('div', { class: 'spacer' })),
         h('div', { class: 'col' },
           bubble,
           reacts.length > 0 && h('div', { class: 'reacts' }, reacts.map(([emoji, users]) =>
@@ -571,7 +799,7 @@ class PlugChatElement extends HTMLElement {
         !m.deleted && !m.undecryptable && this._actions(m, mine, conv),
       );
       bubble.addEventListener('click', (e) => {
-        if (e.target.closest('a, button')) return;
+        if (e.target.closest('a, button, audio, video')) return;
         for (const el of box.querySelectorAll('.row.active')) if (el !== row) el.classList.remove('active');
         row.classList.toggle('active');
       });
@@ -580,47 +808,106 @@ class PlugChatElement extends HTMLElement {
     }
 
     const keep = box.scrollHeight - box.scrollTop;
-    box.replaceChildren(...nodes);
-    if (stick && (nearBottom || instant)) {
-      if (instant) box.style.scrollBehavior = 'auto';
-      box.scrollTop = box.scrollHeight;
-      if (instant) box.style.scrollBehavior = '';
-    } else if (!stick) {
-      box.style.scrollBehavior = 'auto';
+    fill(box, ...nodes);
+    if (stick) {
+      if (nearBottom || instant) box.scrollTop = box.scrollHeight;
+    } else {
       box.scrollTop = nearBottom ? box.scrollHeight : box.scrollHeight - keep;
-      box.style.scrollBehavior = '';
     }
   }
 
+  /** The body of a bubble, by message kind. */
+  _content(m, conv, mine) {
+    if (m.viewOnce) {
+      const shown = this.opened.get(m.id);
+      if (shown) return [shown.file && this._attachment(shown), linkify(shown.text)];
+      const recipients = conv.members.length - 1;
+      if (mine) return h('div', { class: 'once' }, h('span', { icon: 'eye' }), `View once · opened by ${m.openedBy.length} of ${recipients}`);
+      if (m.consumed || m.openedBy.includes(this.chat.me.id)) return h('div', { class: 'once' }, h('span', { icon: 'eye' }), 'Opened');
+      return h('button', { class: 'once', onclick: async () => {
+        try {
+          this.opened.set(m.id, await this.chat.open(m.id));
+          this._renderMessages();
+        } catch (e) {
+          this._error(e.message);
+        }
+      } }, h('span', { icon: 'eye' }), m.hasFile ? 'Tap to view photo or file' : 'Tap to view message');
+    }
+    if (m.kind === 'poll') return this._poll(m);
+    if (m.kind === 'location') {
+      const { lat, lng, label } = m.location;
+      const url = `https://www.openstreetmap.org/?mlat=${Number(lat)}&mlon=${Number(lng)}#map=16/${Number(lat)}/${Number(lng)}`;
+      return h('a', { class: 'file', href: url, target: '_blank', rel: 'noopener noreferrer' }, h('span', { icon: 'map' }), label || `Location (${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)})`);
+    }
+    return [m.file && this._attachment(m), linkify(m.text)];
+  }
+
+  _poll(m) {
+    const me = this.chat.me.id;
+    const votes = m.votes ?? {};
+    const total = Object.values(votes).reduce((n, v) => n + v.length, 0);
+    const mine = Object.keys(votes).filter((i) => votes[i].includes(me)).map(Number);
+    return h('div', { class: 'poll' },
+      h('div', { class: 'q' }, m.poll.question),
+      m.poll.options.map((label, i) => {
+        const count = votes[i]?.length ?? 0;
+        const on = mine.includes(i);
+        const fill = h('span', { class: 'fill' });
+        fill.style.width = `${total ? Math.round((count / total) * 100) : 0}%`;
+        return h('button', { class: `opt${on ? ' on' : ''}`, 'aria-pressed': String(on), onclick: () => {
+          const picks = m.poll.multi ? (on ? mine.filter((x) => x !== i) : [...mine, i]) : on ? [] : [i];
+          this._guard(this.chat.vote(m.id, picks));
+        } }, fill, h('span', { class: 'lbl' }, label), h('span', { class: 'cnt' }, String(count)));
+      }),
+      h('small', {}, `${m.poll.multi ? 'Choose any' : 'Choose one'} · ${total} vote${total === 1 ? '' : 's'}`),
+    );
+  }
+
   _actions(m, mine, conv) {
-    const myRole = conv.members.find((x) => x.userId === this.chat.me.id)?.role;
-    const canDelete = mine || (conv.type === 'group' && myRole !== 'member');
+    const role = this._role(conv);
+    const canDelete = mine || (conv.type === 'group' && role !== 'member');
+    const canPin = !(conv.announce && role === 'member');
+    const plain = m.kind === 'text' && !m.viewOnce;
+    const forwardable = !m.viewOnce || this.opened.has(m.id);
     const picker = h('span', { hidden: true }, QUICK_REACTIONS.map((emoji) =>
       h('button', { class: 'emoji', 'aria-label': `React ${emoji}`, onclick: () => this._toggleReaction(m, emoji) }, emoji)));
+    const act = (icon, label, onclick, cls = '') => h('button', { class: `icon ${cls}`, icon, title: label, 'aria-label': label, onclick });
     return h('div', { class: 'acts' },
       picker,
-      h('button', { class: 'icon', icon: 'smile', title: 'React', 'aria-label': 'React', onclick: () => (picker.hidden = !picker.hidden) }),
-      h('button', { class: 'icon', icon: 'reply', title: 'Reply', 'aria-label': 'Reply', onclick: () => this._setDraftMode({ replyTo: m }) }),
-      mine && h('button', { class: 'icon', icon: 'edit', title: 'Edit', 'aria-label': 'Edit', onclick: () => this._setDraftMode({ editing: m }) }),
-      canDelete && h('button', { class: 'icon danger', icon: 'trash', title: 'Delete', 'aria-label': 'Delete', onclick: () => this._guard(this.chat.remove(m.id)) }),
+      act('smile', 'React', () => (picker.hidden = !picker.hidden)),
+      act('reply', 'Reply', () => this._setDraftMode({ replyTo: m })),
+      forwardable && !m.viewOnce && act('forward', 'Forward', () => this._forwardDialog(m)),
+      canPin && act('pin', m.pinned ? 'Unpin' : 'Pin', () => this._guard(m.pinned ? this.chat.unpin(m.id) : this.chat.pin(m.id)), m.pinned ? 'on' : ''),
+      mine && plain && act('edit', 'Edit', () => this._setDraftMode({ editing: m })),
+      !mine && act('flag', 'Report', () => this._reportDialog(m)),
+      canDelete && act('trash', 'Delete', () => this._guard(this.chat.remove(m.id)), 'danger'),
     );
   }
 
   _attachment(m) {
     const label = `${m.file.name} (${size(m.file.size)})`;
+    const blobUrl = () => {
+      let url = this.blobs.get(m.file.fileId);
+      if (!url) this.blobs.set(m.file.fileId, (url = this.chat.download(m).then((b) => URL.createObjectURL(b))));
+      return url;
+    };
+    const small = m.file.size <= 8 * 1048576;
+    if (INLINE_IMAGES.has(m.file.mime) && small) {
+      const img = h('img', { class: 'pic', alt: m.file.name, title: label });
+      blobUrl().then((u) => (img.src = u), () => (img.alt = 'Image unavailable'));
+      return img;
+    }
+    if (PLAYABLE.test(m.file.mime) && small) {
+      const el = m.file.mime.startsWith('audio/') ? h('audio', { controls: true, preload: 'metadata', title: label }) : h('video', { class: 'media', controls: true, preload: 'metadata', playsinline: true, title: label });
+      blobUrl().then((u) => (el.src = u), () => {});
+      return el;
+    }
     const save = async () => {
       const url = URL.createObjectURL(await this.chat.download(m));
       h('a', { href: url, download: m.file.name }).click();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
     };
-    if (INLINE_IMAGES.has(m.file.mime) && m.file.size <= 5 * 1048576) {
-      const img = h('img', { class: 'pic', alt: m.file.name, title: label });
-      let url = this.blobs.get(m.file.fileId);
-      if (!url) this.blobs.set(m.file.fileId, (url = this.chat.download(m).then((b) => URL.createObjectURL(b))));
-      url.then((u) => (img.src = u), () => (img.alt = 'Image unavailable'));
-      return img;
-    }
-    return h('button', { class: 'file', onclick: () => this._guard(save()) }, h('span', { icon: 'clip' }), label);
+    return h('button', { class: 'file', onclick: () => this._guard(save()) }, h('span', { icon: 'file' }), label);
   }
 
   async _loadOlder() {
@@ -661,11 +948,28 @@ class PlugChatElement extends HTMLElement {
     }
   }
 
+  _toggleMenu(force) {
+    const open = force ?? this.$menu.hidden;
+    if (open) {
+      const item = (icon, label, onclick) => h('button', { type: 'button', role: 'menuitem', onclick: () => (this._toggleMenu(false), onclick()) }, h('span', { icon }), label);
+      fill(this.$menu, 
+        item('file', 'Photo or file', () => this.$file.click()),
+        item('poll', 'Poll', () => this._pollDialog()),
+        navigator.geolocation && item('map', 'Share my location', () => this._shareLocation()),
+        item('eye', this.viewOnce ? 'View once: on' : 'View once: off', () => {
+          this.viewOnce = !this.viewOnce;
+          this._renderBanner();
+        }),
+      );
+    }
+    this.$menu.hidden = !open;
+  }
+
   _setDraftMode(mode) {
     this.replyTo = mode?.replyTo ?? null;
     this.editing = mode?.editing ?? null;
     if (this.editing) this.$input.value = this.editing.text;
-    else if (!mode) this.pendingFile = null;
+    else if (!mode) (this.pendingFile = null), (this.viewOnce = false);
     this._renderBanner();
     this._onInput();
     this.$input.focus();
@@ -673,33 +977,85 @@ class PlugChatElement extends HTMLElement {
 
   _renderBanner() {
     const conv = this.convs.get(this.activeId);
-    const text = this.editing ? 'Editing message'
-      : this.replyTo ? `Replying to ${this._memberName(conv, this.replyTo.senderId)}: ${this.replyTo.text || this.replyTo.file?.name || ''}`
-      : this.pendingFile ? `Attached: ${this.pendingFile.name} (${size(this.pendingFile.size)})` : null;
-    this.$banner.hidden = !text;
-    if (text) {
-      this.$banner.replaceChildren(
-        h('span', {}, this.pendingFile && (this.editing || this.replyTo) ? `${text} · 📎 ${this.pendingFile.name}` : text),
-        h('button', { class: 'icon', icon: 'close', title: 'Cancel', 'aria-label': 'Cancel', onclick: () => {
-          if (this.editing) this.$input.value = '';
-          this._setDraftMode(null);
-        } }),
-      );
-    }
+    const parts = [];
+    if (this.editing) parts.push('Editing message');
+    if (this.replyTo) parts.push(`Replying to ${this._memberName(conv, this.replyTo.senderId)}: ${this._snippet(this.replyTo)}`);
+    if (this.pendingFile) parts.push(`📎 ${this.pendingFile.name} (${size(this.pendingFile.size)})`);
+    if (this.viewOnce) parts.push('View once');
+    this.$banner.hidden = !parts.length;
+    if (!parts.length) return;
+    fill(this.$banner, 
+      h('span', {}, parts.join(' · ')),
+      h('button', { class: 'icon', icon: 'close', title: 'Cancel', 'aria-label': 'Cancel', onclick: () => {
+        if (this.editing) this.$input.value = '';
+        this._setDraftMode(null);
+      } }),
+    );
   }
 
   async _submit() {
     const text = this.$input.value.trim();
-    const { editing, replyTo, pendingFile: file, activeId: id } = this;
+    const { editing, replyTo, pendingFile: file, activeId: id, viewOnce } = this;
     if (!text && !file) return;
+    const conv = this.convs.get(id);
+    // Writing "@Ama" notifies Ama even if she muted the group.
+    const mentions = conv.type === 'group'
+      ? conv.members.filter((m) => m.userId !== this.chat.me.id && text.toLowerCase().includes(`@${first(m.name).toLowerCase()}`)).map((m) => m.userId)
+      : [];
     this.$input.value = '';
     this._setDraftMode(null);
     try {
       if (editing) await this.chat.edit(editing, text);
-      else await this.chat.send(id, { text, file, replyTo: replyTo?.id });
+      else await this.chat.send(id, { text, file, replyTo: replyTo?.id, viewOnce, mentions: mentions.length ? mentions : undefined });
     } catch (e) {
       if (this.activeId === id && !this.$input.value) (this.$input.value = text), this._onInput();
       this._error(e.message);
+    }
+  }
+
+  _shareLocation() {
+    const id = this.activeId;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => this._guard(this.chat.sendLocation(id, { lat: pos.coords.latitude, lng: pos.coords.longitude })),
+      () => this._error('Location permission was denied.'),
+      { timeout: 15_000 },
+    );
+  }
+
+  async _toggleRecording() {
+    if (this._rec) return this._stopRecording(false);
+    const id = this.activeId;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = (this._rec = new MediaRecorder(stream));
+      const chunks = [];
+      rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+      rec.onstop = () => {
+        for (const t of stream.getTracks()) t.stop();
+        if (rec.discard || !chunks.length) return;
+        const type = (rec.mimeType || 'audio/webm').split(';')[0];
+        const file = new File(chunks, `voice-note.${type.split('/')[1]}`, { type });
+        this._guard(this.chat.send(id, { file }));
+      };
+      rec.start();
+      this.$mic.classList.add('rec');
+      this.$mic.innerHTML = ICON.stop;
+      this.$mic.title = 'Stop and send';
+    } catch {
+      this._error('Microphone permission was denied.');
+    }
+  }
+
+  _stopRecording(discard) {
+    const rec = this._rec;
+    if (!rec) return;
+    this._rec = null;
+    rec.discard = discard;
+    rec.stop();
+    if (this.$mic) {
+      this.$mic.classList.remove('rec');
+      this.$mic.innerHTML = ICON.mic;
+      this.$mic.title = 'Record a voice note';
     }
   }
 
@@ -718,7 +1074,7 @@ class PlugChatElement extends HTMLElement {
   // ---- dialogs ----
 
   _openDialog(...content) {
-    this.$dialog.replaceChildren(...content);
+    fill(this.$dialog, ...content);
     if (!this.$dialog.open) this.$dialog.showModal();
   }
 
@@ -726,49 +1082,65 @@ class PlugChatElement extends HTMLElement {
     return h('h3', {}, h('span', {}, text), h('button', { class: 'icon', icon: 'close', type: 'button', 'aria-label': 'Close', onclick: () => this.$dialog.close() }));
   }
 
-  _newChatDialog() {
-    if (!this.chat?.me) return;
-    const picked = new Map();
+  /** A searchable people list. `onPick(user, row)` fires when one is chosen. */
+  _peoplePicker({ exclude = new Set(), render }) {
     const $people = h('div', { class: 'people' });
-    const $title = h('input', { type: 'text', placeholder: 'Group name', maxlength: '120', 'aria-label': 'Group name', hidden: true });
-    const $e2ee = h('input', { type: 'checkbox' });
-    const $err = h('div', { class: 'error', hidden: true, role: 'alert' });
-    const $go = h('button', { class: 'btn', type: 'submit', disabled: true }, 'Start chat');
-    const sync = () => {
-      $title.hidden = picked.size < 2;
-      $go.disabled = picked.size === 0;
-      $go.textContent = picked.size > 1 ? `Create group (${picked.size + 1})` : 'Start chat';
-    };
     let ticket = 0;
     const search = async (q) => {
       const mine = ++ticket;
       let users = [];
       try {
-        users = await this.chat.searchUsers(q);
+        users = (await this.chat.searchUsers(q)).filter((u) => !exclude.has(u.id));
       } catch (e) {
-        return $people.replaceChildren(h('div', { class: 'hint' }, e.message));
+        return fill($people, h('div', { class: 'hint' }, e.message));
       }
       if (mine !== ticket) return;
-      for (const u of picked.values()) if (!users.some((x) => x.id === u.id)) users.unshift(u);
-      if (!users.length) return $people.replaceChildren(h('div', { class: 'hint' }, 'Nobody found.'));
-      $people.replaceChildren(...users.map((u) => {
-        const box = h('input', { type: 'checkbox', checked: picked.has(u.id), onchange: () => {
-          if (box.checked) picked.set(u.id, u);
-          else picked.delete(u.id);
-          sync();
-        } });
-        return h('label', { class: 'person' }, box, this._avatar(u.name, u.avatar, { small: true, online: u.online }), h('span', {}, u.name));
-      }));
+      users = render.merge ? render.merge(users) : users;
+      fill($people, ...(users.length ? users.map(render) : [h('div', { class: 'hint' }, 'Nobody found. Try their exact email, phone number or username.')]));
     };
-    const form = h('form', { onsubmit: async (e) => {
+    const later = debounce(search, 200);
+    const $search = h('input', { type: 'search', placeholder: 'Name, or exact email / phone / username', 'aria-label': 'Search people', oninput: (e) => later(e.target.value) });
+    search('');
+    return { $search, $people };
+  }
+
+  _newChatDialog() {
+    if (!this.chat?.me) return;
+    const picked = new Map();
+    const $title = h('input', { type: 'text', placeholder: 'Group name', maxlength: '120', 'aria-label': 'Group name', hidden: true });
+    const mustEncrypt = !!this.chat.me.features?.requireEncryption;
+    const $e2ee = h('input', { type: 'checkbox', checked: mustEncrypt, disabled: mustEncrypt });
+    const $announce = h('input', { type: 'checkbox' });
+    const $announceRow = h('label', { class: 'check', hidden: true }, $announce, h('span', {}, 'Announcement channel', h('small', {}, 'Only you and admins you appoint can post.')));
+    const $err = h('div', { class: 'error', hidden: true, role: 'alert' });
+    const $go = h('button', { class: 'btn', type: 'submit', disabled: true }, 'Start chat');
+    const sync = () => {
+      $title.hidden = $announceRow.hidden = picked.size < 2;
+      $go.disabled = picked.size === 0;
+      $go.textContent = picked.size > 1 ? `Create group (${picked.size + 1})` : 'Start chat';
+    };
+    const render = (u) => {
+      const box = h('input', { type: 'checkbox', checked: picked.has(u.id), onchange: () => {
+        if (box.checked) picked.set(u.id, u);
+        else picked.delete(u.id);
+        sync();
+      } });
+      return h('label', { class: 'person' }, box, this._avatar(u.name, u.avatar, { small: true, online: u.online }), h('span', {}, u.name));
+    };
+    render.merge = (users) => [...[...picked.values()].filter((p) => !users.some((u) => u.id === p.id)), ...users];
+    const { $search, $people } = this._peoplePicker({ render });
+    this._openDialog(h('form', { onsubmit: async (e) => {
       e.preventDefault();
       $go.disabled = true;
       try {
         const ids = [...picked.keys()];
         const encrypted = $e2ee.checked;
-        const conv = ids.length === 1
-          ? await this.chat.openDm(ids[0], { encrypted })
-          : await this.chat.createGroup({ title: $title.value.trim() || [...picked.values()].map((u) => u.name.split(' ')[0]).join(', ').slice(0, 120), memberIds: ids, encrypted });
+        let conv;
+        if (ids.length === 1) conv = await this.chat.openDm(ids[0], { encrypted });
+        else {
+          conv = await this.chat.createGroup({ title: $title.value.trim() || [...picked.values()].map((u) => first(u.name)).join(', ').slice(0, 120), memberIds: ids, encrypted });
+          if ($announce.checked) conv = await this.chat.update(conv.id, { announce: true });
+        }
         this.convs.set(conv.id, conv);
         this.$dialog.close();
         this._select(conv.id);
@@ -778,21 +1150,17 @@ class PlugChatElement extends HTMLElement {
         sync();
       }
     } },
-      this._dialogTitle('New chat'),
-      h('input', { type: 'search', placeholder: 'Search people', 'aria-label': 'Search people', autofocus: true, oninput: (e) => search(e.target.value) }),
-      $people, $title,
-      this.getAttribute('e2ee') !== 'off' && h('label', { class: 'check' }, $e2ee,
+      this._dialogTitle('New chat'), $search, $people, $title, $announceRow,
+      this._on('e2ee') && h('label', { class: 'check' }, $e2ee,
         h('span', {}, 'End-to-end encrypt', h('small', {}, 'Only members can read messages, on the device where they joined. Not even the server can.'))),
       $err, $go,
-    );
-    this._openDialog(form);
-    search('');
+    ));
   }
 
   async _detailsDialog(conv) {
     const me = this.chat.me.id;
-    const myRole = conv.members.find((m) => m.userId === me)?.role;
-    const canManage = conv.type === 'dm' || myRole !== 'member';
+    const isGroup = conv.type === 'group';
+    const canManage = !isGroup || this._role(conv) !== 'member';
     const $err = h('div', { class: 'error', hidden: true, role: 'alert' });
     const run = async (p, close = false) => {
       try {
@@ -803,26 +1171,218 @@ class PlugChatElement extends HTMLElement {
         $err.hidden = false;
       }
     };
+    const toggle = (label, checked, onchange, hint) => {
+      const box = h('input', { type: 'checkbox', checked, onchange: () => run(onchange(box.checked)) });
+      return h('label', { class: 'check' }, box, h('span', {}, label, hint && h('small', {}, hint)));
+    };
     const $timer = h('select', { disabled: !canManage, onchange: () => run(this.chat.update(conv.id, { ttlSeconds: Number($timer.value) || null })) },
       TIMERS.map(([s, label]) => h('option', { value: String(s), selected: (conv.ttlSeconds ?? 0) === s }, label)));
     const $code = h('div', { class: 'code' }, '…');
     if (conv.encrypted) this.chat.safetyCode(conv.id).then((c) => ($code.textContent = c), () => ($code.textContent = 'unavailable'));
-    const other = conv.type === 'dm' ? this._other(conv) : null;
+    const other = isGroup ? null : this._other(conv);
     const blocked = other ? (await this.chat.blocked().catch(() => [])).includes(other.userId) : false;
+
+    const $name = h('input', { type: 'text', value: conv.title ?? '', maxlength: '120', 'aria-label': 'Group name' });
+    const adder = isGroup && canManage && this._peoplePicker({
+      exclude: new Set(conv.members.map((m) => m.userId)),
+      render: (u) => h('button', { class: 'person', type: 'button', onclick: () => run(this.chat.addMembers(conv.id, [u.id]), true) },
+        this._avatar(u.name, u.avatar, { small: true }), h('span', {}, u.name), h('small', {}, 'Add')),
+    });
 
     this._openDialog(h('div', { class: 'panel' },
       this._dialogTitle(this._title(conv)),
+      isGroup && canManage && h('div', { class: 'inline' }, $name, h('button', { class: 'btn plain', onclick: () => $name.value.trim() && run(this.chat.update(conv.id, { title: $name.value.trim() }), true) }, 'Rename')),
       h('div', { class: 'people' }, conv.members.map((m) =>
         h('div', { class: 'person' }, this._avatar(m.name, m.avatar, { small: true, online: this.chat.online.has(m.userId) }),
           h('span', {}, m.userId === me ? `${m.name} (you)` : m.name), m.role !== 'member' && h('small', {}, m.role),
-          conv.type === 'group' && canManage && m.userId !== me && m.role !== 'owner'
+          isGroup && canManage && m.userId !== me && m.role !== 'owner'
             && h('button', { class: 'icon', icon: 'close', title: `Remove ${m.name}`, 'aria-label': `Remove ${m.name}`, onclick: () => run(this.chat.removeMember(conv.id, m.userId), true) })))),
+      adder && h('div', { class: 'field' }, 'Add people', adder.$search, adder.$people),
+      toggle('Mute notifications', conv.muted, (v) => this.chat.settings(conv.id, { muted: v })),
+      toggle('Pin to top', conv.pinned, (v) => this.chat.settings(conv.id, { pinned: v })),
+      toggle('Archive', conv.archived, (v) => this.chat.settings(conv.id, { archived: v })),
+      isGroup && canManage && toggle('Announcement channel', conv.announce, (v) => this.chat.update(conv.id, { announce: v }), 'Only admins can post.'),
       h('label', { class: 'field' }, 'Disappearing messages', $timer),
       conv.encrypted && h('label', { class: 'field' }, 'Safety code — compare with the other members in person. If it matches, nobody has tampered with your keys.', $code),
       $err,
-      conv.type === 'group' && h('button', { class: 'btn warn', onclick: () => run(this.chat.leave(conv.id), true) }, 'Leave group'),
+      isGroup && h('button', { class: 'btn warn', onclick: () => run(this.chat.leave(conv.id), true) }, 'Leave group'),
       other && h('button', { class: 'btn warn', onclick: () => run(blocked ? this.chat.unblock(other.userId) : this.chat.block(other.userId), true) }, blocked ? `Unblock ${other.name}` : `Block ${other.name}`),
     ));
+  }
+
+  _pollDialog() {
+    const id = this.activeId;
+    const option = () => h('input', { type: 'text', placeholder: 'Option', maxlength: '100', 'aria-label': 'Option' });
+    const $question = h('input', { type: 'text', placeholder: 'Ask a question', maxlength: '200', 'aria-label': 'Question', required: true });
+    const $options = h('div', { class: 'field' }, option(), option());
+    const $multi = h('input', { type: 'checkbox' });
+    const $err = h('div', { class: 'error', hidden: true, role: 'alert' });
+    this._openDialog(h('form', { onsubmit: async (e) => {
+      e.preventDefault();
+      const options = [...$options.querySelectorAll('input')].map((i) => i.value.trim()).filter(Boolean);
+      if (options.length < 2) return ($err.textContent = 'Add at least two options.'), ($err.hidden = false);
+      try {
+        await this.chat.sendPoll(id, { question: $question.value.trim(), options, multi: $multi.checked });
+        this.$dialog.close();
+      } catch (err) {
+        $err.textContent = err.message;
+        $err.hidden = false;
+      }
+    } },
+      this._dialogTitle('Create a poll'), $question, $options,
+      h('button', { class: 'btn plain', type: 'button', onclick: (e) => ($options.children.length < 12 ? $options.append(option()) : (e.target.disabled = true)) }, 'Add option'),
+      h('label', { class: 'check' }, $multi, h('span', {}, 'Allow several answers')),
+      $err, h('button', { class: 'btn', type: 'submit' }, 'Send poll'),
+    ));
+  }
+
+  _forwardDialog(m) {
+    const source = this.opened.get(m.id) ?? m;
+    const $err = h('div', { class: 'error', hidden: true, role: 'alert' });
+    const targets = [...this.convs.values()].filter((c) => !(c.announce && this._role(c) === 'member')).sort((a, b) => b.updatedAt - a.updatedAt);
+    this._openDialog(h('div', { class: 'panel' },
+      this._dialogTitle('Forward to…'),
+      h('div', { class: 'people' }, targets.map((c) => h('button', { class: 'person', onclick: async (e) => {
+        e.currentTarget.disabled = true;
+        try {
+          await this.chat.forward(source, c.id);
+          this.$dialog.close();
+        } catch (err) {
+          $err.textContent = err.message;
+          $err.hidden = false;
+        }
+      } }, this._avatar(this._title(c), null, { small: true }), h('span', {}, this._title(c)), c.encrypted && h('small', {}, 'encrypted')))),
+      $err,
+    ));
+  }
+
+  _reportDialog(m) {
+    const $reason = h('select', { 'aria-label': 'Reason' }, REPORT_REASONS.map((r) => h('option', { value: r }, r)));
+    const $done = h('div', { class: 'hint', hidden: true }, 'Thanks. The report was sent to the moderators.');
+    const $go = h('button', { class: 'btn', onclick: async () => {
+      $go.disabled = true;
+      await this.chat.report(m.id, $reason.value).then(() => ($done.hidden = false), (e) => ($done.textContent = e.message, $done.hidden = false));
+    } }, 'Send report');
+    this._openDialog(h('div', { class: 'panel' }, this._dialogTitle('Report message'),
+      h('label', { class: 'field' }, 'What is wrong with this message? The moderators of this platform will receive a copy of it.', $reason), $go, $done));
+  }
+
+  _newStoryDialog() {
+    const $text = h('textarea', { placeholder: 'Share an update…', maxlength: '2000', 'aria-label': 'Story text' });
+    const $file = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp', 'aria-label': 'Photo' });
+    const $err = h('div', { class: 'error', hidden: true, role: 'alert' });
+    this._openDialog(h('form', { onsubmit: async (e) => {
+      e.preventDefault();
+      if (!$text.value.trim() && !$file.files[0]) return;
+      try {
+        await this.chat.postStory({ text: $text.value.trim(), file: $file.files[0] });
+        this.$dialog.close();
+        this._loadStories();
+      } catch (err) {
+        $err.textContent = err.message;
+        $err.hidden = false;
+      }
+    } },
+      this._dialogTitle('Add to your story'), $text, $file,
+      h('small', { class: 'field' }, 'Visible for 24 hours to the people you have conversations with. Stories are not end-to-end encrypted.'),
+      $err, h('button', { class: 'btn', type: 'submit' }, 'Post story'),
+    ));
+  }
+
+  _storyDialog(group, index = Math.max(0, group.stories.findIndex((s) => !s.seen))) {
+    const story = group.stories[index];
+    if (!story) return this.$dialog.close();
+    const mine = group.user.id === this.chat.me.id;
+    if (!story.seen) {
+      story.seen = true;
+      this.chat.viewStory(story.id).then(() => this._loadStories(), () => {});
+    }
+    const $view = h('div', { class: 'storyview' });
+    if (story.attachment && INLINE_IMAGES.has(story.attachment.mime)) {
+      const img = h('img', { alt: 'Story photo' });
+      let url = this.blobs.get(story.attachment.fileId);
+      if (!url) this.blobs.set(story.attachment.fileId, (url = this.chat.storyFile(story).then((b) => URL.createObjectURL(b))));
+      url.then((u) => (img.src = u), () => (img.alt = 'Photo unavailable'));
+      $view.append(img);
+    }
+    if (story.text) $view.append(h('div', {}, linkify(story.text)));
+    const go = (i) => () => this._storyDialog(group, i);
+    this._openDialog(h('div', { class: 'panel' },
+      h('div', { class: 'steps' }, group.stories.map((_, i) => h('i', { class: i <= index ? 'on' : '' }))),
+      this._dialogTitle(`${mine ? 'My story' : group.user.name} · ${shortWhen(story.createdAt)}`),
+      $view,
+      mine && h('small', { class: 'field' }, story.views.length ? `Seen by ${story.views.map((v) => this._knownName(v.userId)).join(', ')}` : 'No views yet'),
+      h('div', { class: 'inline' },
+        h('button', { class: 'btn plain', disabled: index === 0, onclick: go(index - 1) }, 'Previous'),
+        h('button', { class: 'btn plain', disabled: index === group.stories.length - 1, onclick: go(index + 1) }, 'Next'),
+        mine && h('button', { class: 'btn plain', onclick: () => this._newStoryDialog() }, 'Add'),
+        mine && h('button', { class: 'btn warn', onclick: () => this.chat.deleteStory(story.id).then(() => (this.$dialog.close(), this._loadStories()), (e) => this._error(e.message)) }, 'Delete'),
+      ),
+    ));
+  }
+
+  _knownName(userId) {
+    for (const c of this.convs.values()) {
+      const m = c.members.find((x) => x.userId === userId);
+      if (m) return m.name;
+    }
+    return 'Someone';
+  }
+
+  // ---- calls ----
+
+  async _startCall(conv, other, video) {
+    try {
+      this._showCall(await this.calls.start(conv.id, other.userId, { video }));
+    } catch (e) {
+      this._error(e.message);
+    }
+  }
+
+  _showCall(call) {
+    const conv = this.convs.get(call.conversationId);
+    const name = this._memberName(conv, call.peerId);
+    const $remote = h('video', { class: 'remote', autoplay: true, playsinline: true, hidden: !call.video });
+    const $local = h('video', { class: 'local', autoplay: true, playsinline: true, hidden: !call.video });
+    $local.muted = true;
+    const $state = h('div', { role: 'status' });
+    const $btns = h('div', { class: 'cbtns' });
+    const overlay = h('div', { class: 'call', role: 'dialog', 'aria-label': `Call with ${name}` },
+      $remote, h('div', { class: 'cinfo' }, this._avatar(name), h('strong', {}, name), $state), $local, $btns);
+    let muted = false, camera = call.video, ticker;
+    const btn = (icon, label, cls, onclick) => h('button', { icon, title: label, 'aria-label': label, class: cls, onclick });
+    const render = () => {
+      const kind = call.video ? 'video' : 'voice';
+      $state.textContent = call.state === 'ringing' ? (call.direction === 'in' ? `Incoming ${kind} call…` : 'Ringing…')
+        : call.state === 'connecting' ? 'Connecting…'
+        : call.state === 'active' ? mmss(Date.now() - call.startedAt)
+        : `Call ended${call.reason && call.reason !== 'ended' ? ` · ${call.reason}` : ''}`;
+      if (call.state === 'ended') return fill($btns, );
+      if (call.state === 'ringing' && call.direction === 'in') {
+        return fill($btns, btn('phone', 'Accept', 'ok', () => call.accept()), btn('close', 'Decline', 'hang', () => call.decline()));
+      }
+      fill($btns, 
+        btn('mic', muted ? 'Unmute' : 'Mute', muted ? 'off' : '', () => (call.setMuted((muted = !muted)), render())),
+        call.video && btn('video', camera ? 'Turn camera off' : 'Turn camera on', camera ? '' : 'off', () => (call.setCamera((camera = !camera)), render())),
+        btn('close', 'Hang up', 'hang', () => call.hangup()),
+      );
+    };
+    call.on('local', (s) => ($local.srcObject = s));
+    call.on('remote', (s) => ($remote.srcObject = s));
+    if (call.localStream) $local.srcObject = call.localStream;
+    call.on('state', (s) => {
+      render();
+      if (s === 'active') ticker = setInterval(render, 1000);
+      if (s === 'ended') {
+        clearInterval(ticker);
+        setTimeout(() => overlay.remove(), 1800);
+      }
+    });
+    // An audio-only call still needs an element to play the remote stream.
+    if (!call.video) $remote.hidden = false, ($remote.style.opacity = '0');
+    render();
+    this.$root.append(overlay);
+    this.dispatchEvent(new CustomEvent('plugchat:call', { detail: { call } }));
   }
 }
 

@@ -14,7 +14,7 @@ export class Hub {
     this.authenticate = authenticate;
     this.allowOrigin = allowOrigin;
     this.sockets = new Map(); // userId -> Set<WebSocket>
-    this.wss = new WebSocketServer({ noServer: true, maxPayload: 8 * 1024 });
+    this.wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
     this.wss.on('connection', (ws) => this._onConnection(ws));
     this.heartbeat = setInterval(() => this._beat(), HEARTBEAT_MS);
     this.heartbeat.unref();
@@ -57,6 +57,8 @@ export class Hub {
     ws.alive = true;
     ws.userId = null;
     ws.typingAt = 0;
+    ws.signalWindow = 0;
+    ws.signalCount = 0;
     // The token travels in the first frame, not the URL, so it never lands in access logs.
     ws.authTimer = setTimeout(() => ws.close(4401, 'auth timeout'), AUTH_TIMEOUT_MS);
 
@@ -73,7 +75,21 @@ export class Hub {
       if (msg?.type === 'auth') return this._auth(ws, msg.token);
       if (!ws.userId) return ws.close(4401, 'not authenticated');
       if (msg?.type === 'typing') return this._typing(ws, msg.conversationId);
+      if (msg?.type === 'signal') return this._signal(ws, msg);
     });
+  }
+
+  // Call setup (WebRTC offers, answers, ICE candidates). Media itself flows
+  // peer-to-peer; the server only passes these envelopes between two members
+  // of the same conversation.
+  _signal(ws, { conversationId, to, data }) {
+    const t = Date.now();
+    if (t - ws.signalWindow > 1000) (ws.signalWindow = t), (ws.signalCount = 0);
+    if (++ws.signalCount > 60) return;
+    if (typeof conversationId !== 'string' || typeof to !== 'string' || !data || typeof data !== 'object') return;
+    if (!this.store.member(conversationId, ws.userId) || !this.store.member(conversationId, to)) return;
+    if (this.store.isBlocked(ws.userId, to)) return;
+    this.emit([to], { type: 'signal', conversationId, from: ws.userId, data });
   }
 
   _auth(ws, token) {

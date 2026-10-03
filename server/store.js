@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS conversations (
   dm_key TEXT UNIQUE,
   encrypted INTEGER NOT NULL DEFAULT 0,
   ttl_seconds INTEGER,
+  announce INTEGER NOT NULL DEFAULT 0,
+  description TEXT,
   created_by TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
@@ -30,9 +32,19 @@ CREATE TABLE IF NOT EXISTS members (
   role TEXT NOT NULL DEFAULT 'member',
   last_read_seq INTEGER NOT NULL DEFAULT 0,
   wrapped_key TEXT,
+  muted INTEGER NOT NULL DEFAULT 0,
+  archived INTEGER NOT NULL DEFAULT 0,
+  pinned INTEGER NOT NULL DEFAULT 0,
   joined_at INTEGER NOT NULL,
   PRIMARY KEY (conversation_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS handles (
+  kind TEXT NOT NULL,
+  value TEXT NOT NULL,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (kind, value)
+);
+CREATE INDEX IF NOT EXISTS handles_user ON handles(user_id);
 CREATE INDEX IF NOT EXISTS members_user ON members(user_id);
 CREATE TABLE IF NOT EXISTS messages (
   id TEXT PRIMARY KEY,
@@ -48,7 +60,48 @@ CREATE TABLE IF NOT EXISTS messages (
   edited_at INTEGER,
   deleted_at INTEGER,
   expires_at INTEGER,
+  meta TEXT,
+  view_once INTEGER NOT NULL DEFAULT 0,
+  consumed_at INTEGER,
+  pinned_at INTEGER,
+  pinned_by TEXT,
   UNIQUE (conversation_id, seq)
+);
+CREATE INDEX IF NOT EXISTS messages_view_once ON messages(view_once) WHERE view_once = 1 AND consumed_at IS NULL;
+CREATE TABLE IF NOT EXISTS votes (
+  message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  option INTEGER NOT NULL,
+  PRIMARY KEY (message_id, user_id, option)
+);
+CREATE TABLE IF NOT EXISTS opens (
+  message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  PRIMARY KEY (message_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS stories (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  attachment TEXT,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS story_views (
+  story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  PRIMARY KEY (story_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS reports (
+  id TEXT PRIMARY KEY,
+  message_id TEXT NOT NULL,
+  conversation_id TEXT NOT NULL,
+  reporter_id TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  snapshot TEXT NOT NULL,
+  created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS messages_expiry ON messages(expires_at) WHERE expires_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS messages_client ON messages(conversation_id, sender_id, client_id);
@@ -60,7 +113,8 @@ CREATE TABLE IF NOT EXISTS reactions (
 );
 CREATE TABLE IF NOT EXISTS files (
   id TEXT PRIMARY KEY,
-  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,
+  message_id TEXT,
   owner_id TEXT NOT NULL,
   name TEXT NOT NULL,
   mime TEXT NOT NULL,
@@ -73,6 +127,23 @@ CREATE TABLE IF NOT EXISTS blocks (
   PRIMARY KEY (user_id, blocked_id)
 );
 `;
+
+/**
+ * Platforms identify people differently (email, phone, username, member
+ * number...). A handle is any such identifier, normalised so lookups match
+ * however it was typed.
+ */
+export function normalizeHandle(kind, value) {
+  if (typeof value !== 'string') return '';
+  const v = value.trim().slice(0, 254);
+  if (kind === 'phone') return v.replace(/[^\d+]/g, '').replace(/(?!^)\+/g, '');
+  if (kind === 'username') return v.replace(/^@/, '').toLowerCase();
+  return v.toLowerCase();
+}
+
+// Every normalised form a typed value could take, since we don't know its kind.
+const handleCandidates = (value) =>
+  [...new Set(['email', 'phone', 'username'].map((k) => normalizeHandle(k, value)).filter(Boolean))];
 
 const userOut = (r) => r && { id: r.id, name: r.name, avatar: r.avatar, publicKey: r.public_key, lastSeen: r.last_seen };
 
@@ -124,13 +195,44 @@ export class Store {
     return userOut(this.get('SELECT * FROM users WHERE id = ?', id));
   }
 
+  /** Substring match on display name; handles (email, phone, ...) only ever match exactly. */
   searchUsers(q, excludeId, limit = 20) {
     const like = `%${q.replace(/[\\%_]/g, '\\$&')}%`;
-    return this.all(
-      `SELECT * FROM users WHERE id != ? AND (name LIKE ? ESCAPE '\\' OR id LIKE ? ESCAPE '\\')
+    const candidates = handleCandidates(q);
+    const marks = candidates.map(() => '?').join(',') || "''";
+    return this.db.prepare(
+      `SELECT * FROM users WHERE id != ? AND (name LIKE ? ESCAPE '\\'
+         OR id IN (SELECT user_id FROM handles WHERE value IN (${marks})))
        ORDER BY name LIMIT ?`,
-      excludeId, like, like, limit,
-    ).map(userOut);
+    ).all(excludeId, like, ...candidates, limit).map(userOut);
+  }
+
+  // ---- handles: the identifiers a platform's users know each other by ----
+
+  handlesOf(userId) {
+    return Object.fromEntries(this.all('SELECT kind, value FROM handles WHERE user_id = ?', userId).map((r) => [r.kind, r.value]));
+  }
+
+  /** Replace a user's handles. Returns the kinds that were skipped because someone else holds that value. */
+  setHandles(userId, handles) {
+    const taken = [];
+    this.tx(() => {
+      this.run('DELETE FROM handles WHERE user_id = ?', userId);
+      for (const [kind, raw] of Object.entries(handles)) {
+        const value = normalizeHandle(kind, raw);
+        if (!value) continue;
+        const r = this.run('INSERT OR IGNORE INTO handles (kind, value, user_id) VALUES (?, ?, ?)', kind, value, userId);
+        if (!r.changes) taken.push(kind);
+      }
+    });
+    return taken;
+  }
+
+  findByHandle(value, kind) {
+    const r = kind
+      ? this.get('SELECT user_id FROM handles WHERE kind = ? AND value = ?', kind, normalizeHandle(kind, value))
+      : this.db.prepare(`SELECT user_id FROM handles WHERE value IN (${handleCandidates(value).map(() => '?').join(',') || "''"}) LIMIT 1`).get(...handleCandidates(value));
+    return r ? this.getUser(r.user_id) : null;
   }
 
   setPublicKey(id, key) {
@@ -147,6 +249,10 @@ export class Store {
       const files = this.all('SELECT id FROM files WHERE owner_id = ?', id).map((r) => r.id);
       this.run('DELETE FROM files WHERE owner_id = ?', id);
       this.run('DELETE FROM reactions WHERE user_id = ?', id);
+      this.run('DELETE FROM votes WHERE user_id = ?', id);
+      this.run('DELETE FROM opens WHERE user_id = ?', id);
+      this.run('DELETE FROM story_views WHERE user_id = ?', id);
+      this.run('DELETE FROM reports WHERE reporter_id = ?', id);
       this.run('DELETE FROM messages WHERE sender_id = ?', id);
       this.run('DELETE FROM blocks WHERE user_id = ? OR blocked_id = ?', id, id);
       this.run('DELETE FROM conversations WHERE type = ? AND id IN (SELECT conversation_id FROM members WHERE user_id = ?)', 'dm', id);
@@ -194,15 +300,15 @@ export class Store {
     return !!this.get('SELECT 1 FROM conversations WHERE id = ?', id);
   }
 
-  createConversation({ id, type, title, creator, memberIds, encrypted, ttlSeconds, keys }) {
+  createConversation({ id, type, title, creator, memberIds, encrypted, ttlSeconds, keys, announce, description }) {
     const t = Date.now();
     const cid = id ?? randomUUID();
     this.tx(() => {
       this.run(
-        `INSERT INTO conversations (id, type, title, dm_key, encrypted, ttl_seconds, created_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO conversations (id, type, title, dm_key, encrypted, ttl_seconds, announce, description, created_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         cid, type, title ?? null, type === 'dm' ? Store.dmKey(memberIds[0], memberIds[1]) : null,
-        encrypted ? 1 : 0, ttlSeconds ?? null, creator, t, t,
+        encrypted ? 1 : 0, ttlSeconds ?? null, announce ? 1 : 0, description ?? null, creator, t, t,
       );
       for (const uid of memberIds) {
         const role = type === 'group' && uid === creator ? 'owner' : 'member';
@@ -232,7 +338,7 @@ export class Store {
     const c = this.rawConversation(id);
     if (!c) return null;
     const rows = this.all(
-      `SELECT m.user_id, m.role, m.last_read_seq, m.wrapped_key, u.name, u.avatar, u.public_key
+      `SELECT m.user_id, m.role, m.last_read_seq, m.wrapped_key, m.muted, m.archived, m.pinned, u.name, u.avatar, u.public_key
        FROM members m JOIN users u ON u.id = m.user_id WHERE m.conversation_id = ? ORDER BY m.joined_at, u.name`,
       id,
     );
@@ -248,6 +354,11 @@ export class Store {
       title: c.title,
       encrypted: !!c.encrypted,
       ttlSeconds: c.ttl_seconds,
+      announce: !!c.announce,
+      description: c.description,
+      muted: !!me?.muted,
+      archived: !!me?.archived,
+      pinned: !!me?.pinned,
       createdBy: c.created_by,
       createdAt: c.created_at,
       updatedAt: c.updated_at,
@@ -270,9 +381,22 @@ export class Store {
     ).map((r) => this.conversationFor(r.id, userId));
   }
 
-  updateConversation(id, { title, ttlSeconds }) {
+  updateConversation(id, { title, ttlSeconds, announce, description }) {
     if (title !== undefined) this.run('UPDATE conversations SET title = ? WHERE id = ?', title, id);
     if (ttlSeconds !== undefined) this.run('UPDATE conversations SET ttl_seconds = ? WHERE id = ?', ttlSeconds, id);
+    if (announce !== undefined) this.run('UPDATE conversations SET announce = ? WHERE id = ?', announce ? 1 : 0, id);
+    if (description !== undefined) this.run('UPDATE conversations SET description = ? WHERE id = ?', description, id);
+  }
+
+  /** Per-member preferences: these never affect what other members see. */
+  setMemberSettings(conversationId, userId, { muted, archived, pinned }) {
+    for (const [col, v] of [['muted', muted], ['archived', archived], ['pinned', pinned]]) {
+      if (v !== undefined) this.run(`UPDATE members SET ${col} = ? WHERE conversation_id = ? AND user_id = ?`, v ? 1 : 0, conversationId, userId);
+    }
+  }
+
+  mutedIds(conversationId) {
+    return this.all('SELECT user_id FROM members WHERE conversation_id = ? AND muted = 1', conversationId).map((r) => r.user_id);
   }
 
   addMembers(conversationId, userIds, keys) {
@@ -311,8 +435,10 @@ export class Store {
     return out;
   }
 
-  _messageOut(r, reactions) {
-    return {
+  _messageOut(r, reactions, { reveal = false } = {}) {
+    const meta = r.meta ? JSON.parse(r.meta) : {};
+    const attachment = r.attachment ? JSON.parse(r.attachment) : null;
+    const out = {
       id: r.id,
       conversationId: r.conversation_id,
       seq: r.seq,
@@ -320,14 +446,34 @@ export class Store {
       kind: r.kind,
       body: r.body,
       replyTo: r.reply_to,
-      attachment: r.attachment ? JSON.parse(r.attachment) : null,
+      attachment,
       clientId: r.client_id,
       createdAt: r.created_at,
       editedAt: r.edited_at,
       deleted: !!r.deleted_at,
       expiresAt: r.expires_at,
       reactions: reactions?.get(r.id) ?? {},
+      mentions: meta.mentions ?? [],
+      forwarded: !!meta.forwarded,
+      pinned: r.pinned_at ? { at: r.pinned_at, by: r.pinned_by } : null,
     };
+    if (r.kind === 'poll') {
+      out.poll = meta.poll;
+      out.votes = {};
+      for (const v of this.all('SELECT user_id, option FROM votes WHERE message_id = ?', r.id)) (out.votes[v.option] ??= []).push(v.user_id);
+    }
+    if (r.view_once) {
+      out.viewOnce = true;
+      out.consumed = !!r.consumed_at;
+      out.hasFile = !!attachment;
+      out.openedBy = this.all('SELECT user_id FROM opens WHERE message_id = ?', r.id).map((o) => o.user_id);
+      // The content of a view-once message is only ever released by openMessage().
+      if (!reveal) {
+        out.body = '';
+        out.attachment = null;
+      }
+    }
+    return out;
   }
 
   getMessage(id) {
@@ -343,7 +489,7 @@ export class Store {
     return r ? this.getMessage(r.id) : null;
   }
 
-  insertMessage({ conversationId, senderId, kind, body, replyTo, attachment, clientId }) {
+  insertMessage({ conversationId, senderId, kind, body, replyTo, attachment, clientId, meta, viewOnce }) {
     const id = randomUUID();
     const t = Date.now();
     this.tx(() => {
@@ -351,12 +497,14 @@ export class Store {
       const seq = c.last_seq + 1;
       this.run('UPDATE conversations SET last_seq = ?, updated_at = ? WHERE id = ?', seq, t, conversationId);
       this.run(
-        `INSERT INTO messages (id, conversation_id, seq, sender_id, kind, body, reply_to, attachment, client_id, created_at, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO messages (id, conversation_id, seq, sender_id, kind, body, reply_to, attachment, client_id, created_at, expires_at, meta, view_once)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id, conversationId, seq, senderId, kind, body, replyTo ?? null,
         attachment ? JSON.stringify(attachment) : null, clientId ?? null, t,
         c.ttl_seconds ? t + c.ttl_seconds * 1000 : null,
+        meta && Object.keys(meta).length ? JSON.stringify(meta) : null, viewOnce ? 1 : 0,
       );
+      if (attachment) this.run('UPDATE files SET message_id = ? WHERE id = ?', id, attachment.fileId);
       // Your own message is never unread for you.
       this.run('UPDATE members SET last_read_seq = ? WHERE conversation_id = ? AND user_id = ?', seq, conversationId, senderId);
     });
@@ -382,8 +530,9 @@ export class Store {
   deleteMessage(id) {
     const fileId = this._attachmentFileId(id);
     this.tx(() => {
-      this.run("UPDATE messages SET body = '', attachment = NULL, deleted_at = ? WHERE id = ?", Date.now(), id);
+      this.run("UPDATE messages SET body = '', attachment = NULL, meta = NULL, pinned_at = NULL, deleted_at = ? WHERE id = ?", Date.now(), id);
       this.run('DELETE FROM reactions WHERE message_id = ?', id);
+      this.run('DELETE FROM votes WHERE message_id = ?', id);
       if (fileId) this.run('DELETE FROM files WHERE id = ?', fileId);
     });
     return fileId;
@@ -426,17 +575,174 @@ export class Store {
     }));
   }
 
+  // ---- pins, polls, view-once, search ----
+
+  pinMessage(id, userId) {
+    this.run('UPDATE messages SET pinned_at = ?, pinned_by = ? WHERE id = ?', userId ? Date.now() : null, userId, id);
+    return this.getMessage(id);
+  }
+
+  listPins(conversationId) {
+    const rows = this.all(
+      'SELECT * FROM messages WHERE conversation_id = ? AND pinned_at IS NOT NULL AND (expires_at IS NULL OR expires_at > ?) ORDER BY pinned_at DESC LIMIT 50',
+      conversationId, Date.now(),
+    );
+    const reactions = this._reactions(rows.map((r) => r.id));
+    return rows.map((r) => this._messageOut(r, reactions));
+  }
+
+  /** Replace one voter's choices on a poll. */
+  vote(messageId, userId, options) {
+    this.tx(() => {
+      this.run('DELETE FROM votes WHERE message_id = ? AND user_id = ?', messageId, userId);
+      for (const o of options) this.run('INSERT INTO votes (message_id, user_id, option) VALUES (?, ?, ?)', messageId, userId, o);
+    });
+    return this.getMessage(messageId);
+  }
+
+  /** Release a view-once message to one recipient, exactly once. Returns null if they already opened it. */
+  openMessage(id, userId) {
+    const r = this.run('INSERT OR IGNORE INTO opens (message_id, user_id, at) VALUES (?, ?, ?)', id, userId, Date.now());
+    if (!r.changes) return null;
+    const row = this.get('SELECT * FROM messages WHERE id = ?', id);
+    return this._messageOut(row, this._reactions([id]), { reveal: true });
+  }
+
+  openedWithin(messageId, userId, ms) {
+    return !!this.get('SELECT 1 FROM opens WHERE message_id = ? AND user_id = ? AND at > ?', messageId, userId, Date.now() - ms);
+  }
+
+  /** Wipe view-once messages every recipient has opened (after a short grace so downloads can finish). */
+  sweepViewOnce(graceMs) {
+    const cutoff = Date.now() - graceMs;
+    const done = [];
+    for (const m of this.all('SELECT id, conversation_id, sender_id, attachment FROM messages WHERE view_once = 1 AND consumed_at IS NULL')) {
+      const pending = this.get(
+        `SELECT 1 FROM members mb WHERE mb.conversation_id = ? AND mb.user_id != ?
+           AND NOT EXISTS (SELECT 1 FROM opens o WHERE o.message_id = ? AND o.user_id = mb.user_id AND o.at <= ?)`,
+        m.conversation_id, m.sender_id, m.id, cutoff,
+      );
+      if (pending) continue;
+      const fileId = m.attachment ? JSON.parse(m.attachment).fileId : null;
+      this.tx(() => {
+        this.run("UPDATE messages SET body = '', attachment = NULL, consumed_at = ? WHERE id = ?", Date.now(), m.id);
+        if (fileId) this.run('DELETE FROM files WHERE id = ?', fileId);
+      });
+      done.push({ id: m.id, conversationId: m.conversation_id, fileId });
+    }
+    return done;
+  }
+
+  /** Server-side search. Encrypted conversations are skipped: the server cannot read them. */
+  search(userId, q, conversationId, limit = 30) {
+    const like = `%${q.replace(/[\\%_]/g, '\\$&')}%`;
+    const rows = this.db.prepare(
+      `SELECT m.* FROM messages m
+       JOIN members mb ON mb.conversation_id = m.conversation_id AND mb.user_id = ?
+       JOIN conversations c ON c.id = m.conversation_id
+       WHERE c.encrypted = 0 AND m.kind = 'text' AND m.view_once = 0 AND m.deleted_at IS NULL
+         AND (m.expires_at IS NULL OR m.expires_at > ?) AND m.body LIKE ? ESCAPE '\\'
+         ${conversationId ? 'AND m.conversation_id = ?' : ''}
+       ORDER BY m.created_at DESC LIMIT ?`,
+    ).all(...[userId, Date.now(), like, conversationId, limit].filter((v) => v !== undefined && v !== null));
+    return rows.map((r) => this._messageOut(r));
+  }
+
+  // ---- stories: posts that vanish, shown to the people you already chat with ----
+
+  addStory({ userId, text, attachment, ttlSeconds }) {
+    const id = randomUUID();
+    const t = Date.now();
+    this.run('INSERT INTO stories (id, user_id, text, attachment, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
+      id, userId, text, attachment ? JSON.stringify(attachment) : null, t, t + ttlSeconds * 1000);
+    if (attachment) this.run('UPDATE files SET message_id = ? WHERE id = ?', id, attachment.fileId);
+    return this.getStory(id, userId);
+  }
+
+  _storyOut(r, viewerId) {
+    const mine = r.user_id === viewerId;
+    const views = this.all('SELECT user_id, at FROM story_views WHERE story_id = ?', r.id);
+    return {
+      id: r.id, userId: r.user_id, text: r.text, attachment: r.attachment ? JSON.parse(r.attachment) : null,
+      createdAt: r.created_at, expiresAt: r.expires_at,
+      seen: mine || views.some((v) => v.user_id === viewerId),
+      // Only the author learns who watched.
+      views: mine ? views.map((v) => ({ userId: v.user_id, at: v.at })) : undefined,
+    };
+  }
+
+  getStory(id, viewerId) {
+    const r = this.get('SELECT * FROM stories WHERE id = ? AND expires_at > ?', id, Date.now());
+    return r ? this._storyOut(r, viewerId) : null;
+  }
+
+  /** Live stories from this user and their peers, grouped by author, own first. */
+  storyFeed(userId) {
+    const rows = this.all(
+      `SELECT s.*, u.name, u.avatar FROM stories s JOIN users u ON u.id = s.user_id
+       WHERE s.expires_at > ? AND (s.user_id = ? OR s.user_id IN (
+         SELECT m2.user_id FROM members m1 JOIN members m2 ON m2.conversation_id = m1.conversation_id WHERE m1.user_id = ?))
+       ORDER BY s.created_at`,
+      Date.now(), userId, userId,
+    );
+    const groups = new Map();
+    for (const r of rows) {
+      if (!groups.has(r.user_id)) groups.set(r.user_id, { user: { id: r.user_id, name: r.name, avatar: r.avatar }, stories: [] });
+      groups.get(r.user_id).stories.push(this._storyOut(r, userId));
+    }
+    return [...groups.values()].sort((a, b) => (b.user.id === userId) - (a.user.id === userId));
+  }
+
+  viewStory(id, userId) {
+    return this.run('INSERT OR IGNORE INTO story_views (story_id, user_id, at) VALUES (?, ?, ?)', id, userId, Date.now()).changes > 0;
+  }
+
+  deleteStory(id) {
+    const r = this.get('SELECT attachment FROM stories WHERE id = ?', id);
+    const fileId = r?.attachment ? JSON.parse(r.attachment).fileId : null;
+    this.run('DELETE FROM stories WHERE id = ?', id);
+    if (fileId) this.run('DELETE FROM files WHERE id = ?', fileId);
+    return fileId;
+  }
+
+  sweepStories() {
+    return this.all('SELECT id FROM stories WHERE expires_at <= ?', Date.now()).map((r) => this.deleteStory(r.id)).filter(Boolean);
+  }
+
+  // ---- reports ----
+
+  addReport({ messageId, conversationId, reporterId, reason, snapshot }) {
+    const id = randomUUID();
+    this.run('INSERT INTO reports (id, message_id, conversation_id, reporter_id, reason, snapshot, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      id, messageId, conversationId, reporterId, reason, JSON.stringify(snapshot), Date.now());
+    return id;
+  }
+
+  listReports(limit = 100) {
+    return this.all('SELECT * FROM reports ORDER BY created_at DESC LIMIT ?', limit).map((r) => ({
+      id: r.id, messageId: r.message_id, conversationId: r.conversation_id, reporterId: r.reporter_id,
+      reason: r.reason, message: JSON.parse(r.snapshot), createdAt: r.created_at,
+    }));
+  }
+
   // ---- files ----
 
   addFile({ id, conversationId, ownerId, name, mime, size }) {
     this.run(
       'INSERT INTO files (id, conversation_id, owner_id, name, mime, size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      id, conversationId, ownerId, name, mime, size, Date.now(),
+      id, conversationId ?? null, ownerId, name, mime, size, Date.now(),
     );
   }
 
   getFile(id) {
     const r = this.get('SELECT * FROM files WHERE id = ?', id);
-    return r ? { id: r.id, conversationId: r.conversation_id, ownerId: r.owner_id, name: r.name, mime: r.mime, size: r.size } : null;
+    return r ? { id: r.id, conversationId: r.conversation_id, messageId: r.message_id, ownerId: r.owner_id, name: r.name, mime: r.mime, size: r.size } : null;
+  }
+
+  /** Uploads that were never attached to anything. */
+  sweepOrphanFiles(olderThanMs) {
+    const rows = this.all('SELECT id FROM files WHERE message_id IS NULL AND created_at < ?', Date.now() - olderThanMs);
+    for (const r of rows) this.run('DELETE FROM files WHERE id = ?', r.id);
+    return rows.map((r) => r.id);
   }
 }

@@ -37,7 +37,7 @@ const api = (path, { token, method = 'GET', json } = {}) =>
 
 before(async () => {
   dir = mkdtempSync(join(tmpdir(), 'plugchat-'));
-  chat = createPlugChat({ secret: SECRET, dataDir: dir, log: { error() {} } });
+  chat = createPlugChat({ secret: SECRET, dataDir: dir, log: { error() {} }, rateLimit: { perSecond: 1000, burst: 1000 } });
   server = await chat.listen(0);
   url = `http://localhost:${server.address().port}/plugchat`;
 });
@@ -231,6 +231,220 @@ test('host admin token can provision users, post system messages and erase a use
 
   assert.equal((await api('/users/u-900', { token: admin, method: 'DELETE' })).status, 200);
   assert.equal(chat.store.getUser('u-900'), undefined);
+});
+
+test('people are found by whatever the platform identifies them with', async () => {
+  const tok = (claims) => signToken(claims, SECRET);
+  const byEmail = new PlugChat({ url, getToken: async () => tok({ sub: 'h1', name: 'Hana', email: 'Hana@Example.com' }) });
+  const byPhone = new PlugChat({ url, getToken: async () => tok({ sub: 'h2', name: 'Ibra', phone: '+233 (24) 555-0101' }) });
+  const byMemberNo = new PlugChat({ url, getToken: async () => tok({ sub: 'h3', name: 'Jo', username: '@Jo_J', handles: { member_no: 'AA-0042' } }) });
+  clients.push(byEmail, byPhone, byMemberNo);
+  await Promise.all([byEmail.connect(), byPhone.connect(), byMemberNo.connect()]);
+
+  assert.equal((await byPhone.findUser('hana@example.com')).id, 'h1');
+  assert.equal((await byEmail.findUser('+233245550101')).id, 'h2', 'phone formatting does not matter');
+  assert.equal((await byEmail.findUser('jo_j')).id, 'h3');
+  assert.equal((await byEmail.findUser('aa-0042', 'member_no')).id, 'h3', 'custom handle kinds work');
+  await assert.rejects(byEmail.findUser('hana@'), { status: 404 }, 'handles only match exactly');
+
+  // other users never see your handles unless the host opts in
+  assert.equal((await byPhone.findUser('hana@example.com')).handles, undefined);
+  assert.deepEqual(byEmail.me.handles, { email: 'hana@example.com' });
+
+  const dm = await byEmail.openDmByHandle('+233 24 555 0101');
+  assert.deepEqual(dm.members.map((m) => m.userId).sort(), ['h1', 'h2']);
+
+  // a handle cannot be claimed twice
+  const admin = tok({ sub: 'host', admin: true });
+  const clash = await api('/users/h9', { token: admin, method: 'PUT', json: { name: 'Imposter', handles: { email: 'hana@example.com' } } });
+  assert.equal(clash.status, 409);
+});
+
+test('polls, including inside encrypted conversations', async () => {
+  const alice = await client('alice');
+  const bob = await client('bob');
+  for (const encrypted of [false, true]) {
+    const group = await alice.createGroup({ title: 'Vote', memberIds: ['bob'], encrypted });
+    const poll = await alice.sendPoll(group.id, { question: 'Venue?', options: ['Accra', 'Kumasi', 'Tamale'] });
+    assert.deepEqual(poll.poll.options, ['Accra', 'Kumasi', 'Tamale']);
+
+    const seen = next(alice, 'message.updated', (m) => m.id === poll.id);
+    await bob.vote(poll.id, [1]);
+    assert.deepEqual((await seen).votes, { 1: ['bob'] });
+    await assert.rejects(bob.vote(poll.id, [0, 2]), { status: 400 }, 'single-choice poll');
+    await assert.rejects(bob.vote(poll.id, [7]), { status: 400 });
+    if (encrypted) assert.ok(!chat.store.get('SELECT body FROM messages WHERE id = ?', poll.id).body.includes('Accra'));
+  }
+});
+
+test('view-once messages can be opened a single time and are then wiped', async () => {
+  const alice = await client('alice');
+  const bob = await client('bob');
+  const dm = await alice.openDm('bob');
+  const file = new File(['secret-bytes'], 'pic.png', { type: 'image/png' });
+
+  const incoming = next(bob, 'message', (m) => m.viewOnce);
+  const sent = await alice.send(dm.id, { text: 'for your eyes only', file, viewOnce: true });
+  const masked = await incoming;
+  assert.equal(masked.text, '');
+  assert.equal(masked.file, null);
+  assert.equal(masked.hasFile, true);
+
+  const fileId = chat.store.get('SELECT attachment FROM messages WHERE id = ?', sent.id).attachment.match(/"fileId":"([^"]+)"/)[1];
+  const bobToken = signToken({ sub: 'bob' }, SECRET);
+  assert.equal((await api(`/files/${fileId}`, { token: bobToken })).status, 404, 'no download before opening');
+  await assert.rejects(alice.open(sent.id), { status: 403 });
+
+  const opened = await bob.open(sent.id);
+  assert.equal(opened.text, 'for your eyes only');
+  assert.equal(await (await bob.download(opened)).text(), 'secret-bytes');
+  await assert.rejects(bob.open(sent.id), { status: 410 });
+  assert.equal((await bob.messages(dm.id)).find((m) => m.id === sent.id).text, '');
+
+  assert.equal(chat.store.sweepViewOnce(60_000).length, 0, 'grace period still running');
+  assert.equal(chat.store.sweepViewOnce(-1).length, 1);
+  assert.equal(chat.store.get('SELECT body FROM messages WHERE id = ?', sent.id).body, '');
+  assert.equal(chat.store.getFile(fileId), null);
+});
+
+test('pins, forwarding, mentions, per-user settings and search', async () => {
+  const alice = await client('alice');
+  const bob = await client('bob');
+  await client('carol');
+  const group = await alice.createGroup({ title: 'Planning', memberIds: ['bob', 'carol'] });
+
+  const msg = await alice.send(group.id, { text: 'Budget is 4200 cedis', mentions: ['bob', 'not-a-member'] });
+  assert.deepEqual(msg.mentions, ['bob']);
+
+  await bob.pin(msg.id);
+  assert.equal((await alice.pins(group.id))[0].id, msg.id);
+  await bob.unpin(msg.id);
+  assert.equal((await alice.pins(group.id)).length, 0);
+
+  const dm = await bob.openDm('carol');
+  const fwd = await bob.forward(msg, dm.id);
+  assert.equal(fwd.forwarded, true);
+  assert.equal(fwd.text, 'Budget is 4200 cedis');
+
+  const muted = await bob.settings(group.id, { muted: true, pinned: true });
+  assert.equal(muted.muted, true);
+  assert.equal(muted.pinned, true);
+  assert.equal((await alice.conversation(group.id)).muted, false, 'settings are private to each member');
+
+  assert.ok((await bob.search('4200')).some((m) => m.id === msg.id));
+  const eve = await client('eve');
+  assert.equal((await eve.search('4200')).length, 0, 'search never reaches into conversations you are not in');
+});
+
+test('announcement channels: only admins post', async () => {
+  const alice = await client('alice');
+  const bob = await client('bob');
+  const channel = await alice._req('POST', '/conversations', { json: { type: 'group', title: 'Notices', memberIds: ['bob'], announce: true } });
+  await alice.send(channel.id, { text: 'AGM on Friday' });
+  await assert.rejects(bob.send(channel.id, { text: 'ok' }), { status: 403 });
+  await bob.react((await bob.messages(channel.id))[0].id, '👍');
+});
+
+test('stories are visible to peers only and report who viewed', async () => {
+  const alice = await client('alice');
+  const bob = await client('bob');
+  const stranger = await client('stranger-1');
+  await alice.openDm('bob');
+
+  const posted = next(bob, 'story.new');
+  const story = await alice.postStory({ text: 'At the reunion!', file: new File(['img'], 's.png', { type: 'image/png' }) });
+  await posted;
+
+  const feed = await bob.stories();
+  const fromAlice = feed.find((g) => g.user.id === 'alice');
+  assert.equal(fromAlice.stories[0].seen, false);
+  assert.equal(await (await bob.storyFile(fromAlice.stories[0])).text(), 'img');
+  await bob.viewStory(story.id);
+
+  const mine = (await alice.stories())[0];
+  assert.equal(mine.user.id, 'alice');
+  assert.deepEqual(mine.stories.at(-1).views.map((v) => v.userId), ['bob']);
+
+  assert.ok(!(await stranger.stories()).some((g) => g.user.id === 'alice'));
+  await assert.rejects(stranger.viewStory(story.id), { status: 404 });
+  await assert.rejects(stranger.storyFile(story), { status: 404 });
+  await assert.rejects(bob.deleteStory(story.id), { status: 404 });
+  await alice.deleteStory(story.id);
+});
+
+test('reports reach the host; call signalling only flows between members', async () => {
+  const alice = await client('alice');
+  const bob = await client('bob');
+  const eve = await client('eve');
+  const dm = await alice.openDm('bob');
+  const msg = await alice.send(dm.id, { text: 'something rude' });
+
+  await bob.report(msg.id, 'harassment');
+  await assert.rejects(eve.report(msg.id, 'x'), { status: 404 });
+  const reports = await (await api('/reports', { token: signToken({ sub: 'host', admin: true }, SECRET) })).json();
+  assert.ok(reports.reports.some((r) => r.messageId === msg.id && r.reason === 'harassment' && r.message.body === 'something rude'));
+  assert.equal((await api('/reports', { token: signToken({ sub: 'bob' }, SECRET) })).status, 403);
+
+  const got = next(bob, 'signal');
+  let leaked = false;
+  eve.on('signal', () => (leaked = true));
+  eve.signal(dm.id, 'bob', { call: 'x', t: 'invite' }); // not a member: dropped
+  alice.signal(dm.id, 'bob', { call: 'c1', t: 'invite' });
+  const sig = await got;
+  assert.equal(sig.from, 'alice');
+  assert.equal(sig.data.call, 'c1');
+  assert.equal(leaked, false);
+});
+
+test('with the directory off, users cannot be enumerated; encryption can be made mandatory', async () => {
+  const d = mkdtempSync(join(tmpdir(), 'plugchat-strict-'));
+  const strict = createPlugChat({ secret: SECRET, dataDir: d, log: { error() {} }, directory: false, requireEncryption: true });
+  const srv = await strict.listen(0);
+  const base = `http://localhost:${srv.address().port}/plugchat`;
+  const mk = async (sub, extra) => {
+    const c = new PlugChat({ url: base, getToken: async () => signToken({ sub, ...extra }, SECRET) });
+    await c.connect();
+    return c;
+  };
+  const a = await mk('a', { email: 'a@x.test' });
+  const b = await mk('b', { email: 'b@x.test' });
+  const c = await mk('c');
+  try {
+    await assert.rejects(a.searchUsers(''), { status: 403 });
+    await assert.rejects(a.user('b'), { status: 404 }, 'profiles of strangers are hidden');
+    assert.equal((await a.findUser('b@x.test')).id, 'b', 'but an exact handle still resolves');
+
+    await assert.rejects(a.openDm('b'), { status: 400 }, 'plaintext conversations are refused');
+    const dm = await a.openDm('b', { encrypted: true });
+    assert.equal(dm.encrypted, true);
+    assert.equal((await a.user('b')).id, 'b', 'peers are visible');
+    await assert.rejects(c.user('b'), { status: 404 });
+  } finally {
+    for (const x of [a, b, c]) x.close();
+    srv.close();
+    srv.closeAllConnections();
+    strict.close();
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test('writes are rate limited per user', async () => {
+  const d = mkdtempSync(join(tmpdir(), 'plugchat-rl-'));
+  const limited = createPlugChat({ secret: SECRET, dataDir: d, log: { error() {} }, rateLimit: { perSecond: 1, burst: 3 } });
+  const srv = await limited.listen(0);
+  const token = signToken({ sub: 'spammer' }, SECRET);
+  const statuses = [];
+  for (let i = 0; i < 5; i++) {
+    const res = await fetch(`http://localhost:${srv.address().port}/plugchat/v1/me/key`, {
+      method: 'PUT', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: '{"publicKey":"k"}',
+    });
+    statuses.push(res.status);
+  }
+  assert.deepEqual(statuses, [200, 200, 200, 429, 429]);
+  srv.close();
+  srv.closeAllConnections();
+  limited.close();
+  rmSync(d, { recursive: true, force: true });
 });
 
 test('webhook signatures verify with the shared secret', () => {

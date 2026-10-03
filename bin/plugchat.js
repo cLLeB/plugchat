@@ -33,6 +33,10 @@ if (cmd === 'secret') {
     origins: env.PLUGCHAT_ORIGINS ? env.PLUGCHAT_ORIGINS.split(',').map((s) => s.trim()) : '*',
     webhookUrl: env.PLUGCHAT_WEBHOOK_URL,
     directory: env.PLUGCHAT_DIRECTORY !== 'off',
+    stories: env.PLUGCHAT_STORIES !== 'off',
+    requireEncryption: env.PLUGCHAT_REQUIRE_E2EE === 'on',
+    handleVisibility: env.PLUGCHAT_HANDLE_VISIBILITY === 'all' ? 'all' : 'none',
+    iceServers: env.PLUGCHAT_ICE_SERVERS ? JSON.parse(env.PLUGCHAT_ICE_SERVERS) : undefined,
     maxFileBytes: env.PLUGCHAT_MAX_FILE_MB ? Number(env.PLUGCHAT_MAX_FILE_MB) * 1024 * 1024 : undefined,
   });
   const server = await chat.listen(port, env.HOST);

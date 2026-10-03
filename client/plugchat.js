@@ -234,8 +234,11 @@ export class PlugChat {
     if (!this.identity) throw new PlugChatError(0, 'e2ee_disabled', 'End-to-end encryption is not enabled on this client');
     const keys = {};
     for (const id of userIds) {
-      const publicKey = id === this.me.id ? this.identity.publicKey : (await this.user(id)).publicKey;
-      if (!publicKey) throw new PlugChatError(409, 'no_public_key', `${id} has not opened chat yet, so encryption cannot be set up with them`);
+      const { publicKey } = id === this.me.id ? this.identity : await this._req('GET', `/users/${encodeURIComponent(id)}/key`);
+      if (!publicKey) {
+        const name = await this.user(id).then((u) => u.name, () => 'This person');
+        throw new PlugChatError(409, 'no_public_key', `${name} has not opened chat yet, so encryption cannot be set up with them`);
+      }
       keys[id] = await e2ee.wrapKey(this.identity, this.me.id, publicKey, conversationId, raw);
     }
     return keys;
@@ -243,15 +246,29 @@ export class PlugChat {
 
   async _hydrate(message, conv) {
     const out = { ...message, text: message.body, file: message.attachment, encrypted: false, undecryptable: false };
-    if (message.deleted || message.kind !== 'text') return out;
+    if (message.deleted || message.kind === 'system') return out;
     conv ??= this._convs.get(message.conversationId) ?? (await this.conversation(message.conversationId));
-    if (!conv.encrypted) return out;
-    out.encrypted = true;
+    out.encrypted = conv.encrypted;
+    // Unopened or already-consumed view-once messages arrive without content.
+    if (!message.body) return out;
     try {
-      const { key } = await this._requireKey(conv);
-      const payload = JSON.parse(await e2ee.decryptText(key, message.body, conv.id));
-      out.text = payload.t ?? '';
-      out.file = message.attachment && { ...message.attachment, name: payload.f?.name ?? 'file', mime: payload.f?.mime ?? 'application/octet-stream' };
+      let payload;
+      if (conv.encrypted) {
+        const { key } = await this._requireKey(conv);
+        payload = JSON.parse(await e2ee.decryptText(key, message.body, conv.id));
+        out.text = payload.t ?? '';
+        out.file = message.attachment && { ...message.attachment, name: payload.f?.name ?? 'file', mime: payload.f?.mime ?? 'application/octet-stream' };
+      } else if (message.kind !== 'text') {
+        const v = JSON.parse(message.body);
+        payload = message.kind === 'poll' ? { poll: v } : { loc: v };
+      }
+      if (message.kind === 'poll') {
+        out.text = payload.poll.question;
+        out.poll = { ...message.poll, question: payload.poll.question, options: payload.poll.options };
+      } else if (message.kind === 'location') {
+        out.location = payload.loc;
+        out.text = payload.loc.label ?? '';
+      }
     } catch {
       out.text = '';
       out.undecryptable = true;
@@ -276,6 +293,15 @@ export class PlugChat {
   }
   user(id) {
     return this._req('GET', `/users/${encodeURIComponent(id)}`);
+  }
+  /** Exact lookup by email, phone, username or any custom handle kind the host uses. */
+  findUser(handle, kind) {
+    const p = new URLSearchParams({ handle });
+    if (kind) p.set('kind', kind);
+    return this._req('GET', `/users/lookup?${p}`);
+  }
+  async openDmByHandle(handle, options) {
+    return this.openDm((await this.findUser(handle)).id, options);
   }
   block(userId) {
     return this._req('PUT', `/blocks/${encodeURIComponent(userId)}`);
@@ -326,6 +352,11 @@ export class PlugChat {
     return this._hydrateConversation(await this._req('PATCH', `/conversations/${conversationId}`, { json: patch }));
   }
 
+  /** Private per-user preferences: `{ muted, archived, pinned }`. */
+  async settings(conversationId, prefs) {
+    return this._hydrateConversation(await this._req('PUT', `/conversations/${conversationId}/settings`, { json: prefs }));
+  }
+
   async addMembers(conversationId, userIds) {
     const conv = await this._conv(conversationId);
     const json = { userIds };
@@ -359,9 +390,14 @@ export class PlugChat {
 
   /**
    * @param {string} conversationId
-   * @param {{ text?: string, file?: File|Blob, replyTo?: string }} content
+   * @param {object} content
+   * @param {string} [content.text]
+   * @param {File|Blob} [content.file]
+   * @param {string} [content.replyTo]     id of the message being answered
+   * @param {string[]} [content.mentions]  user ids to notify even if they muted the chat
+   * @param {boolean} [content.viewOnce]   each recipient can open it a single time, then it is wiped
    */
-  async send(conversationId, { text = '', file, replyTo } = {}) {
+  async send(conversationId, { text = '', file, replyTo, mentions, viewOnce, forwarded } = {}) {
     const conv = await this._conv(conversationId);
     const k = conv.encrypted ? await this._requireKey(conv) : null;
     let attachment, fileMeta;
@@ -379,11 +415,118 @@ export class PlugChat {
       });
       attachment = { fileId: up.fileId };
     }
-    const body = k ? await e2ee.encryptText(k.key, JSON.stringify({ t: text, f: fileMeta }), conv.id) : text;
-    const message = await this._req('POST', `/conversations/${conversationId}/messages`, {
-      json: { body, replyTo, attachment, clientId: crypto.randomUUID() },
+    return this._post(conv, k, 'text', { t: text, f: fileMeta }, text, { replyTo, attachment, mentions, viewOnce, forwarded });
+  }
+
+  // Encrypted conversations carry one JSON payload as ciphertext; plain ones
+  // carry the readable body the REST API documents.
+  async _post(conv, k, kind, payload, plainBody, extra = {}) {
+    const body = k ? await e2ee.encryptText(k.key, JSON.stringify(payload), conv.id) : plainBody;
+    const message = await this._req('POST', `/conversations/${conv.id}/messages`, {
+      json: { kind, body, clientId: crypto.randomUUID(), ...extra },
     });
-    return this._hydrate(message, conv);
+    const out = await this._hydrate(message, conv);
+    // The sender never gets a view-once body back, so keep what we just wrote.
+    if (message.viewOnce) out.text = payload.t ?? '';
+    return out;
+  }
+
+  async sendPoll(conversationId, { question, options, multi = false }) {
+    const conv = await this._conv(conversationId);
+    const k = conv.encrypted ? await this._requireKey(conv) : null;
+    const poll = { question, options };
+    return this._post(conv, k, 'poll', { poll }, JSON.stringify(poll), { poll: { options: options.length, multi } });
+  }
+
+  async sendLocation(conversationId, { lat, lng, label }) {
+    const conv = await this._conv(conversationId);
+    const k = conv.encrypted ? await this._requireKey(conv) : null;
+    const loc = { lat, lng, label };
+    return this._post(conv, k, 'location', { loc }, JSON.stringify(loc));
+  }
+
+  /** Copy a message into another conversation (re-encrypting for it if needed). */
+  async forward(message, toConversationId) {
+    if (message.kind === 'poll') return this.sendPoll(toConversationId, { question: message.poll.question, options: message.poll.options, multi: message.poll.multi });
+    if (message.kind === 'location') return this.sendLocation(toConversationId, message.location);
+    let file;
+    if (message.file) file = new File([await this.download(message)], message.file.name, { type: message.file.mime });
+    return this.send(toConversationId, { text: message.text, file, forwarded: true });
+  }
+
+  async vote(messageId, options) {
+    return this._hydrate(await this._req('PUT', `/messages/${messageId}/vote`, { json: { options } }));
+  }
+
+  async pin(messageId) {
+    return this._hydrate(await this._req('PUT', `/messages/${messageId}/pin`));
+  }
+  async unpin(messageId) {
+    return this._hydrate(await this._req('DELETE', `/messages/${messageId}/pin`));
+  }
+  async pins(conversationId) {
+    const conv = await this._conv(conversationId);
+    const { messages } = await this._req('GET', `/conversations/${conversationId}/pins`);
+    return Promise.all(messages.map((m) => this._hydrate(m, conv)));
+  }
+
+  /** Open a view-once message. Resolves with its content exactly once; a second call rejects with 410. */
+  async open(messageId) {
+    return this._hydrate(await this._req('POST', `/messages/${messageId}/open`));
+  }
+
+  report(messageId, reason) {
+    return this._req('POST', `/messages/${messageId}/report`, { json: { reason } });
+  }
+
+  /** Server-side search. Encrypted conversations are not searchable by the server. */
+  async search(q, { conversationId } = {}) {
+    const p = new URLSearchParams({ q });
+    if (conversationId) p.set('conversationId', conversationId);
+    const { messages } = await this._req('GET', `/search?${p}`);
+    return Promise.all(messages.map((m) => this._hydrate(m)));
+  }
+
+  // ---- stories ----
+
+  stories() {
+    return this._req('GET', '/stories').then((r) => r.feed);
+  }
+
+  async postStory({ text = '', file, ttlSeconds } = {}) {
+    let attachment;
+    if (file) {
+      const up = await this._req('POST', '/files', {
+        body: await file.arrayBuffer(),
+        headers: { 'content-type': file.type || 'application/octet-stream', 'x-filename': encodeURIComponent(file.name ?? 'file') },
+      });
+      attachment = { fileId: up.fileId };
+    }
+    return this._req('POST', '/stories', { json: { text, attachment, ttlSeconds } });
+  }
+
+  viewStory(storyId) {
+    return this._req('POST', `/stories/${storyId}/view`);
+  }
+
+  deleteStory(storyId) {
+    return this._req('DELETE', `/stories/${storyId}`);
+  }
+
+  async storyFile(story) {
+    return new Blob([await this._req('GET', `/files/${story.attachment.fileId}`, { blob: true })], { type: story.attachment.mime });
+  }
+
+  // ---- calls (WebRTC; media is peer-to-peer and encrypted in transit by DTLS-SRTP) ----
+
+  iceServers() {
+    return this._req('GET', '/ice').then((r) => r.iceServers);
+  }
+
+  /** Low-level call signalling. `client/calls.js` builds on this. */
+  signal(conversationId, to, data) {
+    if (this._ws?.readyState !== 1) throw new PlugChatError(0, 'offline', 'Not connected');
+    this._ws.send(JSON.stringify({ type: 'signal', conversationId, to, data }));
   }
 
   /** @param {object} message A message previously returned by this client. */

@@ -1,0 +1,28 @@
+{
+  "name": "plugchat",
+  "version": "0.1.0",
+  "description": "Drop-in, self-hosted, security-focused in-app messaging for any existing platform.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
+  "bin": {
+    "plugchat": "bin/plugchat.js"
+  },
+  "exports": {
+    ".": "./server/index.js",
+    "./client": "./client/plugchat.js",
+    "./element": "./client/element.js"
+  },
+  "scripts": {
+    "start": "node bin/plugchat.js start",
+    "demo": "node examples/host-app/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
+

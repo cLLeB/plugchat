@@ -1,0 +1,4 @@
+node_modules/
+plugchat-data/
+examples/host-app/data/
+*.log

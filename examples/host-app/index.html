@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en" data-state="{{state}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Alumni Association — Members</title>
+  <style>
+    body { margin: 0; font: 15px/1.5 system-ui, sans-serif; background: #f2f3f5; color: #1c1e21; }
+    header { background: #0b3d2e; color: #fff; padding: 14px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+    header strong { flex: 1; font-size: 17px; }
+    header a { color: #cfe9dd; }
+    main { max-width: 980px; margin: 20px auto; padding: 0 16px; }
+    .card { background: #fff; border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+    .who a { display: inline-block; margin: 6px 8px 0 0; padding: 8px 14px; border-radius: 8px; background: #0b3d2e; color: #fff; text-decoration: none; }
+    [data-state="out"] .members-only, [data-state="in"] .guests-only { display: none; }
+    plug-chat { height: min(640px, calc(100vh - 150px)); --pc-accent: #0b6b4f; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #101214; color: #e8eaee; }
+      .card { background: #1a1d21; }
+      plug-chat { --pc-accent: #63c7a3; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>Alumni Association</strong>
+    <span class="members-only">Signed in as {{member}} <span id="unread"></span></span>
+    <span class="members-only">Switch:
+      <a href="/login?as=ama">Ama</a> <a href="/login?as=kofi">Kofi</a> <a href="/login?as=esi">Esi</a> <a href="/login?as=yaw">Yaw</a>
+    </span>
+  </header>
+  <main>
+    <div class="card who guests-only">
+      <h2>Members' area</h2>
+      <p>This page stands in for an existing platform with its own accounts. Sign in as a member (open a second browser window as someone else to chat with yourself):</p>
+      <a href="/login?as=ama">Ama Owusu</a><a href="/login?as=kofi">Kofi Mensah</a><a href="/login?as=esi">Esi Appiah</a><a href="/login?as=yaw">Yaw Boateng</a>
+    </div>
+    <div class="members-only">
+      <!-- Everything the host adds to its front end: -->
+      <script type="module" src="/plugchat/client/element.js"></script>
+      <plug-chat server="/plugchat" token-url="/api/chat-token" heading="Member messages"></plug-chat>
+    </div>
+  </main>
+  <script>
+    document.querySelector('plug-chat')?.addEventListener('plugchat:unread', (e) => {
+      document.getElementById('unread').textContent = e.detail.count ? `(${e.detail.count} unread)` : '';
+    });
+  </script>
+</body>
+</html>

@@ -1,10 +1,8 @@
-// The look of <plug-chat>. It borrows what each well-known messenger does best
-// and belongs to none of them: a navigation rail (a tab bar on phones), a chat
-// list with brief "2h" times, story rings and unread counts; clean bubbles on
-// a plain backdrop, with a gradient that shifts down the screen on your own
-// messages; time and delivery status under a block of messages rather than in
-// every bubble; replies as a faded line above the answer; and one rounded box
-// for composing, with add on the left and send or record on the right.
+// The look of <plug-chat>. By default: neutral gray panels, a navigation rail,
+// a compact chat list with red unread counts, and flat message rows (picture,
+// name and time on the first line of each block, no bubbles), with a toolbar
+// that floats over the row under the pointer and a single box for composing.
+// layout="bubbles" gives the bubble style instead.
 //
 // Nothing here is fixed. Hosts change colours, fonts, corner radii, border
 // widths and sizes with the --pc-* variables, restyle any element through
@@ -15,16 +13,18 @@
 export const STYLE = `
 :host {
   color-scheme: light;
-  --pc-accent: #e8452c; --pc-accent-fg: #fff;
-  --pc-bg: #fff; --pc-surface: #f2f3f7; --pc-chat: #fff; --pc-fg: #111418; --pc-muted: #667085;
-  --pc-border: #e6e8ee; --pc-bubble: #eef0f5; --pc-danger: #d92d20; --pc-online: #12b76a; --pc-radius: 16px;
+  --pc-accent: #4e5058; --pc-accent-fg: #fff;
+  --pc-bg: #f2f3f5; --pc-surface: #e3e5e8; --pc-chat: #fff; --pc-fg: #2e3035; --pc-muted: #5c5e66;
+  --pc-border: #dcdee3; --pc-bubble: #f2f3f5; --pc-danger: #da373c; --pc-online: #23a55a; --pc-radius: 12px;
+  /* the navigation rail, the box you type in, links */
+  --pc-rail: #e3e5e8; --pc-field: #ebedef; --pc-link: #006ce7;
   /* type */
   --pc-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; --pc-font-size: 15px;
   /* shape */
-  --pc-bubble-radius: 20px; --pc-avatar-radius: 50%; --pc-control-radius: 12px; --pc-border-width: 1px;
+  --pc-bubble-radius: 16px; --pc-avatar-radius: 50%; --pc-control-radius: 8px; --pc-border-width: 1px;
   /* messages: incoming text colour, and the outgoing bubble (any CSS background, so a gradient works) */
   --pc-bubble-fg: var(--pc-fg); --pc-bubble-out-fg: var(--pc-accent-fg);
-  --pc-bubble-out: linear-gradient(to bottom, color-mix(in oklab, var(--pc-accent) 55%, #ffb02e), var(--pc-accent) 45%, color-mix(in oklab, var(--pc-accent) 60%, #e0245e));
+  --pc-bubble-out: var(--pc-accent);
   /* sizes, and the backdrop behind the messages ("none" for a plain one) */
   --pc-sidebar-width: 340px; --pc-height: 640px; --pc-sender-l: 40%;
   --pc-pattern: none;
@@ -32,13 +32,13 @@ export const STYLE = `
   font: var(--pc-font-size)/1.4 var(--pc-font); color: var(--pc-fg);
 }
 :host([theme="dark"]) {
-  color-scheme: dark; --pc-accent: #ff6a4d; --pc-accent-fg: #fff; --pc-bg: #14161c; --pc-surface: #20232c; --pc-chat: #14161c;
-  --pc-fg: #e9ecf1; --pc-muted: #98a2b3; --pc-border: #2a2f38; --pc-bubble: #262a35; --pc-danger: #f97066; --pc-sender-l: 70%;
+  color-scheme: dark; --pc-accent: #c4c9d0; --pc-accent-fg: #1e1f22; --pc-bg: #2b2d31; --pc-surface: #1e1f22; --pc-chat: #313338;
+  --pc-fg: #dbdee1; --pc-muted: #949ba4; --pc-border: #232428; --pc-bubble: #2b2d31; --pc-danger: #f23f43; --pc-sender-l: 70%; --pc-rail: #1e1f22; --pc-field: #383a40; --pc-link: #00a8fc;
 }
 @media (prefers-color-scheme: dark) {
   :host(:not([theme="light"])) {
-    color-scheme: dark; --pc-accent: #ff6a4d; --pc-accent-fg: #fff; --pc-bg: #14161c; --pc-surface: #20232c; --pc-chat: #14161c;
-    --pc-fg: #e9ecf1; --pc-muted: #98a2b3; --pc-border: #2a2f38; --pc-bubble: #262a35; --pc-danger: #f97066; --pc-sender-l: 70%;
+    color-scheme: dark; --pc-accent: #c4c9d0; --pc-accent-fg: #1e1f22; --pc-bg: #2b2d31; --pc-surface: #1e1f22; --pc-chat: #313338;
+    --pc-fg: #dbdee1; --pc-muted: #949ba4; --pc-border: #232428; --pc-bubble: #2b2d31; --pc-danger: #f23f43; --pc-sender-l: 70%; --pc-rail: #1e1f22; --pc-field: #383a40; --pc-link: #00a8fc;
   }
 }
 * { box-sizing: border-box; scrollbar-width: thin; }
@@ -640,6 +640,62 @@ slot[name="empty"] { display: contents; }
 @keyframes pc-up { from { transform: translateY(40px); opacity: .6; } }
 @keyframes pc-side { from { transform: translateX(28px); opacity: .6; } }
 @media (prefers-reduced-motion: reduce) { dialog, .row.new .col, .toast { animation: none !important; } }
+
+/* ---- the default look: gray panels, flat rows ---- */
+.rail { background: var(--pc-rail); border-inline-end: 0; gap: 8px; }
+.navbtn { width: 46px; height: 46px; border-radius: 50%; background: var(--pc-bg); color: var(--pc-fg); transition: border-radius .15s, background .15s, color .15s; }
+.navbtn:hover, .navbtn.on { border-radius: 16px; background: var(--pc-accent); color: var(--pc-accent-fg); }
+.navbtn.on::before { content: ""; position: absolute; inset-inline-start: -9px; top: 9px; bottom: 9px; width: 4px; border-radius: 0 4px 4px 0; background: var(--pc-fg); }
+.navbtn.compose { background: var(--pc-bg); color: var(--pc-online); }
+.navbtn.compose:hover { background: var(--pc-online); color: #fff; }
+.navbtn .badge { box-shadow: 0 0 0 3px var(--pc-rail); }
+.badge { background: var(--pc-danger); color: #fff; }
+.badge.quiet { background: var(--pc-muted); }
+.side > .bar { padding-top: 8px; min-height: 52px; box-shadow: 0 1px 0 var(--pc-border); }
+.side > .bar h2 { font-size: 17px; font-weight: 700; letter-spacing: 0; }
+.find { padding-top: 10px; }
+.find input { border-radius: 6px; padding: 7px 10px; font-size: 14px; }
+.chips .chip[aria-pressed="true"] { color: var(--pc-fg); border-bottom-color: var(--pc-fg); }
+.conv { border-radius: 6px; padding: 6px 8px; }
+.conv > .avatar { width: 36px; height: 36px; font-size: 14px; }
+.conv:hover, .conv[aria-current="true"] { background: color-mix(in srgb, var(--pc-fg) 9%, transparent); }
+.conv .name { font-weight: 500; color: var(--pc-muted); }
+.conv:hover .name, .conv[aria-current="true"] .name, .conv.unread .name { color: var(--pc-fg); }
+.conv .preview, .conv .when { font-size: 12px; }
+.main > .bar { background: var(--pc-chat); border-bottom: 0; box-shadow: 0 1px 0 var(--pc-border); min-height: 52px; }
+.byline { display: flex; align-items: baseline; gap: 8px; }
+.stamp { font-size: 12px; font-weight: 400; color: var(--pc-muted); }
+.root:not(.flat) .stamp { display: none; }
+.root.flat .main, .root.flat .composer, .root.flat .extras { background: var(--pc-chat); }
+.root.flat .row, .root.flat .row.mine { gap: 16px; padding: 1px 16px; }
+.root.flat .row.first { margin-top: 14px; padding-top: 2px; }
+.root.flat .row > .avatar.sm { width: 40px; height: 40px; font-size: 15px; }
+.root.flat .row > .spacer { width: 40px; }
+.root.flat .sender { font-weight: 600; margin: 0; }
+.root.flat .col > .meta.plain { display: none; }
+.root.flat .bubble a { color: var(--pc-link); }
+.root.flat .bubble.mention { box-shadow: -3px 0 0 #f0b232; background: color-mix(in srgb, #f0b232 12%, transparent); }
+.root.flat .at { color: var(--pc-link); background: color-mix(in srgb, var(--pc-link) 14%, transparent); border-radius: 4px; padding: 0 2px; }
+.root.flat .day { font-size: 12px; text-transform: none; letter-spacing: 0; }
+.react { border-radius: 8px; }
+.root.flat .react { box-shadow: none; padding: 1px 8px; }
+.root.flat .react.on { box-shadow: 0 0 0 1px var(--pc-link); background: color-mix(in srgb, var(--pc-link) 14%, var(--pc-surface)); }
+.acts { border-radius: 8px; }
+.composer { padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
+.dock { background: var(--pc-field); border: 0; border-radius: 10px; padding: 4px 6px; }
+.dock > .attach, .dock > .attach:hover { width: 26px; height: 26px; margin: 6px 6px 6px 4px; background: var(--pc-muted); color: var(--pc-field); }
+.dock > .attach svg { width: 16px; height: 16px; stroke-width: 2.6; }
+.dock .action:not(.mic) { border-radius: 8px; }
+dialog { border-radius: 12px; }
+@container (max-width: 700px) {
+  .navbtn.on::before { display: none; }
+  .rail { background: var(--pc-rail); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .side > .bar h2 { font-size: 20px; }
+  .conv { padding: 8px 12px; }
+  .conv > .avatar { width: 42px; height: 42px; }
+  .composer { padding: 0 10px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .root.flat .row, .root.flat .row.mine { padding-inline: 12px; gap: 12px; }
+}
 /* on a phone the rail becomes a tab bar along the bottom of the chat list */
 @container (max-width: 700px) {
   .rail { position: absolute; inset-inline: 0; bottom: 0; z-index: 3; width: auto; height: calc(58px + env(safe-area-inset-bottom, 0px)); padding: 7px 12px env(safe-area-inset-bottom, 0px); flex-direction: row; align-items: flex-start; justify-content: space-around; border-inline-end: 0; border-top: var(--pc-border-width) solid var(--pc-border); background: color-mix(in srgb, var(--pc-bg) 86%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
@@ -649,7 +705,6 @@ slot[name="empty"] { display: contents; }
   .navme { margin-top: 2px; }
   .root.nav .side { padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
   .root.nav .list { padding-bottom: 8px; }
-  .side > .bar h2 { font-size: 28px; }
   .conv { border-radius: 0; padding: 10px 14px; }
   .conv .body { border-bottom: 0; padding-bottom: 0; margin-bottom: 0; }
   .msgs { padding-inline: 12px; }

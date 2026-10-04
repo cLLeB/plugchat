@@ -60,7 +60,7 @@ table below that is plain data, under the option's own name:
   "webhookUrl": "https://alumni.example/webhooks/plugchat",
   "webhookEvents": ["message.new", "member.added"],
   "features": { "stories": false },
-  "ui": { "theme": { "accent": "#0b6b4f" }, "layout": "bubbles" },
+  "ui": { "theme": { "accent": "#0b6b4f" }, "layout": "flat" },
   "storage": { "type": "s3", "bucket": "alumni-chat", "accessKeyId": "…", "secretAccessKey": "…" }
 }
 ```
@@ -330,7 +330,7 @@ session your site already has. Give the element a height with CSS.
 | `lang` | Interface language: `en`, `fr`, `es`, `pt` or `ar`. Defaults to the page's `<html lang>` |
 | `dir` | `rtl` or `ltr`. Right-to-left is chosen automatically for Arabic, Hebrew, Persian and Urdu `lang` values |
 | `e2ee`, `calls`, `stories` | Set to `off` to hide that feature |
-| `layout` | `bubbles` (default) or `flat` |
+| `layout` | `flat` (default) or `bubbles` |
 | `density` | `compact` for tighter rows |
 | `nav` | `off` leaves out the navigation rail (a tab bar on phones) and puts its controls in the chat list's header |
 | `stylesheet` | URL of a CSS file to apply inside the chat |

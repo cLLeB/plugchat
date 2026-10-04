@@ -103,7 +103,7 @@ const PARTS = {
 };
 
 // What a person can choose for themselves in Settings → Appearance (kept on their device).
-const SWATCHES = ['#e8452c', '#c8553d', '#d97706', '#0b8a5f', '#0e7c86', '#1d6fe0', '#1e3a8a', '#d6336c', '#334155'];
+const SWATCHES = ['#4e5058', '#e8452c', '#c8553d', '#d97706', '#0b8a5f', '#0e7c86', '#1d6fe0', '#1e3a8a', '#d6336c', '#334155'];
 const BACKDROPS = {
   plain: 'none',
   dots: 'radial-gradient(color-mix(in srgb, var(--pc-fg) 9%, transparent) 1px, transparent 1.4px)',
@@ -153,10 +153,10 @@ function h(tag, props = {}, ...kids) {
 // Like replaceChildren, but drops null/false and flattens arrays the way h() does.
 const fill = (el, ...kids) => el.replaceChildren(...kids.flat(Infinity).filter((c) => c != null && c !== false));
 
-// A steady colour per name, for initials and sender names. Violet and purple hues (240–330) are left out of the wheel.
+// A steady colour per name, for initials and sender names. Indigo, violet and purple hues (225–335) are left out of the wheel.
 const hue = (s) => {
-  const h = [...s].reduce((a, c) => (a * 31 + c.codePointAt(0)) % 270, 7);
-  return h < 240 ? h : h + 90;
+  const h = [...s].reduce((a, c) => (a * 31 + c.codePointAt(0)) % 250, 7);
+  return h < 225 ? h : h + 110;
 };
 const initials = (name) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => [...w][0].toUpperCase()).join('') || '?';
 const first = (name) => name.split(/\s+/)[0];
@@ -330,7 +330,7 @@ class PlugChatElement extends HTMLElement {
   _personalCss(mine) {
     const out = [];
     if (/^#[0-9a-f]{6}$/i.test(mine.accent ?? '')) out.push(`--pc-accent:${mine.accent}`);
-    if (mine.solid) out.push('--pc-bubble-out:var(--pc-accent)');
+    if (mine.gradient) out.push('--pc-bubble-out:linear-gradient(to bottom, color-mix(in oklab, var(--pc-accent) 70%, #fff), var(--pc-accent) 50%, color-mix(in oklab, var(--pc-accent) 75%, #000))');
     if (Number.isFinite(mine.fontSize)) out.push(`--pc-font-size:${Math.min(20, Math.max(12, mine.fontSize))}px`);
     if (Number.isFinite(mine.corners)) out.push(`--pc-bubble-radius:${Math.min(24, Math.max(0, mine.corners))}px`);
     if (BACKDROPS[mine.backdrop]) out.push(`--pc-pattern:${BACKDROPS[mine.backdrop]}`);
@@ -353,14 +353,14 @@ class PlugChatElement extends HTMLElement {
     const mark = (picked) => {
       for (const b of $swatches.querySelectorAll('.swatch')) b.setAttribute('aria-checked', String(b === picked));
     };
-    const $custom = h('input', { type: 'color', class: 'swatch custom', value: mine.accent ?? '#e8452c', title: T('Colour'), 'aria-label': T('Colour'),
+    const $custom = h('input', { type: 'color', class: 'swatch custom', value: mine.accent ?? '#4e5058', title: T('Colour'), 'aria-label': T('Colour'),
       oninput: () => (this._setPersonal({ accent: $custom.value }), mark($custom)) });
     const $swatches = h('div', { class: 'swatches', role: 'radiogroup', 'aria-label': T('Colour') },
       h('button', { class: 'swatch auto', role: 'radio', 'aria-checked': String(!mine.accent), title: T('Default'), 'aria-label': T('Default'), onclick: (e) => (this._setPersonal({ accent: null }), mark(e.currentTarget)) }),
       SWATCHES.map((colour) => h('button', { class: 'swatch', role: 'radio', 'aria-checked': String(mine.accent === colour), 'aria-label': colour, style: `background:${colour}`,
         onclick: (e) => (this._setPersonal({ accent: colour }), mark(e.currentTarget)) })),
       $custom);
-    const $gradient = h('input', { type: 'checkbox', role: 'switch', checked: !mine.solid, onchange: () => this._setPersonal({ solid: $gradient.checked ? null : true }) });
+    const $gradient = h('input', { type: 'checkbox', role: 'switch', checked: !!mine.gradient, onchange: () => this._setPersonal({ gradient: $gradient.checked ? true : null }) });
     return [
       h('p', { class: 'note' }, T('Colour')), $swatches,
       h('label', { class: 'setrow' }, h('span', {}, T('Gradient on my messages')), $gradient),
@@ -386,7 +386,7 @@ class PlugChatElement extends HTMLElement {
     if (!this.$root) return;
     const ui = this._ui();
     const mine = this._personal();
-    this.$root.classList.toggle('flat', (mine.layout || this.getAttribute('layout') || ui.layout) === 'flat');
+    this.$root.classList.toggle('flat', (mine.layout || this.getAttribute('layout') || ui.layout) !== 'bubbles');
     this.$root.classList.toggle('compact', (mine.density || this.getAttribute('density') || ui.density) === 'compact');
     const shared = declarations(ui.theme, (name) => !SURFACE_TOKENS.has(name));
     const dark = shared + declarations(ui.dark);
@@ -1626,7 +1626,9 @@ class PlugChatElement extends HTMLElement {
         const photoOnly = shown?.file && INLINE_IMAGES.has(shown.file.mime) && !shown.text && !m.replyTo && !m.forwarded && !(showAvatars && isFirst);
         const jumbo = m.kind === 'text' && !m.file && !m.replyTo && !m.viewOnce && !m.forwarded && JUMBO.test(m.text ?? '');
         bubble = h('div', { part: `bubble ${mine ? 'bubble-out' : 'bubble-in'}`, class: `bubble${m.mentions?.includes(me) ? ' mention' : ''}${photoOnly ? ' media' : ''}${jumbo ? ' jumbo' : ''}${m.pending ? ' pending' : ''}` },
-          showAvatars && isFirst && h('button', { class: 'sender', style: `--h:${hue(name)}`, onclick: () => this._profileDialog(m.senderId) }, name),
+          showAvatars && isFirst && h('div', { class: 'byline' },
+            h('button', { class: 'sender', style: `--h:${hue(name)}`, onclick: () => this._profileDialog(m.senderId) }, name),
+            h('span', { class: 'stamp' }, clock(m.createdAt))),
           m.forwarded && h('div', { class: 'tag' }, h('span', { icon: 'forward' }), T('Forwarded')),
           this._content(m, conv, mine),
         );
@@ -1636,7 +1638,8 @@ class PlugChatElement extends HTMLElement {
       const parent = plainRow && m.replyTo && byId.get(m.replyTo);
       // Time and status sit under the last message of a block (or under one with something to say:
       // edited, starred, pinned, timed, still sending), not inside every bubble.
-      const foot = plainRow && (isLast || m.starred || m.pinned || m.expiresAt || m.editedAt || m.pending) && h('span', { class: 'meta' },
+      const flagged = m.starred || m.pinned || m.expiresAt || m.editedAt || m.pending;
+      const foot = plainRow && (isLast || flagged) && h('span', { class: flagged ? 'meta' : 'meta plain' },
         m.starred && h('span', { icon: 'star', title: T('Starred') }),
         m.pinned && h('span', { icon: 'pin', title: T('Pinned') }),
         m.expiresAt && h('span', { icon: 'timer', title: T('Disappearing message') }),

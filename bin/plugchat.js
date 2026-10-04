@@ -40,7 +40,7 @@ if (cmd === 'secret') {
       webhookUrl: '',
       webhookEvents: ['message.new', 'message.reported', 'call.started'],
       features: { stories: true, polls: true, calls: true },
-      ui: { theme: { accent: '#e8452c' }, layout: 'bubbles' },
+      ui: { theme: {}, layout: 'flat' },
       studio: true,
     }, null, 2) + '\n');
     wrote.push('plugchat.config.json');

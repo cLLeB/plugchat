@@ -26,7 +26,7 @@ switched off cannot be switched back on from a page.
   "ui": {
     "theme": { "accent": "#0b6b4f", "bubbleRadius": "8px", "font": "Inter, sans-serif" },
     "dark": { "bg": "#101413" },
-    "layout": "bubbles",
+    "layout": "flat",
     "density": "comfortable",
     "heading": "Member messages",
     "strings": { "New chat": "New conversation" },
@@ -110,24 +110,27 @@ server (`accentFg` or `accent-fg`, both work).
 
 | Token | CSS variable | Default (light) | What it controls |
 |---|---|---|---|
-| `accent` | `--pc-accent` | `#e8452c` | Your brand colour: buttons, badges, links, outgoing messages |
+| `accent` | `--pc-accent` | `#4e5058` (gray) | Your brand colour: buttons, badges, links, outgoing messages |
 | `accentFg` | `--pc-accent-fg` | `#fff` | Text on the brand colour |
-| `bg` | `--pc-bg` | `#fff` | Panels, the chat list, the composer |
-| `surface` | `--pc-surface` | `#f2f3f7` | Fields, hover, settings cards |
+| `bg` | `--pc-bg` | `#f2f3f5` | Panels, the chat list, the composer |
+| `surface` | `--pc-surface` | `#e3e5e8` | Fields, hover, settings cards |
 | `chat` | `--pc-chat` | `#fff` | The backdrop behind messages |
-| `fg` | `--pc-fg` | `#111418` | Text |
-| `muted` | `--pc-muted` | `#667085` | Secondary text and icons |
-| `border` | `--pc-border` | `#e6e8ee` | Lines |
-| `bubble` | `--pc-bubble` | `#eef0f5` | Incoming message background |
+| `fg` | `--pc-fg` | `#2e3035` | Text |
+| `muted` | `--pc-muted` | `#5c5e66` | Secondary text and icons |
+| `border` | `--pc-border` | `#dcdee3` | Lines |
+| `bubble` | `--pc-bubble` | `#f2f3f5` | Incoming message background |
 | `bubbleFg` | `--pc-bubble-fg` | text colour | Incoming message text |
-| `bubbleOut` | `--pc-bubble-out` | a gradient built from the accent that shifts down the screen | Outgoing message background: a single colour (`#0b6b4f`) for a flat look, or any CSS gradient |
+| `bubbleOut` | `--pc-bubble-out` | the accent | Outgoing message background: a single colour (`#0b6b4f`) for a flat look, or any CSS gradient |
 | `bubbleOutFg` | `--pc-bubble-out-fg` | `accentFg` | Outgoing message text |
-| `danger` | `--pc-danger` | `#d92d20` | Destructive actions, errors |
-| `online` | `--pc-online` | `#12b76a` | The online dot |
-| `radius` | `--pc-radius` | `16px` | Corners of the whole frame |
-| `bubbleRadius` | `--pc-bubble-radius` | `20px` | Message corners |
+| `danger` | `--pc-danger` | `#da373c` | Destructive actions, errors, unread counts |
+| `rail` | `--pc-rail` | `#e3e5e8` | The navigation rail |
+| `field` | `--pc-field` | `#ebedef` | The box you type in |
+| `link` | `--pc-link` | `#006ce7` | Links and @mentions in the flat layout |
+| `online` | `--pc-online` | `#23a55a` | The online dot |
+| `radius` | `--pc-radius` | `12px` | Corners of the whole frame |
+| `bubbleRadius` | `--pc-bubble-radius` | `16px` | Message corners |
 | `avatarRadius` | `--pc-avatar-radius` | `50%` | Picture shape: `50%` circle, `30%` rounded, `6px` square |
-| `controlRadius` | `--pc-control-radius` | `12px` | Buttons and fields |
+| `controlRadius` | `--pc-control-radius` | `8px` | Buttons and fields |
 | `borderWidth` | `--pc-border-width` | `1px` | Line thickness (`0` removes lines) |
 | `font` | `--pc-font` | the system font | Typeface (load web fonts in your own page) |
 | `fontSize` | `--pc-font-size` | `15px` | Base text size |
@@ -145,8 +148,8 @@ background never leaks into the dark look.
 
 | Attribute / `ui` key | Values | Effect |
 |---|---|---|
-| `layout` | `bubbles` (default) | Messages in bubbles, yours on one side |
-| | `flat` | No bubbles, everyone on one side, a picture and name on every block, a line between days. Suits workspaces, support desks and communities |
+| `layout` | `flat` (default) | No bubbles: everyone on one side, with a picture, name and time on the first line of each block and a line between days |
+| | `bubbles` | Messages in bubbles, yours on one side, time and status under each block |
 | `density` | `comfortable` (default), `compact` | Tighter rows and headers |
 | `nav` (attribute) | `off` | Leave out the navigation rail (a tab bar on phones); its controls move into the chat list's header |
 

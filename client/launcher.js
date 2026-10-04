@@ -10,7 +10,7 @@
 import './element.js';
 
 const STYLE = `
-:host { --pc-accent: #e8452c; --pc-accent-fg: #fff; position: fixed; bottom: 20px; right: 20px; z-index: 2147483000; font: 14px system-ui, sans-serif; }
+:host { --pc-accent: #4e5058; --pc-accent-fg: #fff; position: fixed; bottom: 20px; right: 20px; z-index: 2147483000; font: 14px system-ui, sans-serif; }
 :host([position="left"]) { right: auto; left: 20px; }
 button { width: 56px; height: 56px; border-radius: 50%; border: 0; cursor: pointer; background: var(--pc-accent); color: var(--pc-accent-fg); display: grid; place-items: center; box-shadow: 0 6px 20px rgba(0, 0, 0, .25); position: relative; }
 button:focus-visible { outline: 3px solid var(--pc-accent); outline-offset: 3px; }

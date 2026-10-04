@@ -69,8 +69,8 @@ const STUDIO_PAGE = `<!doctype html>
 <meta name="robots" content="noindex">
 <title>PlugChat setup studio</title>
 <style>
-:root { color-scheme: light dark; --bg: #f4f5f7; --card: #fff; --fg: #16181d; --muted: #667085; --line: #e3e5ea; --accent: #d83c24; --code: #0f1420; --codefg: #dfe5f2; }
-@media (prefers-color-scheme: dark) { :root { --bg: #0f1115; --card: #191c23; --fg: #e8eaee; --muted: #98a2b3; --line: #2a2e37; --accent: #ff7a5c; --code: #0a0c11; } }
+:root { color-scheme: light dark; --bg: #f4f5f7; --card: #fff; --fg: #16181d; --muted: #667085; --line: #e3e5ea; --accent: #4e5058; --code: #0f1420; --codefg: #dfe5f2; }
+@media (prefers-color-scheme: dark) { :root { --bg: #0f1115; --card: #191c23; --fg: #e8eaee; --muted: #98a2b3; --line: #2a2e37; --accent: #b5bac1; --code: #0a0c11; } }
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; display: flex; flex-direction: column; }
@@ -104,7 +104,7 @@ input[type="color"] { width: 38px; height: 28px; padding: 0; border: 1px solid v
 .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: none; }
 .toolbar .label { color: var(--muted); font-size: 13px; } .toolbar .gap { flex: 1; }
 .seg { display: inline-flex; } .seg button { border-radius: 0; margin-left: -1px; } .seg button:first-child { border-radius: 8px 0 0 8px; margin: 0; } .seg button:last-child { border-radius: 0 8px 8px 0; }
-.seg button[aria-checked="true"], .tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.seg button[aria-checked="true"], .tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--card); }
 .stage { flex: 1; min-height: 0; display: flex; justify-content: center; }
 .stage plug-chat { height: 100%; width: 100%; box-shadow: 0 10px 40px rgba(16, 24, 40, .12); border-radius: 16px; }
 .stage[data-device="phone"] plug-chat { width: 390px; max-width: 100%; }
@@ -140,8 +140,8 @@ const ADMIN_PAGE = `<!doctype html>
 <meta name="robots" content="noindex">
 <title>Chat moderation</title>
 <style>
-:root { color-scheme: light dark; --bg: #f4f5f7; --card: #fff; --fg: #16181d; --muted: #6b7280; --line: #e3e5ea; --accent: #d83c24; --danger: #c92a2a; }
-@media (prefers-color-scheme: dark) { :root { --bg: #111317; --card: #1b1e25; --fg: #e8eaee; --muted: #9199a6; --line: #2a2e37; --accent: #ff7a5c; --danger: #ff8787; } }
+:root { color-scheme: light dark; --bg: #f4f5f7; --card: #fff; --fg: #16181d; --muted: #6b7280; --line: #e3e5ea; --accent: #4e5058; --danger: #c92a2a; }
+@media (prefers-color-scheme: dark) { :root { --bg: #111317; --card: #1b1e25; --fg: #e8eaee; --muted: #9199a6; --line: #2a2e37; --accent: #b5bac1; --danger: #ff8787; } }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
 #app { max-width: 880px; margin: 0 auto; padding: 20px 16px 60px; }
 h1 { font-size: 22px; } h2 { font-size: 17px; margin: 0 0 10px; }
@@ -156,7 +156,7 @@ blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--line
 .actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .tag { display: inline-block; background: color-mix(in srgb, var(--accent) 16%, transparent); border-radius: 8px; padding: 1px 8px; font-size: 13px; margin-left: 4px; }
 button { font: inherit; padding: 7px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; }
-button.primary { background: var(--accent); color: #fff; border-color: transparent; margin-top: 10px; }
+button.primary { background: var(--accent); color: var(--card); border-color: transparent; margin-top: 10px; }
 button.danger { color: var(--danger); } button:disabled { opacity: .5; }
 input { font: inherit; width: 100%; box-sizing: border-box; padding: 9px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
 .error { color: var(--danger); font-size: 13px; }

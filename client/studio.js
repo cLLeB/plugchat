@@ -25,19 +25,19 @@ function h(tag, props = {}, ...kids) {
 const SYSTEM_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 // [token, label, kind, default, extra]
 const TOKENS = [
-  ['accent', 'Brand colour', 'color', '#e8452c'],
+  ['accent', 'Brand colour', 'color', '#4e5058'],
   ['accentFg', 'Text on the brand colour', 'color', '#ffffff'],
-  ['bg', 'Panels', 'color', '#ffffff'],
-  ['surface', 'Fields and hover', 'color', '#f2f3f7'],
+  ['bg', 'Panels', 'color', '#f2f3f5'],
+  ['surface', 'Fields and hover', 'color', '#e3e5e8'],
   ['chat', 'Behind the messages', 'color', '#ffffff'],
-  ['fg', 'Text', 'color', '#111418'],
-  ['muted', 'Secondary text', 'color', '#667085'],
-  ['border', 'Lines', 'color', '#e6e8ee'],
-  ['bubble', 'Incoming message', 'color', '#eef0f5'],
+  ['fg', 'Text', 'color', '#2e3035'],
+  ['muted', 'Secondary text', 'color', '#5c5e66'],
+  ['border', 'Lines', 'color', '#dcdee3'],
+  ['bubble', 'Incoming message', 'color', '#f2f3f5'],
   ['bubbleOut', 'Outgoing message', 'text', '', 'a colour or a CSS gradient'],
-  ['radius', 'Frame corners', 'range', 16, [0, 28, 'px']],
-  ['bubbleRadius', 'Message corners', 'range', 20, [0, 24, 'px']],
-  ['controlRadius', 'Buttons and fields', 'range', 12, [0, 24, 'px']],
+  ['radius', 'Frame corners', 'range', 12, [0, 28, 'px']],
+  ['bubbleRadius', 'Message corners', 'range', 16, [0, 24, 'px']],
+  ['controlRadius', 'Buttons and fields', 'range', 8, [0, 24, 'px']],
   ['borderWidth', 'Line thickness', 'range', 1, [0, 3, 'px']],
   ['fontSize', 'Text size', 'range', 15, [12, 20, 'px']],
   ['sidebarWidth', 'Chat list width', 'range', 340, [240, 440, 'px']],
@@ -46,15 +46,15 @@ const TOKENS = [
   ['pattern', 'Backdrop pattern', 'select', 'none', [['none', 'None'], ['radial-gradient(color-mix(in srgb, currentColor 7%, transparent) 1px, transparent 1.4px)', 'Dots']]],
 ];
 const DARK_TOKENS = [
-  ['bg', 'Panels', '#14161c'], ['surface', 'Fields and hover', '#20232c'], ['chat', 'Behind the messages', '#14161c'],
-  ['fg', 'Text', '#e9ecf1'], ['border', 'Lines', '#2a2f38'], ['bubble', 'Incoming message', '#262a35'],
+  ['bg', 'Panels', '#2b2d31'], ['surface', 'Fields and hover', '#1e1f22'], ['chat', 'Behind the messages', '#313338'],
+  ['fg', 'Text', '#dbdee1'], ['border', 'Lines', '#232428'], ['bubble', 'Incoming message', '#2b2d31'],
 ];
 const PRESETS = {
   'Default': {},
-  'Workspace': { layout: 'flat', density: 'compact', theme: { accent: '#0e7c86', bubbleOut: '#0e7c86', radius: '8px', controlRadius: '6px', avatarRadius: '6px' } },
-  'Soft': { theme: { accent: '#d6336c', bubbleOut: 'linear-gradient(to bottom, #ff8a5c, #d6336c)', radius: '24px', bubbleRadius: '24px', controlRadius: '20px', chat: '#fff7f6', bubble: '#ffffff' } },
-  'Minimal': { theme: { accent: '#111418', bubbleOut: '#111418', radius: '0px', bubbleRadius: '6px', controlRadius: '4px', chat: '#ffffff', pattern: 'none' }, dark: { accent: '#e9ecf1', accentFg: '#111418', bubbleOut: '#e9ecf1', bubbleOutFg: '#111418' } },
-  'Forest': { theme: { accent: '#0b6b4f', bubbleOut: '#0b6b4f', chat: '#eef5f1', bubble: '#ffffff', surface: '#e9f0ec' } },
+  'Compact': { density: 'compact', theme: { accent: '#0e7c86', bubbleOut: '#0e7c86', radius: '8px', controlRadius: '6px', avatarRadius: '6px' } },
+  'Soft': { layout: 'bubbles', theme: { accent: '#d6336c', bubbleOut: 'linear-gradient(to bottom, #ff8a5c, #d6336c)', radius: '24px', bubbleRadius: '24px', controlRadius: '20px', chat: '#fff7f6', bubble: '#ffffff' } },
+  'Minimal': { layout: 'bubbles', theme: { accent: '#111418', bubbleOut: '#111418', radius: '0px', bubbleRadius: '6px', controlRadius: '4px', chat: '#ffffff', pattern: 'none' }, dark: { accent: '#e9ecf1', accentFg: '#111418', bubbleOut: '#e9ecf1', bubbleOutFg: '#111418' } },
+  'Forest': { layout: 'bubbles', theme: { accent: '#0b6b4f', bubbleOut: '#0b6b4f', chat: '#eef5f1', bubble: '#ffffff', surface: '#e9f0ec' } },
 };
 const FEATURE_LABELS = {
   groups: 'Group chats', directory: 'Browse people', files: 'Photos and files', voiceNotes: 'Voice notes', reactions: 'Reactions', replies: 'Replies',
@@ -68,7 +68,7 @@ const WORDING = ['Chats', 'Message', 'New chat', 'Search chats and messages', 'S
 // What the developer has chosen so far. Starts from what the server is already configured with.
 const state = {
   theme: { ...info.ui.theme }, dark: { ...info.ui.dark },
-  layout: info.ui.layout ?? 'bubbles', density: info.ui.density ?? 'comfortable',
+  layout: info.ui.layout ?? 'flat', density: info.ui.density ?? 'comfortable',
   heading: info.ui.heading ?? '', strings: { ...info.ui.strings }, css: info.ui.css ?? '',
   features: Object.fromEntries(info.featureNames.map((name) => [name, info.features[name] !== false])),
   viewer: info.users[0].id, device: 'desktop', mode: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', embed: 'html', backend: info.starters[0]?.id, tab: 'embed',
@@ -79,7 +79,7 @@ function uiNow() {
   const ui = {};
   if (Object.keys(clean(state.theme)).length) ui.theme = clean(state.theme);
   if (Object.keys(clean(state.dark)).length) ui.dark = clean(state.dark);
-  if (state.layout !== 'bubbles') ui.layout = state.layout;
+  if (state.layout !== 'flat') ui.layout = state.layout;
   if (state.density !== 'comfortable') ui.density = state.density;
   if (state.heading) ui.heading = state.heading;
   if (Object.keys(clean(state.strings)).length) ui.strings = clean(state.strings);
@@ -155,12 +155,12 @@ function renderControls() {
     h('h2', {}, 'Shape it'),
     h('p', { class: 'lead' }, 'Everything here changes the real chat in the middle. Nothing is saved to the server: copy the result from the right-hand side into your own project.'),
     h('div', { class: 'presets' }, Object.entries(PRESETS).map(([name, preset]) => h('button', { type: 'button', onclick: () => {
-      Object.assign(state, { theme: { ...preset.theme }, dark: { ...preset.dark }, layout: preset.layout ?? 'bubbles', density: preset.density ?? 'comfortable' });
+      Object.assign(state, { theme: { ...preset.theme }, dark: { ...preset.dark }, layout: preset.layout ?? 'flat', density: preset.density ?? 'comfortable' });
       renderControls();
       refresh();
     } }, name))),
     section('Layout', true,
-      choice('Messages', 'layout', [['bubbles', 'Bubbles, mine on one side'], ['flat', 'Flat, everyone on one side']]),
+      choice('Messages', 'layout', [['flat', 'Flat rows: picture, name and time'], ['bubbles', 'Bubbles, mine on one side']]),
       choice('Spacing', 'density', [['comfortable', 'Comfortable'], ['compact', 'Compact']])),
     section('Colours', true, TOKENS.filter((t) => t[2] === 'color' || t[0] === 'bubbleOut').map((t) => tokenControl(t))),
     section('Shape, size and type', false, TOKENS.filter((t) => t[2] !== 'color' && t[0] !== 'bubbleOut').map((t) => tokenControl(t))),
@@ -215,7 +215,7 @@ function pageScript(target) {
   if (state.css.trim()) lines.push(`${target}.css = ${JSON.stringify(state.css)};`);
   return lines.join('\n');
 }
-const attrs = () => [state.layout !== 'bubbles' && `layout="${state.layout}"`, state.density !== 'comfortable' && `density="${state.density}"`, state.heading && `heading="${state.heading.replace(/"/g, '&quot;')}"`].filter(Boolean).join(' ');
+const attrs = () => [state.layout !== 'flat' && `layout="${state.layout}"`, state.density !== 'comfortable' && `density="${state.density}"`, state.heading && `heading="${state.heading.replace(/"/g, '&quot;')}"`].filter(Boolean).join(' ');
 
 const EMBEDS = {
   html: ['Any web page', () => {
@@ -228,8 +228,8 @@ const EMBEDS = {
   }],
   vue: ['Vue', () => `<!-- vite.config: vue({ template: { compilerOptions: { isCustomElement: (tag) => tag.startsWith('plug-chat') } } }) -->\n<template>\n  <plug-chat ref="chat" server="${origin}${base}" token-url="/api/chat-token"${attrs() ? ' ' + attrs() : ''} />\n</template>\n\n<script setup>\nimport { onMounted, ref } from 'vue';\nconst chat = ref(null);\nonMounted(() => {\n  ${indent(pageScript('chat.value') || '// chat.value.features, .strings, .ui ... can be set here', '  ')}\n});\n</script>\n\n<style>\n${cssVariables()}\n</style>`],
   launcher: ['Floating button', () => `<script type="module" src="${origin}${base}/client/launcher.js"></script>\n\n<plug-chat-launcher server="${origin}${base}" token-url="/api/chat-token"${attrs() ? ' ' + attrs() : ''}></plug-chat-launcher>\n\n<style>\n${cssVariables().replaceAll('plug-chat', 'plug-chat-launcher').replace('  height: 640px;\n', '')}\n</style>`],
-  iframe: ['Iframe (site builders, CMS)', () => `<!-- The look comes from the server settings ("Server" tab): an iframe cannot be styled from outside. -->\n<iframe id="chat" src="${origin}${base}/embed?origin=https://YOUR-SITE${state.layout !== 'bubbles' ? `&layout=${state.layout}` : ''}"\n        allow="camera; microphone; display-capture" style="width:100%;height:640px;border:0"></iframe>\n<script>\n  const frame = document.getElementById('chat');\n  addEventListener('message', async (e) => {\n    if (e.source !== frame.contentWindow || e.data?.type !== 'plugchat:token-request') return;\n    const { token } = await (await fetch('/api/chat-token')).json();\n    frame.contentWindow.postMessage({ type: 'plugchat:token', token }, '${origin}');\n  });\n</script>`],
-  mobile: ['Mobile app (WebView)', () => `// Open this URL in a WebView. The look comes from the server settings ("Server" tab).\n${origin}${base}/embed${state.layout !== 'bubbles' ? `?layout=${state.layout}` : ''}\n\n// The page asks your app for a token and accepts it back:\n//   React Native   onMessage gets {"type":"plugchat:token-request"}  →  webview.injectJavaScript("plugchatSetToken('…')")\n//   Android        addJavascriptInterface(obj, "PlugChatNative")      →  webView.evaluateJavascript("plugchatSetToken('…')", null)\n//   iOS            message handler named "PlugChatNative"             →  webView.evaluateJavaScript("plugchatSetToken('…')")\n//   Flutter        JavaScriptChannel named "PlugChatNative"           →  controller.runJavaScript("plugchatSetToken('…')")`],
+  iframe: ['Iframe (site builders, CMS)', () => `<!-- The look comes from the server settings ("Server" tab): an iframe cannot be styled from outside. -->\n<iframe id="chat" src="${origin}${base}/embed?origin=https://YOUR-SITE${state.layout !== 'flat' ? `&layout=${state.layout}` : ''}"\n        allow="camera; microphone; display-capture" style="width:100%;height:640px;border:0"></iframe>\n<script>\n  const frame = document.getElementById('chat');\n  addEventListener('message', async (e) => {\n    if (e.source !== frame.contentWindow || e.data?.type !== 'plugchat:token-request') return;\n    const { token } = await (await fetch('/api/chat-token')).json();\n    frame.contentWindow.postMessage({ type: 'plugchat:token', token }, '${origin}');\n  });\n</script>`],
+  mobile: ['Mobile app (WebView)', () => `// Open this URL in a WebView. The look comes from the server settings ("Server" tab).\n${origin}${base}/embed${state.layout !== 'flat' ? `?layout=${state.layout}` : ''}\n\n// The page asks your app for a token and accepts it back:\n//   React Native   onMessage gets {"type":"plugchat:token-request"}  →  webview.injectJavaScript("plugchatSetToken('…')")\n//   Android        addJavascriptInterface(obj, "PlugChatNative")      →  webView.evaluateJavascript("plugchatSetToken('…')", null)\n//   iOS            message handler named "PlugChatNative"             →  webView.evaluateJavaScript("plugchatSetToken('…')")\n//   Flutter        JavaScriptChannel named "PlugChatNative"           →  controller.runJavaScript("plugchatSetToken('…')")`],
 };
 
 function serverSettings() {

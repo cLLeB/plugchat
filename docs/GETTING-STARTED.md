@@ -133,7 +133,7 @@ of effort:
 |---|---|
 | Match your brand colours, fonts, corner radii, sizes | CSS variables, or `ui.theme` in the server settings |
 | Remove features you do not want (stories, polls, calls, ...) | `features: { stories: false }` |
-| A different layout | `layout="flat"` (no bubbles, everyone on one side), `density="compact"` |
+| A different layout | `layout="bubbles"` (instead of the default flat rows), `density="compact"` |
 | Change any wording, or translate | `strings` |
 | Restyle one specific element | `plug-chat::part(bubble) { ... }` |
 | Anything else about the look | your own CSS, `stylesheet="/my-chat.css"` |

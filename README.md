@@ -151,9 +151,10 @@ Stated plainly so you can plan around them:
 - **No native mobile SDKs.** Mobile apps open the embed page in a WebView or
   call the REST/WebSocket API.
 - **Push notifications are yours to send**, driven by the webhook.
-- **The interface ships in English, French and Spanish.** Other languages are
-  added by the host through `strings`. The layout mirrors for right-to-left
-  languages, but no right-to-left translation ships yet.
+- **The interface ships in English, French, Spanish, Portuguese and Arabic**
+  (with a mirrored right-to-left layout). The translations are mine and have
+  not been reviewed by native speakers. Other languages are added by the host
+  through `strings`.
 - **Not yet exercised here:** the Dockerfile, the token snippets for languages
   other than Node, the native WebView bridges, and calls between two real
   devices on different networks (the call flow is tested in one browser with

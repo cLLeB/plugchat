@@ -64,19 +64,19 @@ const REPORT_REASONS = ['Spam', 'Harassment or bullying', 'Scam or fraud', 'Inap
 
 const STYLE = `
 :host {
-  --pc-accent: #3b5bdb; --pc-accent-fg: #fff;
+  color-scheme: light; --pc-accent: #3b5bdb; --pc-accent-fg: #fff;
   --pc-bg: #fff; --pc-surface: #f5f6f8; --pc-fg: #16181d; --pc-muted: #6b7280;
   --pc-border: #e3e5ea; --pc-bubble: #eceef2; --pc-danger: #c92a2a; --pc-radius: 14px;
   display: block; height: 600px; container-type: inline-size;
   font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--pc-fg);
 }
 :host([theme="dark"]) {
-  --pc-accent: #748ffc; --pc-accent-fg: #0b0d12; --pc-bg: #14161b; --pc-surface: #1b1e25; --pc-fg: #e8eaee;
+  color-scheme: dark; --pc-accent: #748ffc; --pc-accent-fg: #0b0d12; --pc-bg: #14161b; --pc-surface: #1b1e25; --pc-fg: #e8eaee;
   --pc-muted: #9199a6; --pc-border: #2a2e37; --pc-bubble: #262a33; --pc-danger: #ff8787;
 }
 @media (prefers-color-scheme: dark) {
   :host(:not([theme="light"])) {
-    --pc-accent: #748ffc; --pc-accent-fg: #0b0d12; --pc-bg: #14161b; --pc-surface: #1b1e25; --pc-fg: #e8eaee;
+    color-scheme: dark; --pc-accent: #748ffc; --pc-accent-fg: #0b0d12; --pc-bg: #14161b; --pc-surface: #1b1e25; --pc-fg: #e8eaee;
     --pc-muted: #9199a6; --pc-border: #2a2e37; --pc-bubble: #262a33; --pc-danger: #ff8787;
   }
 }
@@ -240,7 +240,7 @@ label.field, .field { font-size: 13px; color: var(--pc-muted); display: flex; fl
 .call .cbtns .hang { background: #e03131; }
 .call .cbtns .ok { background: #2f9e44; }
 
-.root[dir="rtl"] .backbtn svg, .root[dir="rtl"] .tag svg { transform: scaleX(-1); }
+.root[dir="rtl"] .backbtn svg, .root[dir="rtl"] .tag svg, .root[dir="rtl"] .sendbtn svg { transform: scaleX(-1); }
 @container (max-width: 640px) {
   .side { width: 100%; border-inline-end: 0; }
   .main { display: none; }

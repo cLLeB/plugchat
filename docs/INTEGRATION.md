@@ -245,7 +245,7 @@ session your site already has. Give the element a height with CSS.
 | `invite` | Join a group by invite code on load, e.g. from your own `/join/CODE` links |
 | `heading` | Sidebar title |
 | `theme` | `light` or `dark`; follows the system by default |
-| `lang` | Interface language: `en`, `fr` or `es`. Defaults to the page's `<html lang>` |
+| `lang` | Interface language: `en`, `fr`, `es`, `pt` or `ar`. Defaults to the page's `<html lang>` |
 | `dir` | `rtl` or `ltr`. Right-to-left is chosen automatically for Arabic, Hebrew, Persian and Urdu `lang` values |
 | `e2ee`, `calls`, `stories` | Set to `off` to hide that feature |
 

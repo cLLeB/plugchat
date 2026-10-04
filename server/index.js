@@ -1,14 +1,15 @@
 import { createServer } from 'node:http';
-import { createReadStream, mkdirSync } from 'node:fs';
-import { readFile, writeFile, unlink } from 'node:fs/promises';
+import { mkdirSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { randomUUID, createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Store } from './store.js';
 import { Hub } from './hub.js';
 import { signToken, verifyToken, signWebhook } from './auth.js';
+import { diskStorage, createHooks } from './connectors.js';
 
-export { signToken, verifyToken, signWebhook };
+export { signToken, verifyToken, signWebhook, diskStorage };
 
 const CLIENT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'client');
 const CLIENT_FILES = new Set(['plugchat.js', 'e2ee.js', 'calls.js', 'element.js']);
@@ -17,7 +18,7 @@ const MAX_JSON = 256 * 1024;
 const MAX_BODY_CHARS = 32_000;
 const MAX_MEMBERS = 1000;
 const HANDLE_KIND = /^[a-z][a-z0-9_]{0,23}$/;
-const USER_KINDS = new Set(['text', 'poll', 'location']);
+const USER_KINDS = new Set(['text', 'poll', 'location', 'custom']);
 const VIEW_ONCE_GRACE_MS = 60_000;
 
 class HttpError extends Error {
@@ -104,6 +105,12 @@ export function createPlugChat(options = {}) {
     requireEncryption = false,
     iceServers = [{ urls: 'stun:stun.l.google.com:19302' }],
     rateLimit = { perSecond: 5, burst: 30 },
+    storage: customStorage,
+    hooks: hookFns,
+    hookUrl,
+    hookEvents,
+    hookTimeoutMs,
+    hookFailOpen = false,
     log = console,
   } = options;
 
@@ -111,8 +118,12 @@ export function createPlugChat(options = {}) {
     throw new Error('PlugChat: `secret` must be a string of at least 32 characters');
   }
   const base = basePath.replace(/\/+$/, '');
-  const filesDir = join(dataDir, 'files');
-  mkdirSync(filesDir, { recursive: true });
+  mkdirSync(dataDir, { recursive: true });
+  const storage = customStorage ?? diskStorage(join(dataDir, 'files'));
+  const hooks = createHooks({ hooks: hookFns, hookUrl, hookEvents, hookTimeoutMs, secret });
+  // Calls go through the host's own vendor when it has registered one, peer-to-peer otherwise.
+  const callMode = hooks.has('call.join') ? 'external' : 'p2p';
+  const removeFile = (id) => Promise.resolve().then(() => storage.remove(id)).catch(() => {});
 
   const store = new Store(join(dataDir, 'plugchat.db'));
   const seen = new Map(); // sub -> "name\navatar" already written to the store
@@ -157,20 +168,51 @@ export function createPlugChat(options = {}) {
       const gone = store.sweepExpired();
       for (const m of gone) {
         hub.emit(store.memberIds(m.conversationId), { type: 'message.deleted', conversationId: m.conversationId, messageId: m.id, expired: true });
-        if (m.fileId) unlink(join(filesDir, m.fileId)).catch(() => {});
+        if (m.fileId) removeFile(m.fileId);
       }
       for (const m of store.sweepViewOnce(VIEW_ONCE_GRACE_MS)) {
         hub.emit(store.memberIds(m.conversationId), { type: 'message.updated', message: store.getMessage(m.id) });
-        if (m.fileId) unlink(join(filesDir, m.fileId)).catch(() => {});
+        if (m.fileId) removeFile(m.fileId);
       }
       const dead = [...store.sweepStories(), ...store.sweepOrphanFiles(24 * 3600_000)];
-      for (const fileId of dead) unlink(join(filesDir, fileId)).catch(() => {});
+      for (const fileId of dead) removeFile(fileId);
       allowWrite.prune();
     } catch (e) {
       log.error('plugchat sweep failed', e);
     }
   }, 5000);
   sweeper.unref();
+
+  /**
+   * Ask the host. No registered hook means yes. A hook that says
+   * { allow: false, reason } turns into a 403 the user sees; a hook that is
+   * down blocks the action unless the host opted into hookFailOpen.
+   */
+  async function gate(event, payload) {
+    let verdict;
+    try {
+      verdict = await hooks.run(event, payload);
+    } catch (e) {
+      log.error(`plugchat hook ${event} failed:`, e.message);
+      if (hookFailOpen) return {};
+      throw new HttpError(502, 'hook_unavailable', 'this action cannot be completed right now');
+    }
+    if (verdict?.allow === false) throw new HttpError(403, 'rejected', typeof verdict.reason === 'string' ? verdict.reason.slice(0, 300) : 'not allowed');
+    return verdict ?? {};
+  }
+
+  async function joinCall(call, userId, memberIds) {
+    const answer = await gate('call.join', {
+      call,
+      userId,
+      user: store.getUser(userId),
+      isStarter: call.startedBy === userId,
+      memberIds,
+    });
+    const url = typeof answer.url === 'string' && /^https:\/\/|^http:\/\/localhost[:/]/.test(answer.url) ? answer.url : undefined;
+    if (!url && answer.data === undefined) throw new HttpError(502, 'hook_unavailable', 'the call provider returned nothing to join with');
+    return { url, data: answer.data };
+  }
 
   function webhook(event) {
     if (!webhookUrl) return;
@@ -227,7 +269,7 @@ export function createPlugChat(options = {}) {
   };
 
   const routes = [
-    ['GET', '/v1/me', (ctx) => ({ ...userView(store.getUser(ctx.auth.sub), ctx.auth), directory, features: { directory, stories, requireEncryption } })],
+    ['GET', '/v1/me', (ctx) => ({ ...userView(store.getUser(ctx.auth.sub), ctx.auth), directory, features: { directory, stories, requireEncryption, calls: callMode } })],
 
     ['GET', '/v1/ice', () => ({ iceServers })],
 
@@ -246,7 +288,7 @@ export function createPlugChat(options = {}) {
     ['PUT', '/v1/me/key', async (ctx) => {
       const { publicKey } = await ctx.json();
       store.setPublicKey(ctx.auth.sub, str(publicKey, 'publicKey', 256));
-      return { ...userView(store.getUser(ctx.auth.sub), ctx.auth), directory, features: { directory, stories, requireEncryption } };
+      return { ...userView(store.getUser(ctx.auth.sub), ctx.auth), directory, features: { directory, stories, requireEncryption, calls: callMode } };
     }],
 
     ['GET', '/v1/users', (ctx) => {
@@ -293,7 +335,7 @@ export function createPlugChat(options = {}) {
       const files = store.deleteUser(ctx.params.id);
       seen.delete(ctx.params.id);
       hub.disconnect(ctx.params.id);
-      await Promise.all(files.map((f) => unlink(join(filesDir, f)).catch(() => {})));
+      await Promise.all(files.map((f) => removeFile(f)));
       for (const g of groups) pushConversation(g.id);
       hub.emit(peers, { type: 'user.deleted', userId: ctx.params.id });
       return { deleted: true };
@@ -324,6 +366,7 @@ export function createPlugChat(options = {}) {
       if (requireEncryption && !encrypted && !auth.admin) throw bad('this platform requires end-to-end encrypted conversations');
       const id = b.id === undefined ? undefined : str(b.id, 'id', 36);
       if (id !== undefined && (!UUID.test(id) || store.conversationExists(id))) throw bad('id must be an unused UUID');
+      if (!auth.admin) await gate('conversation.before', { type: b.type, creatorId: creator, memberIds, encrypted });
       const cid = store.createConversation({
         id,
         type: b.type,
@@ -438,7 +481,7 @@ export function createPlugChat(options = {}) {
       if (left.length === 0) {
         const files = store.all('SELECT id FROM files WHERE conversation_id = ?', conv.id);
         store.run('DELETE FROM conversations WHERE id = ?', conv.id);
-        await Promise.all(files.map((f) => unlink(join(filesDir, f.id)).catch(() => {})));
+        await Promise.all(files.map((f) => removeFile(f.id)));
       } else {
         if (!left.some((m) => m.role === 'owner')) store.setRole(conv.id, left[0].user_id, 'owner');
         pushConversation(conv.id);
@@ -476,7 +519,7 @@ export function createPlugChat(options = {}) {
         if (!file || file.conversationId !== conv.id || file.messageId || (file.ownerId !== auth.sub && !auth.admin)) throw bad('unknown attachment');
         attachment = { fileId: file.id, name: file.name, mime: file.mime, size: file.size };
       }
-      const body = str(b.body ?? '', 'body', MAX_BODY_CHARS, { allowEmpty: !!attachment });
+      let body = str(b.body ?? '', 'body', MAX_BODY_CHARS, { allowEmpty: !!attachment });
       // Refuse plaintext in an encrypted conversation so a buggy client can't leak content.
       if (conv.encrypted && kind !== 'system' && !body.startsWith('e1.')) throw bad('this conversation only accepts encrypted messages');
 
@@ -490,14 +533,16 @@ export function createPlugChat(options = {}) {
         meta.poll = { options: n, multi: b.poll.multi === true };
       }
       // The server can only check the shape of content it is able to read.
-      if (!conv.encrypted && (kind === 'poll' || kind === 'location')) {
+      if (!conv.encrypted && kind !== 'text' && kind !== 'system') {
         let v;
         try {
           v = JSON.parse(body);
         } catch {
           throw bad(`${kind} body must be JSON`);
         }
-        const ok = kind === 'poll'
+        const ok = kind === 'custom'
+          ? typeof v?.type === 'string' && v.type.length <= 64
+          : kind === 'poll'
           ? typeof v?.question === 'string' && Array.isArray(v.options) && v.options.length === meta.poll.options && v.options.every((o) => typeof o === 'string' && o.trim())
           : Number.isFinite(v?.lat) && Number.isFinite(v?.lng) && Math.abs(v.lat) <= 90 && Math.abs(v.lng) <= 180;
         if (!ok) throw bad(`malformed ${kind}`);
@@ -519,6 +564,15 @@ export function createPlugChat(options = {}) {
       if (b.mentions !== undefined) {
         const members = new Set(memberIds);
         meta.mentions = idList(b.mentions, 'mentions').filter((id) => members.has(id));
+      }
+
+      // The host may veto or rewrite: credit checks, moderation services, compliance rules.
+      if (!auth.admin) {
+        const verdict = await gate('message.before', {
+          message: { conversationId: conv.id, senderId, kind, body, hasAttachment: !!attachment, mentions: meta.mentions ?? [], viewOnce },
+          conversation: { id: conv.id, type: conv.type, encrypted: !!conv.encrypted, memberCount: memberIds.length },
+        });
+        if (typeof verdict.body === 'string' && !conv.encrypted && kind === 'text') body = str(verdict.body, 'body', MAX_BODY_CHARS, { allowEmpty: !!attachment });
       }
 
       const message = store.insertMessage({ conversationId: conv.id, senderId, kind, body, replyTo, attachment, clientId, meta, viewOnce });
@@ -554,7 +608,7 @@ export function createPlugChat(options = {}) {
       return upload(ctx, conv.id);
     }],
 
-    ['GET', '/v1/files/:id', (ctx) => {
+    ['GET', '/v1/files/:id', async (ctx) => {
       const file = UUID.test(ctx.params.id) ? store.getFile(ctx.params.id) : null;
       if (!file) throw notFound('file not found');
       const { auth } = ctx;
@@ -578,7 +632,7 @@ export function createPlugChat(options = {}) {
         'content-security-policy': "default-src 'none'; sandbox",
         'cache-control': 'private, max-age=3600',
       });
-      createReadStream(join(filesDir, file.id)).on('error', () => ctx.res.destroy()).pipe(ctx.res);
+      (await storage.stream(file.id)).on('error', () => ctx.res.destroy()).pipe(ctx.res);
       return undefined;
     }],
 
@@ -598,7 +652,7 @@ export function createPlugChat(options = {}) {
       const moderator = ctx.auth.admin || (conv.type === 'group' && member.role !== 'member');
       if (message.senderId !== ctx.auth.sub && !moderator) throw forbidden('you can only delete your own messages');
       const fileId = store.deleteMessage(message.id);
-      if (fileId) await unlink(join(filesDir, fileId)).catch(() => {});
+      if (fileId) await removeFile(fileId);
       hub.emit(store.memberIds(conv.id), { type: 'message.deleted', conversationId: conv.id, messageId: message.id });
       return { deleted: true };
     }],
@@ -638,6 +692,35 @@ export function createPlugChat(options = {}) {
       webhook({ type: 'message.reported', reportId: id, reporterId: ctx.auth.sub, reason, message, conversation: { id: conv.id, type: conv.type, encrypted: !!conv.encrypted } });
       ctx.status = 201;
       return { reportId: id };
+    }],
+
+    // Calls through the host's own vendor (Twilio, Agora, Daily, LiveKit, Jitsi,
+    // Zoom...). PlugChat keeps the call's place in the conversation and who may
+    // join; the host's `call.join` hook turns that into a vendor room or token.
+    ['POST', '/v1/conversations/:id/calls', async (ctx) => {
+      const { conv, member } = access(ctx, ctx.params.id);
+      if (callMode !== 'external') throw notFound('no call provider is configured; use peer-to-peer calls');
+      if (!member) throw forbidden();
+      const memberIds = store.memberIds(conv.id);
+      if (conv.type === 'dm' && store.isBlocked(ctx.auth.sub, memberIds.find((id) => id !== ctx.auth.sub))) throw forbidden('you cannot call this user');
+      const video = (await ctx.json()).video === true;
+      const call = store.addCall({ conversationId: conv.id, startedBy: ctx.auth.sub, video });
+      const join = await joinCall(call, ctx.auth.sub, memberIds);
+      const message = store.insertMessage({ conversationId: conv.id, senderId: ctx.auth.sub, kind: 'call', body: JSON.stringify({ callId: call.id, video }) });
+      hub.emit(memberIds, { type: 'message.new', message });
+      webhook({
+        type: 'call.started', call, message,
+        conversation: { id: conv.id, type: conv.type, title: conv.title },
+        recipients: memberIds.filter((id) => id !== ctx.auth.sub).map((id) => ({ userId: id, online: hub.isOnline(id) })),
+      });
+      ctx.status = 201;
+      return { call, message, join };
+    }],
+
+    ['POST', '/v1/calls/:id/join', async (ctx) => {
+      const call = UUID.test(ctx.params.id) ? store.getCall(ctx.params.id) : null;
+      if (!call || !store.member(call.conversationId, ctx.auth.sub)) throw notFound('call not found');
+      return { call, join: await joinCall(call, ctx.auth.sub, store.memberIds(call.conversationId)) };
     }],
 
     ['GET', '/v1/reports', (ctx) => (adminOnly(ctx), { reports: store.listReports() })],
@@ -683,7 +766,7 @@ export function createPlugChat(options = {}) {
       const story = store.getStory(ctx.params.id, ctx.auth.sub);
       if (!story || (story.userId !== ctx.auth.sub && !ctx.auth.admin)) throw notFound('story not found');
       const fileId = store.deleteStory(story.id);
-      if (fileId) await unlink(join(filesDir, fileId)).catch(() => {});
+      if (fileId) await removeFile(fileId);
       hub.emit([story.userId, ...store.peers(story.userId)], { type: 'story.deleted', userId: story.userId, storyId: story.id });
       return { deleted: true };
     }],
@@ -708,7 +791,8 @@ export function createPlugChat(options = {}) {
     name = name.replace(/[\\/\0-\x1f]/g, '_').slice(0, 200) || 'file';
     const mime = String(ctx.req.headers['content-type'] ?? 'application/octet-stream').split(';')[0].trim().slice(0, 100);
     const id = randomUUID();
-    await writeFile(join(filesDir, id), data, { flag: 'wx' });
+    if (!ctx.auth.admin) await gate('upload.before', { userId: ctx.auth.sub, conversationId, name, mime, size: data.length });
+    await storage.put(id, data);
     store.addFile({ id, conversationId, ownerId: ctx.auth.sub, name, mime, size: data.length });
     ctx.status = 201;
     return { fileId: id, name, mime, size: data.length };

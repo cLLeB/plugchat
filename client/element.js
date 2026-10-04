@@ -195,6 +195,7 @@ label.field, .field { font-size: 13px; color: var(--pc-muted); display: flex; fl
 .steps i.on { background: var(--pc-accent); }
 
 .call { position: absolute; inset: 0; background: #0d0f13; color: #fff; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+.call iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
 .call video.remote { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .call video.local { position: absolute; right: 14px; top: 14px; width: 28%; max-width: 160px; border-radius: 10px; background: #000; }
 .call .cinfo { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; text-shadow: 0 1px 3px #000; }
@@ -283,8 +284,18 @@ class PlugChatElement extends HTMLElement {
     this.editing = null;
     this.pendingFile = null;
     this.viewOnce = false;
+    /** Host-supplied renderers for custom message types: { [type]: (message) => Node | string }. */
+    this.renderers ??= {};
+    /** Host-supplied entries for the attach menu: [{ label, run({ conversation, chat, element }) }]. */
+    this.actions ??= [];
     this._getToken = null;
     this._started = false;
+    // A framework may have set getToken before this element class was loaded.
+    if (Object.hasOwn(this, 'getToken')) {
+      const fn = this.getToken;
+      delete this.getToken;
+      this._getToken = fn;
+    }
   }
 
   /** Alternative to the token/token-url attributes: `el.getToken = async () => '...'`. */
@@ -399,6 +410,7 @@ class PlugChatElement extends HTMLElement {
         this._renderMessages({ stick: true });
         this._markRead();
       }
+      if (m.kind === 'call' && m.senderId !== chat.me.id && Date.now() - m.createdAt < 45_000) this._ring(m);
       this._announceUnread();
       if (m.senderId !== chat.me.id) this.dispatchEvent(new CustomEvent('plugchat:message', { detail: { message: m } }));
     });
@@ -506,6 +518,7 @@ class PlugChatElement extends HTMLElement {
     if (m.viewOnce) return 'View-once message';
     if (m.kind === 'poll') return `Poll: ${m.text}`;
     if (m.kind === 'location') return 'Shared a location';
+    if (m.kind === 'call') return m.call.video ? 'Video call' : 'Voice call';
     return m.text || (m.file ? `📎 ${m.file.name}` : '');
   }
   _preview(conv, m) {
@@ -687,6 +700,8 @@ class PlugChatElement extends HTMLElement {
     const conv = this.convs.get(this.activeId);
     if (!conv || !this.$header) return;
     const other = conv.type === 'dm' ? this._other(conv) : null;
+    // The host's own call vendor handles groups too; built-in peer-to-peer calls are one-to-one.
+    const canCall = this._on('calls') && (this._external() || (other && this.calls));
     const status = other ? (this.chat.online.has(other.userId) ? 'Online' : 'Offline') : `${conv.members.length} members${conv.announce ? ' · announcements' : ''}`;
     fill(this.$header, 
       h('button', { class: 'icon backbtn', icon: 'back', title: 'Back', 'aria-label': 'Back to conversations', onclick: () => this._select(null) }),
@@ -699,8 +714,8 @@ class PlugChatElement extends HTMLElement {
           h('span', {}, conv.encrypted ? `End-to-end encrypted · ${status}` : status),
         ),
       ),
-      other && this.calls && h('button', { class: 'icon', icon: 'phone', title: 'Voice call', 'aria-label': 'Voice call', onclick: () => this._startCall(conv, other, false) }),
-      other && this.calls && h('button', { class: 'icon', icon: 'video', title: 'Video call', 'aria-label': 'Video call', onclick: () => this._startCall(conv, other, true) }),
+      canCall && h('button', { class: 'icon', icon: 'phone', title: 'Voice call', 'aria-label': 'Voice call', onclick: () => this._call(conv, other, false) }),
+      canCall && h('button', { class: 'icon', icon: 'video', title: 'Video call', 'aria-label': 'Video call', onclick: () => this._call(conv, other, true) }),
       h('button', { class: 'icon', icon: 'info', title: 'Conversation details', 'aria-label': 'Conversation details', onclick: () => this._detailsDialog(conv) }),
     );
   }
@@ -834,6 +849,22 @@ class PlugChatElement extends HTMLElement {
       } }, h('span', { icon: 'eye' }), m.hasFile ? 'Tap to view photo or file' : 'Tap to view message');
     }
     if (m.kind === 'poll') return this._poll(m);
+    if (m.kind === 'call') {
+      return h('div', { class: 'once' }, h('span', { icon: m.call.video ? 'video' : 'phone' }), m.call.video ? 'Video call' : 'Voice call',
+        h('button', { class: 'btn plain', onclick: () => this._openCall(m.call.callId, conv) }, 'Join'));
+    }
+    if (m.kind === 'custom') {
+      // The host decides how its own message types look; without a renderer the fallback text shows.
+      const render = this.renderers?.[m.custom.type];
+      if (render) {
+        try {
+          return render(m);
+        } catch (e) {
+          console.error('plugchat renderer failed', e);
+        }
+      }
+      return linkify(m.text || `[${m.custom.type}]`);
+    }
     if (m.kind === 'location') {
       const { lat, lng, label } = m.location;
       const url = `https://www.openstreetmap.org/?mlat=${Number(lat)}&mlon=${Number(lng)}#map=16/${Number(lat)}/${Number(lng)}`;
@@ -876,7 +907,7 @@ class PlugChatElement extends HTMLElement {
       picker,
       act('smile', 'React', () => (picker.hidden = !picker.hidden)),
       act('reply', 'Reply', () => this._setDraftMode({ replyTo: m })),
-      forwardable && !m.viewOnce && act('forward', 'Forward', () => this._forwardDialog(m)),
+      forwardable && !m.viewOnce && m.kind !== 'call' && act('forward', 'Forward', () => this._forwardDialog(m)),
       canPin && act('pin', m.pinned ? 'Unpin' : 'Pin', () => this._guard(m.pinned ? this.chat.unpin(m.id) : this.chat.pin(m.id)), m.pinned ? 'on' : ''),
       mine && plain && act('edit', 'Edit', () => this._setDraftMode({ editing: m })),
       !mine && act('flag', 'Report', () => this._reportDialog(m)),
@@ -960,6 +991,9 @@ class PlugChatElement extends HTMLElement {
           this.viewOnce = !this.viewOnce;
           this._renderBanner();
         }),
+        // Whatever else the host platform offers: send money, share a product, book a slot...
+        (this.actions ?? []).map((a) => item(a.icon in ICON ? a.icon : 'plus', a.label, () =>
+          this._guard(Promise.resolve().then(() => a.run({ conversation: this.convs.get(this.activeId), chat: this.chat, element: this }))))),
       );
     }
     this.$menu.hidden = !open;
@@ -1330,6 +1364,57 @@ class PlugChatElement extends HTMLElement {
   }
 
   // ---- calls ----
+
+  _external() {
+    return this.chat.me.features?.calls === 'external';
+  }
+
+  async _call(conv, other, video) {
+    if (!this._external()) return this._startCall(conv, other, video);
+    try {
+      const { call, join } = await this.chat.startCall(conv.id, { video });
+      await this._openCall(call.id, conv, join);
+    } catch (e) {
+      this._error(e.message);
+    }
+  }
+
+  /**
+   * Join a call that runs on the host's own vendor. The host can take over by
+   * calling preventDefault() on the `plugchat:call-join` event and using the
+   * vendor's SDK with `detail.data`; otherwise `detail.url` opens in a frame.
+   */
+  async _openCall(callId, conv, join) {
+    try {
+      join ??= (await this.chat.joinCall(callId)).join;
+    } catch (e) {
+      return this._error(e.message);
+    }
+    const event = new CustomEvent('plugchat:call-join', { cancelable: true, detail: { callId, conversation: conv, url: join.url, data: join.data } });
+    if (!this.dispatchEvent(event)) return;
+    if (!join.url) return this._error('This call can only be opened by the app.');
+    this.$root.querySelector('.call')?.remove();
+    const overlay = h('div', { class: 'call', role: 'dialog', 'aria-label': 'Call' },
+      h('iframe', { src: join.url, allow: 'camera; microphone; display-capture; autoplay; fullscreen', title: 'Call', referrerpolicy: 'no-referrer' }),
+      h('div', { class: 'cbtns' }, h('button', { icon: 'close', class: 'hang', title: 'Leave call', 'aria-label': 'Leave call', onclick: () => overlay.remove() })));
+    this.$root.append(overlay);
+  }
+
+  _ring(m) {
+    const conv = this.convs.get(m.conversationId);
+    const name = this._memberName(conv, m.senderId);
+    this.$root.querySelector('.call')?.remove();
+    const close = () => (clearTimeout(timer), overlay.remove());
+    const overlay = h('div', { class: 'call', role: 'alertdialog', 'aria-label': `Incoming call from ${name}` },
+      h('div', { class: 'cinfo' }, this._avatar(name), h('strong', {}, name),
+        h('div', { role: 'status' }, `Incoming ${m.call.video ? 'video' : 'voice'} call${conv?.type === 'group' ? ` in ${conv.title}` : ''}…`)),
+      h('div', { class: 'cbtns' },
+        h('button', { icon: 'phone', class: 'ok', title: 'Accept', 'aria-label': 'Accept', onclick: () => (close(), this._openCall(m.call.callId, conv)) }),
+        h('button', { icon: 'close', class: 'hang', title: 'Decline', 'aria-label': 'Decline', onclick: close })));
+    const timer = setTimeout(close, 45_000);
+    this.$root.append(overlay);
+    this.dispatchEvent(new CustomEvent('plugchat:call', { detail: { message: m } }));
+  }
 
   async _startCall(conv, other, video) {
     try {

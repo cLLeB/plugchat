@@ -428,6 +428,124 @@ test('with the directory off, users cannot be enumerated; encryption can be made
   }
 });
 
+test('connectors: host hooks veto and rewrite, third-party call vendor, custom storage, custom messages', async () => {
+  const d = mkdtempSync(join(tmpdir(), 'plugchat-conn-'));
+  const credits = { rich: 2, broke: 0 };
+  const bucket = new Map(); // stands in for S3 or any object store
+  const { Readable } = await import('node:stream');
+  const { createServer } = await import('node:http');
+
+  // A hook endpoint as a backend in any language would expose it.
+  const received = [];
+  const hookServer = createServer(async (req, res) => {
+    let raw = '';
+    for await (const chunk of req) raw += chunk;
+    const valid = req.headers['x-plugchat-signature'] === signWebhook(raw, SECRET);
+    const body = JSON.parse(raw);
+    received.push({ event: body.event, valid });
+    res.setHeader('content-type', 'application/json');
+    if (body.event === 'upload.before') return res.end(JSON.stringify({ allow: body.mime !== 'application/x-msdownload', reason: 'That file type is not allowed here' }));
+    // call.join: mint a "vendor token" for this user and room
+    res.end(JSON.stringify({ url: `https://calls.vendor.example/room/${body.call.id}?t=${body.userId}`, data: { vendor: 'acme-rtc', token: `tok-${body.userId}`, video: body.call.video } }));
+  });
+  await new Promise((r) => hookServer.listen(0, r));
+
+  const hosted = createPlugChat({
+    secret: SECRET, dataDir: d, log: { error() {} },
+    storage: {
+      put: (id, data) => void bucket.set(id, data),
+      stream: (id) => Readable.from(bucket.get(id)),
+      remove: (id) => void bucket.delete(id),
+    },
+    hooks: {
+      // e.g. a pay-per-message platform, plus a moderation service
+      'message.before': ({ message }) => {
+        if (credits[message.senderId] <= 0) return { allow: false, reason: 'You are out of message credits' };
+        credits[message.senderId] -= 1;
+        if (message.kind === 'text') return { body: message.body.replace(/darn/gi, '****') };
+      },
+    },
+    hookUrl: `http://localhost:${hookServer.address().port}/hooks`,
+    hookEvents: ['upload.before', 'call.join'],
+  });
+  const srv = await hosted.listen(0);
+  const base = `http://localhost:${srv.address().port}/plugchat`;
+  const mk = async (sub) => {
+    const c = new PlugChat({ url: base, getToken: async () => signToken({ sub }, SECRET) });
+    await c.connect();
+    return c;
+  };
+  const rich = await mk('rich');
+  const broke = await mk('broke');
+  try {
+    assert.equal(rich.me.features.calls, 'external');
+    const dm = await rich.openDm('broke');
+
+    assert.equal((await rich.send(dm.id, { text: 'well darn' })).text, 'well ****', 'the host rewrote the message');
+    await assert.rejects(broke.send(dm.id, { text: 'hi' }), { status: 403, message: 'You are out of message credits' });
+
+    const custom = await rich.sendCustom(dm.id, { type: 'payment', data: { amount: 50, currency: 'GHS' }, text: 'Sent GHS 50' });
+    assert.deepEqual(custom.custom, { type: 'payment', data: { amount: 50, currency: 'GHS' } });
+    assert.equal(credits.rich, 0);
+    await assert.rejects(rich.send(dm.id, { text: 'one more' }), { status: 403 });
+
+    credits.rich = 5;
+    const sent = await rich.send(dm.id, { file: new File(['in the bucket'], 'a.txt', { type: 'text/plain' }) });
+    assert.equal(bucket.size, 1, 'the file went to the host-provided storage');
+    assert.equal(await (await broke.download(sent)).text(), 'in the bucket');
+    await assert.rejects(rich.send(dm.id, { file: new File(['MZ'], 'virus.exe', { type: 'application/x-msdownload' }) }), { message: 'That file type is not allowed here' });
+    await rich.remove(sent.id);
+    assert.equal(bucket.size, 0);
+
+    const ring = next(broke, 'message', (m) => m.kind === 'call');
+    const started = await rich.startCall(dm.id, { video: true });
+    assert.equal(started.join.data.token, 'tok-rich');
+    const marker = await ring;
+    assert.deepEqual(marker.call, { callId: started.call.id, video: true });
+    const joined = await broke.joinCall(marker.call.callId);
+    assert.equal(joined.join.data.token, 'tok-broke', 'each participant gets their own vendor token');
+    assert.match(joined.join.url, /^https:\/\/calls\.vendor\.example\/room\//);
+
+    const outsider = await mk('outsider');
+    await assert.rejects(outsider.joinCall(started.call.id), { status: 404 }, 'only conversation members can get a join token');
+    outsider.close();
+    assert.ok(received.length >= 4 && received.every((r) => r.valid), 'every hook request carried a valid signature');
+  } finally {
+    rich.close();
+    broke.close();
+    for (const s of [srv, hookServer]) (s.close(), s.closeAllConnections());
+    hosted.close();
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test('a hook that is down blocks the action unless the host chose fail-open', async () => {
+  for (const hookFailOpen of [false, true]) {
+    const d = mkdtempSync(join(tmpdir(), 'plugchat-down-'));
+    const inst = createPlugChat({ secret: SECRET, dataDir: d, log: { error() {} }, hookUrl: 'http://127.0.0.1:9/nothing', hookEvents: ['message.before'], hookTimeoutMs: 500, hookFailOpen });
+    const srv = await inst.listen(0);
+    const mk = async (sub) => {
+      const c = new PlugChat({ url: `http://localhost:${srv.address().port}/plugchat`, getToken: async () => signToken({ sub }, SECRET) });
+      await c.connect();
+      return c;
+    };
+    const a = await mk('a');
+    const b = await mk('b');
+    try {
+      const dm = await a.openDm('b');
+      if (hookFailOpen) assert.equal((await a.send(dm.id, { text: 'through' })).text, 'through');
+      else await assert.rejects(a.send(dm.id, { text: 'blocked' }), { status: 502 });
+    } finally {
+      a.close();
+      b.close();
+      srv.close();
+      srv.closeAllConnections();
+      inst.close();
+      rmSync(d, { recursive: true, force: true });
+    }
+  }
+});
+
 test('writes are rate limited per user', async () => {
   const d = mkdtempSync(join(tmpdir(), 'plugchat-rl-'));
   const limited = createPlugChat({ secret: SECRET, dataDir: d, log: { error() {} }, rateLimit: { perSecond: 1, burst: 3 } });

@@ -94,6 +94,13 @@ CREATE TABLE IF NOT EXISTS story_views (
   at INTEGER NOT NULL,
   PRIMARY KEY (story_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS calls (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  started_by TEXT NOT NULL,
+  video INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS reports (
   id TEXT PRIMARY KEY,
   message_id TEXT NOT NULL,
@@ -707,6 +714,19 @@ export class Store {
 
   sweepStories() {
     return this.all('SELECT id FROM stories WHERE expires_at <= ?', Date.now()).map((r) => this.deleteStory(r.id)).filter(Boolean);
+  }
+
+  // ---- calls placed through the host's own call vendor ----
+
+  addCall({ conversationId, startedBy, video }) {
+    const id = randomUUID();
+    this.run('INSERT INTO calls (id, conversation_id, started_by, video, created_at) VALUES (?, ?, ?, ?, ?)', id, conversationId, startedBy, video ? 1 : 0, Date.now());
+    return this.getCall(id);
+  }
+
+  getCall(id) {
+    const r = this.get('SELECT * FROM calls WHERE id = ?', id);
+    return r ? { id: r.id, conversationId: r.conversation_id, startedBy: r.started_by, video: !!r.video, createdAt: r.created_at } : null;
   }
 
   // ---- reports ----

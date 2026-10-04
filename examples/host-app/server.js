@@ -7,6 +7,8 @@ import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createPlugChat } from '../../server/index.js';
 
+const vendorCalls = process.argv.includes('--vendor-calls');
+const portArg = process.argv.find((a) => a.startsWith('--port='))?.slice(7);
 const here = (f) => fileURLToPath(new URL(f, import.meta.url));
 
 // The association's existing member database.
@@ -22,7 +24,19 @@ const MEMBERS = {
 const chat = createPlugChat({
   // Demo only: a real host keeps one fixed secret in its environment.
   secret: process.env.PLUGCHAT_SECRET ?? randomBytes(48).toString('base64url'),
-  dataDir: here('./data'),
+  dataDir: here(vendorCalls ? './data-vendor' : './data'),
+  hooks: {
+    // The association's own rule, enforced before anything is stored. A real
+    // platform would check credits, call a moderation service, and so on.
+    'message.before': ({ message }) =>
+      message.kind === 'text' && /\bfree money\b/i.test(message.body) ? { allow: false, reason: 'That looks like spam, so it was not sent.' } : undefined,
+    // Run with --vendor-calls to route calls through a third-party video
+    // service instead of the built-in peer-to-peer calls. A paid vendor would
+    // mint a per-user join token here with its API key.
+    ...(vendorCalls && {
+      'call.join': ({ call }) => ({ url: `https://meet.jit.si/plugchat-demo-${call.id}` }),
+    }),
+  },
 });
 // Make every member findable in chat, even before they first open it.
 for (const [id, { name, handles, ...rest }] of Object.entries(MEMBERS)) {
@@ -59,5 +73,5 @@ const server = createServer(async (req, res) => {
 });
 chat.attach(server);
 
-const port = Number(process.env.PORT ?? 3000);
+const port = Number(portArg ?? process.env.PORT ?? 3000);
 server.listen(port, () => console.log(`Demo association site: http://localhost:${port}`));

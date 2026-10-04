@@ -247,6 +247,12 @@ export class PlugChat {
   async _hydrate(message, conv) {
     const out = { ...message, text: message.body, file: message.attachment, encrypted: false, undecryptable: false };
     if (message.deleted || message.kind === 'system') return out;
+    if (message.kind === 'call') {
+      // Call markers are plain metadata in every conversation: { callId, video }.
+      out.call = JSON.parse(message.body);
+      out.text = '';
+      return out;
+    }
     conv ??= this._convs.get(message.conversationId) ?? (await this.conversation(message.conversationId));
     out.encrypted = conv.encrypted;
     // Unopened or already-consumed view-once messages arrive without content.
@@ -260,7 +266,11 @@ export class PlugChat {
         out.file = message.attachment && { ...message.attachment, name: payload.f?.name ?? 'file', mime: payload.f?.mime ?? 'application/octet-stream' };
       } else if (message.kind !== 'text') {
         const v = JSON.parse(message.body);
-        payload = message.kind === 'poll' ? { poll: v } : { loc: v };
+        payload = message.kind === 'poll' ? { poll: v } : message.kind === 'custom' ? { custom: v } : { loc: v };
+      }
+      if (message.kind === 'custom') {
+        out.custom = { type: payload.custom.type, data: payload.custom.data };
+        out.text = payload.custom.text ?? '';
       }
       if (message.kind === 'poll') {
         out.text = payload.poll.question;
@@ -445,8 +455,34 @@ export class PlugChat {
     return this._post(conv, k, 'location', { loc }, JSON.stringify(loc));
   }
 
+  /**
+   * A message type of the host's own: a payment receipt, an order card, an
+   * appointment... `text` is what clients without a renderer for `type` show.
+   */
+  async sendCustom(conversationId, { type, data, text = '' }) {
+    const conv = await this._conv(conversationId);
+    const k = conv.encrypted ? await this._requireKey(conv) : null;
+    const custom = { type, data, text };
+    return this._post(conv, k, 'custom', { custom }, JSON.stringify(custom));
+  }
+
+  /**
+   * Start a call through the host's own call vendor. Resolves with
+   * `{ call, message, join }`, where `join` is whatever the host's `call.join`
+   * hook returned for this user: a `url` to open and/or vendor `data` (tokens).
+   */
+  async startCall(conversationId, { video = false } = {}) {
+    const out = await this._req('POST', `/conversations/${conversationId}/calls`, { json: { video } });
+    return { ...out, message: await this._hydrate(out.message) };
+  }
+
+  joinCall(callId) {
+    return this._req('POST', `/calls/${callId}/join`);
+  }
+
   /** Copy a message into another conversation (re-encrypting for it if needed). */
   async forward(message, toConversationId) {
+    if (message.kind === 'custom') return this.sendCustom(toConversationId, { ...message.custom, text: message.text });
     if (message.kind === 'poll') return this.sendPoll(toConversationId, { question: message.poll.question, options: message.poll.options, multi: message.poll.multi });
     if (message.kind === 'location') return this.sendLocation(toConversationId, message.location);
     let file;

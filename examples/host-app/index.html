@@ -42,9 +42,27 @@
     </div>
   </main>
   <script>
-    document.querySelector('plug-chat')?.addEventListener('plugchat:unread', (e) => {
+    const chatEl = document.querySelector('plug-chat');
+    chatEl.addEventListener('plugchat:unread', (e) => {
       document.getElementById('unread').textContent = e.detail.count ? `(${e.detail.count} unread)` : '';
     });
+
+    // Optional: things only this platform has. Here, members can share a dues
+    // receipt; a real site would call its own payments API inside run().
+    chatEl.actions = [{
+      label: 'Share dues receipt',
+      run: ({ conversation, chat }) =>
+        chat.sendCustom(conversation.id, { type: 'dues', data: { amount: 50, currency: 'GHS', year: 2026 }, text: 'Paid GHS 50 dues for 2026' }),
+    }];
+    chatEl.renderers = {
+      dues: (message) => {
+        const card = document.createElement('div');
+        const { amount, currency, year } = message.custom.data;
+        card.textContent = `✅ Dues paid: ${currency} ${amount} for ${year}`;
+        card.style.fontWeight = '600';
+        return card;
+      },
+    };
   </script>
 </body>
 </html>

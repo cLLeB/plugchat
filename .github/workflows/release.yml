@@ -32,12 +32,6 @@ jobs:
       - run: npm test
       - run: npm run check:types
 
-      - name: Publish to npm
-        if: env.NPM_TOKEN != ''
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
       - name: Container image
         run: |
           image="ghcr.io/$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')/plugchat"
@@ -50,3 +44,11 @@ jobs:
         run: gh release create "$GITHUB_REF_NAME" --generate-notes --notes "See CHANGELOG.md."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Last, so that a problem with the npm token never holds back the image or the release.
+      - name: Publish to npm
+        if: env.NPM_TOKEN != ''
+        # The tests and type check already ran above, so the package's own pre-publish checks are skipped here.
+        run: npm publish --access public --ignore-scripts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

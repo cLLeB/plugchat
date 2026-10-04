@@ -7,6 +7,7 @@
 // All user-provided text is inserted with textContent, never as HTML.
 import { PlugChat } from './plugchat.js';
 import { CallManager } from './calls.js';
+import { STYLE } from './styles.js';
 import { DICTIONARIES } from './i18n.js';
 
 // One language per page: taken from the element's lang attribute, else <html lang>.
@@ -38,6 +39,15 @@ const ICON = {
   edit: svg('<path d="M4 20h4L19 9l-4-4L4 16v4z"/>'),
   trash: svg('<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>'),
   smile: svg('<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 007 0M9 9.5v.5M15 9.5v.5"/>'),
+  check: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>'),
+  checks: svg('<path d="M2 12.5l4.5 4.5L16 7.5M11 15.5l1.5 1.5L22 7.5"/>'),
+  chevron: svg('<path d="M6 9l6 6 6-6"/>'),
+  more: svg('<circle cx="12" cy="5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="19" r="1.4"/>'),
+  play: svg('<path d="M8 5.5v13l11-6.5z"/>'),
+  pause: svg('<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>'),
+  download: svg('<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>'),
+  image: svg('<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 15l-5-4-7 7"/>'),
+  bubbles: svg('<path d="M4 5h11v8H9l-3 3v-3H4zM15 9h5v8h-2v3l-3-3h-4v-2"/>'),
   copy: svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/>'),
   star: svg('<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z"/>'),
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>'),
@@ -61,208 +71,6 @@ const INLINE_IMAGES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/we
 const PLAYABLE = /^(audio\/(webm|ogg|mpeg|mp4|wav|x-wav|aac)|video\/(mp4|webm))$/;
 const TIMERS = [[0, 'Off'], [60, '1 minute'], [3600, '1 hour'], [86400, '1 day'], [604800, '1 week']];
 const REPORT_REASONS = ['Spam', 'Harassment or bullying', 'Scam or fraud', 'Inappropriate content', 'Something else'];
-
-const STYLE = `
-:host {
-  color-scheme: light; --pc-accent: #3b5bdb; --pc-accent-fg: #fff;
-  --pc-bg: #fff; --pc-surface: #f5f6f8; --pc-fg: #16181d; --pc-muted: #6b7280;
-  --pc-border: #e3e5ea; --pc-bubble: #eceef2; --pc-danger: #c92a2a; --pc-radius: 14px;
-  display: block; height: 600px; container-type: inline-size;
-  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--pc-fg);
-}
-:host([theme="dark"]) {
-  color-scheme: dark; --pc-accent: #748ffc; --pc-accent-fg: #0b0d12; --pc-bg: #14161b; --pc-surface: #1b1e25; --pc-fg: #e8eaee;
-  --pc-muted: #9199a6; --pc-border: #2a2e37; --pc-bubble: #262a33; --pc-danger: #ff8787;
-}
-@media (prefers-color-scheme: dark) {
-  :host(:not([theme="light"])) {
-    color-scheme: dark; --pc-accent: #748ffc; --pc-accent-fg: #0b0d12; --pc-bg: #14161b; --pc-surface: #1b1e25; --pc-fg: #e8eaee;
-    --pc-muted: #9199a6; --pc-border: #2a2e37; --pc-bubble: #262a33; --pc-danger: #ff8787;
-  }
-}
-* { box-sizing: border-box; }
-[hidden] { display: none !important; }
-.root { display: flex; height: 100%; background: var(--pc-bg); border: 1px solid var(--pc-border); border-radius: var(--pc-radius); overflow: hidden; position: relative; }
-svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
-button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
-button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--pc-accent); outline-offset: 2px; }
-.icon { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: var(--pc-muted); flex: none; }
-.icon:hover { background: var(--pc-surface); color: var(--pc-fg); }
-.icon.on { color: var(--pc-accent); }
-.icon.rec { color: #fff; background: var(--pc-danger); }
-input[type="text"], input[type="search"], input[type="password"], input[type="datetime-local"], select { font: inherit; color: inherit; background: var(--pc-surface); border: 1px solid var(--pc-border); border-radius: 10px; padding: 8px 12px; width: 100%; min-width: 0; }
-
-.side { width: 300px; flex: none; display: flex; flex-direction: column; border-inline-end: 1px solid var(--pc-border); min-width: 0; }
-.bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; min-height: 58px; border-bottom: 1px solid var(--pc-border); }
-.bar h2 { margin: 0; font-size: 17px; flex: 1; }
-.find { padding: 8px 10px 2px; }
-.stories { display: flex; gap: 10px; padding: 10px 12px 6px; overflow-x: auto; flex: none; }
-.story { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 54px; flex: none; font-size: 11px; color: var(--pc-muted); }
-.story span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ring { padding: 2px; border-radius: 50%; border: 2px solid var(--pc-border); }
-.ring.new { border-color: var(--pc-accent); }
-.list { overflow-y: auto; flex: 1; padding: 6px; }
-.section { font-size: 12px; font-weight: 600; color: var(--pc-muted); padding: 10px 8px 4px; text-transform: uppercase; letter-spacing: .04em; }
-.linkrow { width: 100%; text-align: start; padding: 8px; color: var(--pc-accent); font-size: 13px; border-radius: 10px; }
-.linkrow:hover { background: var(--pc-surface); }
-.conv { display: flex; gap: 10px; align-items: center; width: 100%; text-align: start; padding: 9px 8px; border-radius: 10px; }
-.conv:hover { background: var(--pc-surface); }
-.conv[aria-current="true"] { background: color-mix(in srgb, var(--pc-accent) 14%, transparent); }
-.conv .body { flex: 1; min-width: 0; }
-.line { display: flex; gap: 6px; align-items: center; }
-.line svg { width: 13px; height: 13px; color: var(--pc-muted); }
-.name { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.when { font-size: 12px; color: var(--pc-muted); flex: none; }
-.preview { color: var(--pc-muted); font-size: 13px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.badge { background: var(--pc-accent); color: var(--pc-accent-fg); border-radius: 10px; font-size: 11px; font-weight: 700; padding: 1px 7px; flex: none; }
-.badge.quiet { background: var(--pc-muted); }
-.avatar { width: 40px; height: 40px; border-radius: 50%; flex: none; display: grid; place-items: center; font-weight: 600; color: #fff; position: relative; background-size: cover; background-position: center; font-size: 15px; }
-.avatar.sm { width: 28px; height: 28px; font-size: 11px; }
-.avatar .dot { position: absolute; inset-inline-end: -1px; bottom: -1px; width: 12px; height: 12px; border-radius: 50%; background: #2f9e44; border: 2px solid var(--pc-bg); }
-.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.bubble:focus-visible { outline: 2px solid var(--pc-accent); outline-offset: 2px; }
-.hint { color: var(--pc-muted); text-align: center; padding: 28px 16px; }
-
-.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.main > .hint { margin: auto; }
-.bar .title { flex: 1; min-width: 0; }
-.bar .sub { font-size: 12px; color: var(--pc-muted); display: flex; align-items: center; gap: 4px; }
-.bar .sub svg { width: 12px; height: 12px; }
-.backbtn { display: none; }
-.pinbar { display: flex; gap: 8px; align-items: center; padding: 6px 14px; border-bottom: 1px solid var(--pc-border); font-size: 13px; width: 100%; text-align: start; color: var(--pc-muted); }
-.pinbar span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pinbar svg { width: 15px; height: 15px; color: var(--pc-accent); }
-.msgs { flex: 1; overflow-y: auto; padding: 14px 14px 6px; display: flex; flex-direction: column; gap: 2px; }
-.day, .sys { align-self: center; font-size: 12px; color: var(--pc-muted); background: var(--pc-surface); padding: 3px 10px; border-radius: 10px; margin: 8px 0; }
-.more { align-self: center; color: var(--pc-accent); font-size: 13px; padding: 6px 10px; }
-.row { display: flex; gap: 8px; align-items: flex-end; max-width: 100%; position: relative; border-radius: 12px; }
-.row.first { margin-top: 8px; }
-.row.mine { flex-direction: row-reverse; }
-.row.flash { background: color-mix(in srgb, var(--pc-accent) 16%, transparent); }
-.row .spacer { width: 28px; flex: none; }
-.col { display: flex; flex-direction: column; align-items: flex-start; max-width: min(78%, 520px); min-width: 0; }
-.mine .col { align-items: flex-end; }
-.bubble { background: var(--pc-bubble); padding: 7px 11px; border-radius: 16px; overflow-wrap: anywhere; white-space: pre-wrap; min-width: 0; max-width: 100%; }
-.mine .bubble { background: var(--pc-accent); color: var(--pc-accent-fg); }
-.bubble.mention { box-shadow: 0 0 0 2px var(--pc-accent); }
-.bubble a { color: inherit; }
-.bubble.ghost { background: none; border: 1px dashed var(--pc-border); color: var(--pc-muted); font-style: italic; }
-.sender { font-size: 12px; font-weight: 600; color: var(--pc-accent); margin-bottom: 2px; }
-.tag { font-size: 11px; opacity: .75; display: flex; align-items: center; gap: 4px; margin-bottom: 2px; font-style: italic; }
-.tag svg { width: 12px; height: 12px; }
-button.sender { display: block; text-align: start; }
-button.sender:hover, .namebtn:hover { text-decoration: underline; }
-.namebtn { flex: 1; text-align: start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.linkbtn { color: var(--pc-accent); font-size: 12px; padding: 2px 4px; flex: none; }
-button.quote { display: block; text-align: start; color: inherit; }
-.quote { font-size: 12px; opacity: .8; border-inline-start: 3px solid currentColor; padding: 1px 8px; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
-.meta { font-size: 11px; opacity: .7; margin-inline-start: 8px; float: inline-end; margin-top: 4px; display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
-.meta svg { width: 11px; height: 11px; }
-.pic { display: block; max-width: 240px; max-height: 240px; border-radius: 10px; margin-bottom: 4px; }
-audio, video.media { display: block; max-width: 260px; margin-bottom: 4px; border-radius: 10px; }
-.file { display: flex; gap: 8px; align-items: center; text-decoration: underline; margin-bottom: 2px; text-align: start; }
-.once { display: flex; gap: 8px; align-items: center; font-weight: 600; }
-.poll { display: flex; flex-direction: column; gap: 6px; min-width: 200px; white-space: normal; }
-.poll .q { font-weight: 600; }
-.poll small { opacity: .75; }
-.opt { position: relative; display: flex; gap: 8px; text-align: start; padding: 6px 10px; border-radius: 10px; overflow: hidden; background: color-mix(in srgb, currentColor 10%, transparent); }
-.opt.on { box-shadow: inset 0 0 0 2px currentColor; }
-.opt .fill { position: absolute; inset-block: 0; inset-inline-start: 0; background: color-mix(in srgb, currentColor 18%, transparent); }
-.opt .lbl { flex: 1; position: relative; }
-.opt .cnt { position: relative; font-weight: 600; }
-.reacts { display: flex; gap: 4px; flex-wrap: wrap; margin: 2px 0 4px; }
-.react { border: 1px solid var(--pc-border); background: var(--pc-bg); border-radius: 12px; padding: 0 7px; font-size: 13px; line-height: 22px; }
-.react.on { border-color: var(--pc-accent); background: color-mix(in srgb, var(--pc-accent) 14%, var(--pc-bg)); }
-.acts { display: none; align-items: center; background: var(--pc-bg); border: 1px solid var(--pc-border); border-radius: 18px; padding: 2px; align-self: center; flex: none; flex-wrap: wrap; max-width: 190px; }
-.row:hover .acts, .row.active .acts, .row:focus-within .acts { display: flex; }
-.acts .icon { width: 28px; height: 28px; }
-.acts svg { width: 16px; height: 16px; }
-.acts .emoji { font-size: 17px; width: 28px; height: 28px; border-radius: 50%; }
-.acts .emoji:hover { background: var(--pc-surface); }
-.acts .danger:hover { color: var(--pc-danger); }
-.typing { min-height: 20px; padding: 0 16px; font-size: 12px; color: var(--pc-muted); }
-.emojis { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; max-height: 210px; overflow-y: auto; width: min(300px, 80vw); }
-.emojis .emoji { font-size: 20px; width: 34px; height: 34px; border-radius: 8px; }
-.emojis .emoji:hover { background: var(--pc-surface); }
-.media { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; max-height: 60vh; overflow-y: auto; }
-.media .item { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; min-width: 0; }
-.media .pic { max-width: 100%; max-height: 110px; margin: 0; }
-.media audio, .media video.media { max-width: 100%; }
-.bubble a.card { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; padding: 8px 10px; border-inline-start: 3px solid currentColor; border-radius: 8px; background: color-mix(in srgb, currentColor 10%, transparent); text-decoration: none; white-space: normal; max-width: 320px; }
-.card small, .card span { opacity: .8; font-size: 12px; }
-.notice { display: flex; gap: 8px; align-items: center; padding: 8px 14px; font-size: 13px; background: color-mix(in srgb, #f08c00 18%, var(--pc-bg)); border-bottom: 1px solid var(--pc-border); }
-.notice span:nth-child(2) { flex: 1; }
-.notice svg { width: 16px; height: 16px; }
-.newline { display: flex; align-items: center; gap: 10px; color: var(--pc-accent); font-size: 12px; font-weight: 600; margin: 8px 0; }
-.newline::before, .newline::after { content: ""; flex: 1; height: 1px; background: var(--pc-accent); opacity: .5; }
-.bubble.pending { opacity: .65; }
-.failed { color: var(--pc-danger); font-size: 12px; margin: 2px 0 4px; }
-.tobottom { position: absolute; inset-inline-end: 16px; bottom: calc(100% + 30px); min-width: 38px; height: 38px; padding: 0 10px; border-radius: 19px; background: var(--pc-bg); border: 1px solid var(--pc-border); box-shadow: 0 4px 14px rgba(0, 0, 0, .18); font-weight: 600; z-index: 1; }
-.menu .sel { background: var(--pc-surface); }
-.main.drop { outline: 2px dashed var(--pc-accent); outline-offset: -6px; }
-.pic { cursor: zoom-in; }
-img.full { max-width: 100%; max-height: 70vh; border-radius: 8px; align-self: center; }
-.banner { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-top: 1px solid var(--pc-border); font-size: 13px; color: var(--pc-muted); }
-.banner span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.banner .icon { width: 26px; height: 26px; }
-.composer { display: flex; gap: 4px; align-items: flex-end; padding: 10px 12px; border-top: 1px solid var(--pc-border); position: relative; }
-.menu { position: absolute; inset-inline-start: 10px; bottom: calc(100% - 4px); background: var(--pc-bg); border: 1px solid var(--pc-border); border-radius: 12px; padding: 4px; display: flex; flex-direction: column; min-width: 190px; box-shadow: 0 6px 24px rgba(0, 0, 0, .18); z-index: 2; }
-.menu button { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 8px; text-align: start; }
-.menu button:hover { background: var(--pc-surface); }
-.menu svg { width: 18px; height: 18px; color: var(--pc-muted); }
-textarea { flex: 1; resize: none; border: 1px solid var(--pc-border); border-radius: 18px; padding: 8px 14px; font: inherit; color: inherit; background: var(--pc-surface); max-height: 120px; min-height: 38px; min-width: 0; }
-.sendbtn { background: var(--pc-accent); color: var(--pc-accent-fg); }
-.sendbtn:hover { background: var(--pc-accent); color: var(--pc-accent-fg); filter: brightness(1.1); }
-.sendbtn:disabled { opacity: .45; cursor: default; }
-.error { color: var(--pc-danger); font-size: 13px; padding: 4px 14px; }
-
-dialog { border: 1px solid var(--pc-border); border-radius: var(--pc-radius); background: var(--pc-bg); color: var(--pc-fg); padding: 0; width: min(400px, calc(100% - 24px)); max-height: 88%; }
-dialog::backdrop { background: rgba(0, 0, 0, .45); }
-dialog form, dialog .panel { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
-dialog h3 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px; }
-dialog h3 span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-dialog textarea { border-radius: 10px; min-height: 80px; flex: none; }
-.people { max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; flex: none; }
-.person { display: flex; gap: 10px; align-items: center; padding: 6px 4px; border-radius: 8px; cursor: pointer; width: 100%; text-align: start; }
-.person:hover { background: var(--pc-surface); }
-.person span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.person small { color: var(--pc-muted); }
-.check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
-.check small { color: var(--pc-muted); display: block; }
-.btn { background: var(--pc-accent); color: var(--pc-accent-fg); border-radius: 10px; padding: 9px 14px; font-weight: 600; text-align: center; }
-.btn:disabled { opacity: .45; cursor: default; }
-.btn.plain { background: var(--pc-surface); color: var(--pc-fg); }
-.btn.warn { background: none; color: var(--pc-danger); border: 1px solid var(--pc-border); }
-.inline { display: flex; gap: 8px; align-items: center; }
-.code { font: 600 16px/1.6 ui-monospace, Consolas, monospace; letter-spacing: 1px; background: var(--pc-surface); padding: 10px; border-radius: 10px; text-align: center; }
-label.field, .field { font-size: 13px; color: var(--pc-muted); display: flex; flex-direction: column; gap: 4px; }
-.storyview { min-height: 240px; display: grid; place-items: center; background: var(--pc-surface); border-radius: 10px; padding: 16px; text-align: center; font-size: 17px; overflow-wrap: anywhere; white-space: pre-wrap; gap: 10px; }
-.storyview img { max-width: 100%; max-height: 300px; border-radius: 8px; }
-.steps { display: flex; gap: 3px; }
-.steps i { flex: 1; height: 3px; border-radius: 2px; background: var(--pc-border); }
-.steps i.on { background: var(--pc-accent); }
-
-.call { position: absolute; inset: 0; background: #0d0f13; color: #fff; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
-.call iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
-.call video.remote { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.call video.local { position: absolute; inset-inline-end: 14px; top: 14px; width: 28%; max-width: 160px; border-radius: 10px; background: #000; }
-.call .cinfo { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; text-shadow: 0 1px 3px #000; }
-.call .cinfo .avatar { width: 72px; height: 72px; font-size: 26px; }
-.call .cbtns { position: absolute; bottom: 22px; display: flex; gap: 14px; }
-.call .cbtns button { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .18); color: #fff; }
-.call .cbtns .off { background: #fff; color: #111; }
-.call .cbtns .hang { background: #e03131; }
-.call .cbtns .ok { background: #2f9e44; }
-
-.root[dir="rtl"] .backbtn svg, .root[dir="rtl"] .tag svg, .root[dir="rtl"] .sendbtn svg { transform: scaleX(-1); }
-@container (max-width: 640px) {
-  .side { width: 100%; border-inline-end: 0; }
-  .main { display: none; }
-  .root.open .side { display: none; }
-  .root.open .main { display: flex; }
-  .backbtn { display: inline-grid; }
-}
-`;
 
 function h(tag, props = {}, ...kids) {
   const el = document.createElement(tag);
@@ -335,6 +143,9 @@ class PlugChatElement extends HTMLElement {
     this.viewOnce = false;
     this.lastSeen = new Map(); // userId -> timestamp, for "last seen" in one-to-one chats
     this._below = 0; // messages that arrived while scrolled up
+    this.players = new Map(); // messageId -> { el, audio }: voice notes keep playing across re-renders
+    this.filter = 'all'; // chat list filter: all | unread | groups
+    this._popEl = null; // the open reaction strip or message menu
     this._mention = null; // open @-mention picker: { start, items, index }
     /** Host-supplied renderers for custom message types: { [type]: (message) => Node | string }. */
     this.renderers ??= {};
@@ -369,6 +180,8 @@ class PlugChatElement extends HTMLElement {
   disconnectedCallback() {
     document.removeEventListener('visibilitychange', this._onVisible);
     this.calls?.close();
+    this._stopRecording(true);
+    for (const player of this.players.values()) player.audio.pause();
     this.chat?.close();
     this.chat = this.calls = null;
     this._started = false;
@@ -438,7 +251,7 @@ class PlugChatElement extends HTMLElement {
     style.textContent = STYLE;
     this.$list = h('div', { class: 'list', role: 'list' }, h('div', { class: 'hint' }, T('Connecting…')));
     this.$stories = h('div', { class: 'stories', hidden: true });
-    this.$main = h('section', { class: 'main' }, h('div', { class: 'hint' }, T('Select a conversation to start chatting.')));
+    this.$main = h('section', { class: 'main' }, h('div', { class: 'hint' }, h('span', { icon: 'bubbles' }), T('Select a conversation to start chatting.')));
     const runSearch = debounce(() => this._search(), 250);
     this.$root = h('div', { class: 'root' },
       h('aside', { class: 'side' },
@@ -453,6 +266,7 @@ class PlugChatElement extends HTMLElement {
             this._renderList();
             runSearch();
           } })),
+        (this.$chips = h('div', { class: 'chips', hidden: true })),
         this.$stories,
         this.$list,
       ),
@@ -463,8 +277,9 @@ class PlugChatElement extends HTMLElement {
     this.$dialog.addEventListener('click', (e) => e.target === this.$dialog && this.$dialog.close());
     // Clicking anywhere else puts the pop-up menus away.
     this.shadowRoot.addEventListener('click', (e) => {
-      if (e.target.closest('.menu, .composer > .icon')) return;
-      for (const menu of this.shadowRoot.querySelectorAll('.composer > .menu')) menu.hidden = true;
+      if (!e.target.closest('.acts')) this._closePop();
+      if (e.target.closest('.menu, .sheet, .composer .icon')) return;
+      for (const menu of this.shadowRoot.querySelectorAll('.composer > .menu, .composer > .sheet')) menu.hidden = true;
       this._mention = null;
     });
     this.shadowRoot.append(style, this.$root, this.$dialog);
@@ -609,7 +424,7 @@ class PlugChatElement extends HTMLElement {
     if (m.kind === 'poll') return T('Poll: {question}', { question: m.text });
     if (m.kind === 'location') return T('Shared a location');
     if (m.kind === 'call') return m.call.video ? T('Video call') : T('Voice call');
-    return m.text || (m.file ? `📎 ${m.file.name}` : '');
+    return m.text || (m.file ? this._fileLabel(m.file) : '');
   }
   _preview(conv, m) {
     if (!m) return conv.encrypted ? T('Encrypted conversation') : T('No messages yet');
@@ -619,31 +434,262 @@ class PlugChatElement extends HTMLElement {
 
   // ---- conversation list, search, stories ----
 
+  /** The lowest read position among the other members: everything up to it has been read by all. */
+  _othersRead(conv) {
+    const me = this.chat.me.id;
+    return Math.min(...conv.members.filter((m) => m.userId !== me).map((m) => m.lastReadSeq), Infinity);
+  }
+
+  /** One tick for sent, two for read by everyone. */
+  _ticks(read) {
+    return h('span', { class: `ticks${read ? ' read' : ''}`, icon: read ? 'checks' : 'check', title: read ? T('Read') : T('Sent') });
+  }
+
+  /** What an attachment is called in previews: a voice message, a photo, or its file name. */
+  _fileLabel(file) {
+    if (/^voice-note/.test(file.name) && file.mime?.startsWith('audio/')) return `🎤 ${T('Voice message')}`;
+    if (INLINE_IMAGES.has(file.mime)) return `📷 ${T('Photo')}`;
+    return `📎 ${file.name}`;
+  }
+
+  /**
+   * How a message's actions are reached without the hover buttons: press and
+   * hold on a touch screen, right-click with a mouse, Enter or Space from the keyboard.
+   */
+  _pressable(bubble, row, m, mine, conv) {
+    let timer = null;
+    const cancel = () => clearTimeout(timer);
+    bubble.tabIndex = 0;
+    bubble.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' || e.target.closest('a, button, .wave')) return;
+      timer = setTimeout(() => this._messageSheet(m, mine, conv), 450);
+    });
+    for (const type of ['pointerup', 'pointermove', 'pointercancel', 'pointerleave']) bubble.addEventListener(type, cancel);
+    bubble.addEventListener('contextmenu', (e) => {
+      if (e.target.closest('a')) return; // keep the browser's own menu for links
+      e.preventDefault();
+      cancel();
+      const more = row.querySelector('.acts .mini:last-child');
+      if (more && getComputedStyle(more.parentElement).display !== 'none') this._pop(more, 'menu', m, mine, conv);
+      else this._messageSheet(m, mine, conv);
+    });
+    bubble.addEventListener('keydown', (e) => {
+      if (e.target === bubble && (e.key === 'Enter' || e.key === ' ')) (e.preventDefault(), this._messageSheet(m, mine, conv));
+    });
+  }
+
+  /** Everything that can be done with a message, in the order people look for it. */
+  _menuItems(m, mine, conv) {
+    const role = this._role(conv);
+    const canDelete = mine || (conv.type === 'group' && role !== 'member');
+    const canPin = !(conv.announce && role === 'member');
+    const plain = m.kind === 'text' && !m.viewOnce;
+    return [
+      { icon: 'reply', label: T('Reply'), run: () => this._setDraftMode({ replyTo: m }) },
+      m.text && !m.viewOnce && { icon: 'copy', label: T('Copy text'), run: () => this._guard(navigator.clipboard.writeText(m.text)) },
+      !m.viewOnce && m.kind !== 'call' && { icon: 'forward', label: T('Forward'), run: () => this._forwardDialog(m) },
+      { icon: 'star', label: m.starred ? T('Unstar') : T('Star'), run: () => this._guard(m.starred ? this.chat.unstar(m.id) : this.chat.star(m.id)) },
+      canPin && { icon: 'pin', label: m.pinned ? T('Unpin') : T('Pin'), run: () => this._guard(m.pinned ? this.chat.unpin(m.id) : this.chat.pin(m.id)) },
+      mine && plain && { icon: 'edit', label: T('Edit'), run: () => this._setDraftMode({ editing: m }) },
+      mine && conv.type === 'group' && { icon: 'info', label: T('Message info'), run: () => this._infoDialog(m, conv) },
+      !mine && { icon: 'flag', label: T('Report'), run: () => this._reportDialog(m) },
+      canDelete && { icon: 'trash', label: T('Delete'), danger: true, run: () => this._guard(this.chat.remove(m.id)) },
+    ].filter(Boolean);
+  }
+
+  _quickReactions(m, done) {
+    return [
+      QUICK_REACTIONS.map((emoji) => h('button', { class: 'emoji', 'aria-label': T('React {emoji}', { emoji }), onclick: () => (done(), this._toggleReaction(m, emoji)) }, emoji)),
+      h('button', { class: 'emoji', icon: 'plus', title: T('More reactions'), 'aria-label': T('More reactions'), onclick: () => {
+        done();
+        this._openDialog(h('div', { class: 'panel' }, this._dialogTitle(T('React')), this._emojiGrid((emoji) => (this.$dialog.close(), this._toggleReaction(m, emoji)))));
+      } }),
+    ];
+  }
+
+  /** Open the reaction strip or the action menu next to a message. */
+  _pop(anchor, kind, m, mine, conv) {
+    const again = this._popEl?.dataset.key === `${kind}:${m.id}`;
+    this._closePop();
+    if (again) return;
+    const row = anchor.closest('.row');
+    const pop = kind === 'reactions'
+      ? h('div', { class: 'pop reactions', role: 'menu' }, this._quickReactions(m, () => this._closePop()))
+      : h('div', { class: 'pop list', role: 'menu' }, this._menuItems(m, mine, conv).map((item) =>
+        h('button', { role: 'menuitem', class: item.danger ? 'danger' : '', onclick: () => (this._closePop(), item.run()) }, h('span', { icon: item.icon }), item.label)));
+    pop.dataset.key = `${kind}:${m.id}`;
+    anchor.parentElement.append(pop);
+    // Open towards whichever side of the message has room; if neither has
+    // enough, take the larger side and let the menu scroll.
+    const area = this.$msgs.getBoundingClientRect();
+    const at = anchor.getBoundingClientRect();
+    const above = at.top - area.top - 12;
+    const below = area.bottom - at.bottom - 12;
+    const need = pop.offsetHeight;
+    const down = above < need && below > above;
+    if (down) pop.classList.add('below');
+    if ((down ? below : above) < need) {
+      pop.style.maxHeight = `${Math.max(120, down ? below : above)}px`;
+      pop.style.overflowY = 'auto';
+    }
+    row.classList.add('active');
+    this._popEl = pop;
+  }
+
+  _closePop() {
+    this._popEl?.closest('.row')?.classList.remove('active');
+    this._popEl?.remove();
+    this._popEl = null;
+  }
+
+  /** The same actions as a sheet: reactions across the top, the list beneath. */
+  _messageSheet(m, mine, conv) {
+    const close = () => this.$dialog.close();
+    this._openDialog(h('div', { class: 'panel' },
+      h('div', { class: 'quick' }, this._quickReactions(m, close)),
+      h('div', { class: 'sheetlist', role: 'menu' }, this._menuItems(m, mine, conv).map((item) =>
+        h('button', { role: 'menuitem', class: item.danger ? 'danger' : '', onclick: () => (close(), item.run()) }, h('span', { icon: item.icon }), item.label))),
+    ));
+  }
+
+  /**
+   * A voice note the way messengers show one: a round play button, the
+   * recording's waveform (which doubles as the seek bar), its length, and a
+   * speed switch. Other audio files get the same player with their name.
+   * The node is kept per message, so a re-render does not interrupt playback.
+   */
+  _audio(m, fresh = false) {
+    const kept = !fresh && this.players.get(m.id);
+    if (kept) return kept.el;
+    const BARS = 36;
+    const voice = /^voice-note/.test(m.file.name);
+    const bars = Array.from({ length: BARS }, (_, i) => {
+      const bar = h('i');
+      bar.style.height = `${30 + ((i * 37) % 45)}%`; // a placeholder shape until the audio is decoded
+      return bar;
+    });
+    const $wave = h('div', { class: 'wave', role: 'slider', tabindex: '0', 'aria-label': T('Seek') }, bars);
+    const $time = h('span', {}, '0:00');
+    const $play = h('button', { class: 'vplay', icon: 'play', type: 'button', 'aria-label': T('Play') });
+    const $speed = h('button', { class: 'vspeed', type: 'button', 'aria-label': T('Playback speed') }, '1×');
+    const el = h('div', { class: 'voice' }, $play,
+      h('div', { class: 'vbody' }, $wave, h('div', { class: 'vmeta' }, $time, !voice && h('span', { class: 'vname' }, m.file.name))), $speed);
+    const audio = new Audio();
+    let duration = 0;
+    const paint = () => {
+      const at = duration ? audio.currentTime / duration : 0;
+      bars.forEach((bar, i) => bar.classList.toggle('on', i / BARS < at));
+      $time.textContent = mmss((audio.paused && !audio.currentTime ? duration : audio.currentTime) * 1000);
+      $wave.setAttribute('aria-valuenow', String(Math.round(at * 100)));
+    };
+    const icon = () => {
+      $play.innerHTML = ICON[audio.paused ? 'play' : 'pause'];
+      $play.setAttribute('aria-label', audio.paused ? T('Play') : T('Pause'));
+    };
+    const ready = this.chat.download(m).then(async (blob) => {
+      audio.src = URL.createObjectURL(blob);
+      try {
+        // Decoding gives both the real length (recordings often lack it) and the waveform.
+        this._audioCtx ??= new (globalThis.AudioContext ?? globalThis.webkitAudioContext)();
+        const decoded = await this._audioCtx.decodeAudioData(await blob.arrayBuffer());
+        duration = decoded.duration;
+        const samples = decoded.getChannelData(0);
+        const span = Math.max(1, Math.floor(samples.length / BARS));
+        const peaks = bars.map((_, i) => {
+          let peak = 0;
+          for (let j = i * span; j < (i + 1) * span && j < samples.length; j += 24) peak = Math.max(peak, Math.abs(samples[j]));
+          return peak;
+        });
+        const top = Math.max(...peaks, 0.01);
+        bars.forEach((bar, i) => (bar.style.height = `${Math.max(14, Math.round((peaks[i] / top) * 100))}%`));
+      } catch {
+        audio.addEventListener('loadedmetadata', () => Number.isFinite(audio.duration) && ((duration = audio.duration), paint()));
+      }
+      paint();
+    });
+    ready.catch(() => {
+      $play.disabled = true;
+      $time.textContent = T('unavailable');
+    });
+    $play.onclick = async () => {
+      await ready.catch(() => {});
+      if (!audio.paused) return audio.pause();
+      for (const other of this.players.values()) if (other.audio !== audio) other.audio.pause(); // one at a time
+      audio.play().catch(() => {});
+    };
+    audio.onplay = audio.onpause = icon;
+    audio.ontimeupdate = paint;
+    audio.onended = () => {
+      audio.currentTime = 0;
+      icon();
+      paint();
+    };
+    const seek = (fraction) => {
+      if (!duration) return;
+      audio.currentTime = Math.max(0, Math.min(0.999, fraction)) * duration;
+      paint();
+    };
+    $wave.onclick = (e) => {
+      const box = $wave.getBoundingClientRect();
+      seek((e.clientX - box.left) / box.width);
+    };
+    $wave.onkeydown = (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') (e.preventDefault(), seek((audio.currentTime + (e.key === 'ArrowRight' ? 5 : -5)) / (duration || 1)));
+    };
+    $speed.onclick = () => {
+      audio.playbackRate = { 1: 1.5, 1.5: 2, 2: 1 }[audio.playbackRate] ?? 1;
+      $speed.textContent = `${audio.playbackRate}×`;
+    };
+    if (!fresh) this.players.set(m.id, { el, audio });
+    return el;
+  }
+
+  /** What the round button does right now: send the recording, send the message, or start recording. */
+  _primary() {
+    if (this._rec) return this._stopRecording(false);
+    if (this.$input.value.trim() || this.pendingFile) return this._submit();
+    if (navigator.mediaDevices && globalThis.MediaRecorder) this._startRecording();
+  }
+
   _renderList() {
     if (!this.chat?.me) return;
     const q = this.query.trim().toLowerCase();
+    const me = this.chat.me.id;
     const all = [...this.convs.values()];
     const archived = all.filter((c) => c.archived);
-    const shown = (q ? all.filter((c) => this._title(c).toLowerCase().includes(q)) : this.showArchived ? archived : all.filter((c) => !c.archived))
+    const passes = (c) => (this.filter === 'unread' ? c.unread > 0 : this.filter === 'groups' ? c.type === 'group' : true);
+    const shown = (q ? all.filter((c) => this._title(c).toLowerCase().includes(q)) : this.showArchived ? archived : all.filter((c) => !c.archived && passes(c)))
       .sort((a, b) => b.pinned - a.pinned || b.updatedAt - a.updatedAt);
+
+    const chip = (key, label) => h('button', { class: 'chip', 'aria-pressed': String(this.filter === key), onclick: () => ((this.filter = key), this._renderList()) }, label);
+    this.$chips.hidden = !!q || this.showArchived || all.length === 0;
+    fill(this.$chips, chip('all', T('All')), chip('unread', T('Unread')), chip('groups', T('Groups')));
 
     const nodes = [];
     if (!q && this.showArchived) nodes.push(h('button', { class: 'linkrow', onclick: () => ((this.showArchived = false), this._renderList()) }, T('← Back to chats')));
     for (const c of shown) {
       const other = c.type === 'dm' ? this._other(c) : null;
       const title = this._title(c);
-      nodes.push(h('button', { class: 'conv', role: 'listitem', 'aria-current': String(c.id === this.activeId), onclick: () => this._select(c.id) },
+      const last = c.lastMessage;
+      const unread = c.unread > 0 && c.id !== this.activeId;
+      const typing = this.typing.get(c.id)?.size > 0;
+      const draft = c.id !== this.activeId && this._draft(c.id);
+      const mineLast = last && last.senderId === me && last.kind !== 'system' && !last.deleted;
+      nodes.push(h('button', { class: `conv${unread ? ' unread' : ''}`, role: 'listitem', 'aria-current': String(c.id === this.activeId), onclick: () => this._select(c.id) },
         this._avatar(title, other?.avatar, { online: !!other && this.chat.online.has(other.userId) }),
         h('div', { class: 'body' },
           h('div', { class: 'line' },
             h('span', { class: 'name' }, title),
-            c.pinned && h('span', { icon: 'pin', title: T('Pinned') }),
-            c.muted && h('span', { icon: 'mute', title: T('Muted') }),
-            c.lastMessage && h('span', { class: 'when' }, shortWhen(c.lastMessage.createdAt)),
+            last && h('span', { class: 'when' }, shortWhen(last.createdAt)),
           ),
           h('div', { class: 'line' },
-            h('span', { class: 'preview' }, c.id !== this.activeId && this._draft(c.id) ? T('Draft: {text}', { text: this._draft(c.id) }) : this._preview(c, c.lastMessage)),
-            c.unread > 0 && c.id !== this.activeId && h('span', { class: `badge${c.muted ? ' quiet' : ''}`, 'aria-label': T('{n} unread', { n: c.unread }) }, c.unread > 99 ? '99+' : String(c.unread)),
+            !typing && !draft && mineLast && this._ticks(last.seq <= this._othersRead(c)),
+            typing ? h('span', { class: 'preview live' }, T('typing…'))
+              : draft ? h('span', { class: 'preview draft' }, T('Draft: {text}', { text: draft }))
+              : h('span', { class: 'preview' }, this._preview(c, last)),
+            c.pinned && h('span', { icon: 'pin', title: T('Pinned') }),
+            c.muted && h('span', { icon: 'mute', title: T('Muted') }),
+            unread && h('span', { class: `badge${c.muted ? ' quiet' : ''}`, 'aria-label': T('{n} unread', { n: c.unread }) }, c.unread > 99 ? '99+' : String(c.unread)),
           ),
         ),
       ));
@@ -657,14 +703,14 @@ class PlugChatElement extends HTMLElement {
         const c = this.convs.get(m.conversationId);
         if (!c) continue;
         nodes.push(h('button', { class: 'conv', onclick: () => this._select(c.id, m.id) },
-          this._avatar(this._title(c), null, { small: true }),
+          this._avatar(this._title(c), null),
           h('div', { class: 'body' },
             h('div', { class: 'line' }, h('span', { class: 'name' }, this._title(c)), h('span', { class: 'when' }, shortWhen(m.createdAt))),
             h('div', { class: 'line' }, h('span', { class: 'preview' }, `${first(this._memberName(c, m.senderId))}: ${m.text}`)),
           )));
       }
     }
-    if (!nodes.length) nodes.push(h('div', { class: 'hint' }, q ? T('Nothing found.') : T('No conversations yet. Press + to start one.')));
+    if (!nodes.length) nodes.push(h('div', { class: 'hint' }, q ? T('Nothing found.') : this.filter !== 'all' ? T('Nothing here.') : T('No conversations yet. Press + to start one.')));
     fill(this.$list, ...nodes);
   }
 
@@ -784,9 +830,11 @@ class PlugChatElement extends HTMLElement {
     this.pins = [];
     this.opened.clear();
     this._stopRecording(true);
+    for (const player of this.players.values()) player.audio.pause();
+    this.players.clear();
     this.$root.classList.toggle('open', !!id);
     this._renderList();
-    if (!id) return fill(this.$main, h('div', { class: 'hint' }, T('Select a conversation to start chatting.')));
+    if (!id) return fill(this.$main, h('div', { class: 'hint' }, h('span', { icon: 'bubbles' }), T('Select a conversation to start chatting.')));
 
     this.$header = h('div', { class: 'bar' });
     this.$pins = h('button', { class: 'pinbar', hidden: true });
@@ -832,15 +880,16 @@ class PlugChatElement extends HTMLElement {
       this._attach(this.$file.files);
       this.$file.value = '';
     } });
-    this.$menu = h('div', { class: 'menu', hidden: true, role: 'menu' });
-    this.$mic = h('button', { class: 'icon', icon: 'mic', type: 'button', title: T('Record a voice note'), 'aria-label': T('Record a voice note'),
-      hidden: !(navigator.mediaDevices && globalThis.MediaRecorder), onclick: () => this._toggleRecording() });
-    this.$send = h('button', { class: 'icon sendbtn', icon: 'send', type: 'submit', title: T('Send'), 'aria-label': T('Send'), disabled: true });
-    this.$composer = h('form', { class: 'composer', onsubmit: (e) => (e.preventDefault(), this._submit()) },
+    this.$menu = h('div', { class: 'sheet', hidden: true, role: 'menu' });
+    this.$rec = h('div', { class: 'rec' });
+    this.$action = h('button', { class: 'action', type: 'submit', icon: 'mic' });
+    this.$composer = h('form', { class: 'composer', onsubmit: (e) => (e.preventDefault(), this._primary()) },
       this.$file, this.$menu, this.$mentions, this.$toBottom, this.$emoji,
-      h('button', { class: 'icon', icon: 'plus', type: 'button', title: T('Attach'), 'aria-label': T('Attach'), 'aria-haspopup': 'menu', onclick: () => this._toggleMenu() }),
-      h('button', { class: 'icon', icon: 'smile', type: 'button', title: T('Emoji'), 'aria-label': T('Emoji'), onclick: () => (this.$emoji.hidden = !this.$emoji.hidden) }),
-      this.$input, this.$mic, this.$send,
+      h('button', { class: 'icon attach', icon: 'plus', type: 'button', title: T('Attach'), 'aria-label': T('Attach'), 'aria-haspopup': 'menu', onclick: () => this._toggleMenu() }),
+      h('div', { class: 'pill' },
+        h('button', { class: 'icon', icon: 'smile', type: 'button', title: T('Emoji'), 'aria-label': T('Emoji'), onclick: () => (this.$emoji.hidden = !this.$emoji.hidden) }),
+        this.$input),
+      this.$rec, this.$action,
     );
     this.$readonly = h('div', { class: 'hint', hidden: true }, T('Only admins can post in this channel.'));
     fill(this.$main, this.$header, this.$pins, this.$notice, this.$live, this.$msgs, this.$typing, this.$error, this.$banner, this.$composer, this.$readonly);
@@ -907,24 +956,30 @@ class PlugChatElement extends HTMLElement {
     const conv = this.convs.get(this.activeId);
     if (!conv || !this.$header) return;
     const other = conv.type === 'dm' ? this._other(conv) : null;
+    const seen = other && this.lastSeen.get(other.userId);
+    const typists = [...(this.typing.get(conv.id)?.keys() ?? [])];
     // The host's own call vendor handles groups too; built-in peer-to-peer calls are one-to-one.
     const canCall = this._on('calls') && (this._external() || (other && this.calls));
-    const seen = other && this.lastSeen.get(other.userId);
-    const status = other ? (this.chat.online.has(other.userId) ? T('Online') : seen ? T('Last seen {when}', { when: shortWhen(seen) }) : T('Offline')) : T('{n} members', { n: conv.members.length }) + (conv.announce ? T(' · announcements') : '');
-    fill(this.$header, 
+    const status = typists.length
+      ? (conv.type === 'group' ? T('{name} is typing…', { name: first(this._memberName(conv, typists[0])) }) : T('typing…'))
+      : other ? (this.chat.online.has(other.userId) ? T('Online') : seen ? T('Last seen {when}', { when: shortWhen(seen) }) : T('Offline'))
+      : T('{n} members', { n: conv.members.length }) + (conv.announce ? T(' · announcements') : '');
+    fill(this.$header,
       h('button', { class: 'icon backbtn', icon: 'back', title: T('Back'), 'aria-label': T('Back to conversations'), onclick: () => this._select(null) }),
-      this._avatar(this._title(conv), other?.avatar, { online: !!other && this.chat.online.has(other.userId) }),
-      h('div', { class: 'title' },
-        h('div', { class: 'name' }, this._title(conv)),
-        h('div', { class: 'sub' },
-          conv.encrypted && h('span', { icon: 'lock', title: T('End-to-end encrypted') }),
-          conv.ttlSeconds && h('span', { icon: 'timer', title: T('Disappearing messages are on') }),
-          h('span', {}, conv.encrypted ? T('End-to-end encrypted · {status}', { status }) : status),
-        ),
-      ),
-      canCall && h('button', { class: 'icon', icon: 'phone', title: T('Voice call'), 'aria-label': T('Voice call'), onclick: () => this._call(conv, other, false) }),
+      // The name and picture open the conversation's details, as people expect.
+      h('button', { class: 'who', 'aria-label': T('Conversation details'), onclick: () => this._detailsDialog(conv) },
+        this._avatar(this._title(conv), other?.avatar, { online: !!other && this.chat.online.has(other.userId) }),
+        h('div', { class: 'title' },
+          h('span', { class: 'name' }, this._title(conv)),
+          h('div', { class: `sub${typists.length ? ' live' : ''}` },
+            conv.encrypted && h('span', { icon: 'lock', title: T('End-to-end encrypted') }),
+            conv.ttlSeconds && h('span', { icon: 'timer', title: T('Disappearing messages are on') }),
+            h('span', {}, status),
+          ),
+        )),
       canCall && h('button', { class: 'icon', icon: 'video', title: T('Video call'), 'aria-label': T('Video call'), onclick: () => this._call(conv, other, true) }),
-      h('button', { class: 'icon', icon: 'info', title: T('Conversation details'), 'aria-label': T('Conversation details'), onclick: () => this._detailsDialog(conv) }),
+      canCall && h('button', { class: 'icon', icon: 'phone', title: T('Voice call'), 'aria-label': T('Voice call'), onclick: () => this._call(conv, other, false) }),
+      h('button', { class: 'icon', icon: 'more', title: T('Conversation details'), 'aria-label': T('Conversation details'), onclick: () => this._detailsDialog(conv) }),
     );
   }
 
@@ -971,10 +1026,17 @@ class PlugChatElement extends HTMLElement {
     if (this.activeId === id) this._renderMessages();
   }
   _renderTyping() {
+    // Typing shows in three places at once: the chat list, the header, and as a bubble in the thread.
+    this._renderList();
     const conv = this.convs.get(this.activeId);
     if (!conv || !this.$typing) return;
+    this._renderHeader();
     const names = [...(this.typing.get(conv.id)?.keys() ?? [])].map((id) => first(this._memberName(conv, id)));
-    this.$typing.textContent = names.length === 0 ? '' : names.length === 1 ? T('{name} is typing…', { name: names[0] }) : T('{names} are typing…', { names: names.join(', ') });
+    fill(this.$typing, names.length > 0 && [
+      h('span', { class: 'dots', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')),
+      conv.type === 'group' && h('span', {}, names.join(', ')),
+    ]);
+    if (names.length && this.$msgs.scrollHeight - this.$msgs.scrollTop - this.$msgs.clientHeight < 120) this.$msgs.scrollTop = this.$msgs.scrollHeight;
   }
 
   _clearTyping(conversationId, userId) {
@@ -988,33 +1050,35 @@ class PlugChatElement extends HTMLElement {
     const conv = this.convs.get(this.activeId);
     const state = this.msgs.get(this.activeId);
     if (!conv || !state || !this.$msgs) return;
+    this._closePop();
     const box = this.$msgs;
     const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
     const me = this.chat.me.id;
     const byId = new Map(state.list.map((m) => [m.id, m]));
-    const othersRead = Math.min(...conv.members.filter((m) => m.userId !== me).map((m) => m.lastReadSeq), Infinity);
+    const othersRead = this._othersRead(conv);
+    const sameDay = (a, b) => new Date(a.createdAt).toDateString() === new Date(b.createdAt).toDateString();
+    // Messages from one person within five minutes of each other form a block.
+    const joins = (a, b) => a && b && a.kind !== 'system' && b.kind !== 'system' && a.senderId === b.senderId && sameDay(a, b) && b.createdAt - a.createdAt <= 5 * 60_000;
 
     const nodes = [];
     if (state.more) nodes.push(h('button', { class: 'more', onclick: () => this._guard(this._loadOlder()) }, T('Load earlier messages')));
     if (!state.list.length) nodes.push(h('div', { class: 'hint' }, conv.encrypted ? T('Messages here are end-to-end encrypted. Say hello.') : T('No messages yet. Say hello.')));
 
-    let prev = null;
     let divided = false;
-    for (const m of state.list) {
-      const newDay = !prev || new Date(prev.createdAt).toDateString() !== new Date(m.createdAt).toDateString();
-      if (newDay) nodes.push(h('div', { class: 'day' }, dayLabel(m.createdAt)));
+    state.list.forEach((m, index) => {
+      const prev = state.list[index - 1];
+      const next = state.list[index + 1];
+      if (!prev || !sameDay(prev, m)) nodes.push(h('div', { class: 'day' }, dayLabel(m.createdAt)));
       // A line where this person stopped reading last time.
       if (state.unreadFrom != null && !divided && m.seq > state.unreadFrom && m.senderId !== me) {
         divided = true;
         nodes.push(h('div', { class: 'newline', role: 'separator' }, T('New messages')));
       }
-      if (m.kind === 'system') {
-        nodes.push(h('div', { class: 'sys' }, m.text));
-        prev = null;
-        continue;
-      }
+      if (m.kind === 'system') return void nodes.push(h('div', { class: 'sys' }, m.text));
+
       const mine = m.senderId === me;
-      const isFirst = newDay || !prev || prev.senderId !== m.senderId || m.createdAt - prev.createdAt > 5 * 60_000;
+      const isFirst = !joins(prev, m);
+      const isLast = !joins(m, next);
       const showAvatars = conv.type === 'group' && !mine;
       const name = this._memberName(conv, m.senderId);
 
@@ -1023,7 +1087,10 @@ class PlugChatElement extends HTMLElement {
       else if (m.undecryptable) bubble = h('div', { class: 'bubble ghost' }, T('Waiting for this device to receive the key for this message.'));
       else {
         const parent = m.replyTo && byId.get(m.replyTo);
-        bubble = h('div', { class: `bubble${m.mentions?.includes(me) ? ' mention' : ''}` },
+        const shown = m.viewOnce ? this.opened.get(m.id) : m;
+        // A photo on its own fills the bubble edge to edge, with the time laid over it.
+        const photoOnly = shown?.file && INLINE_IMAGES.has(shown.file.mime) && !shown.text && !m.replyTo && !m.forwarded && !(showAvatars && isFirst);
+        bubble = h('div', { class: `bubble${m.mentions?.includes(me) ? ' mention' : ''}${photoOnly ? ' media' : ''}${m.pending ? ' pending' : ''}` },
           showAvatars && isFirst && h('button', { class: 'sender', onclick: () => this._profileDialog(m.senderId) }, name),
           m.forwarded && h('div', { class: 'tag' }, h('span', { icon: 'forward' }), T('Forwarded')),
           m.replyTo && h('button', { class: 'quote', onclick: () => this._jumpTo(m.replyTo) }, parent ? `${this._memberName(conv, parent.senderId)}: ${this._snippet(parent)}` : T('Earlier message')),
@@ -1034,15 +1101,15 @@ class PlugChatElement extends HTMLElement {
             m.expiresAt && h('span', { icon: 'timer', title: T('Disappearing message') }),
             m.editedAt && T('edited ·'),
             m.pending && !m.failed ? T('Sending…') : clock(m.createdAt),
-            mine && !m.pending && h('span', { title: m.seq <= othersRead ? T('Read') : T('Sent') }, m.seq <= othersRead ? '✓✓' : '✓'),
+            mine && !m.pending && this._ticks(m.seq <= othersRead),
           ),
         );
-        if (m.pending) bubble.classList.add('pending');
       }
 
       const reacts = Object.entries(m.reactions ?? {});
-      const row = h('div', { class: `row${mine ? ' mine' : ''}${isFirst ? ' first' : ''}`, 'data-id': m.id },
-        showAvatars && (isFirst ? this._avatar(name, conv.members.find((x) => x.userId === m.senderId)?.avatar, { small: true }) : h('div', { class: 'spacer' })),
+      const usable = !m.deleted && !m.undecryptable && !m.pending;
+      const row = h('div', { class: `row${mine ? ' mine' : ''}${isFirst ? ' first' : ''}${isLast ? ' last' : ''}`, 'data-id': m.id },
+        showAvatars && (isLast ? this._avatar(name, conv.members.find((x) => x.userId === m.senderId)?.avatar, { small: true }) : h('div', { class: 'spacer' })),
         h('div', { class: 'col' },
           bubble,
           reacts.length > 0 && h('div', { class: 'reacts' }, reacts.map(([emoji, users]) =>
@@ -1050,26 +1117,16 @@ class PlugChatElement extends HTMLElement {
               class: `react${users.includes(me) ? ' on' : ''}`,
               title: users.map((u) => this._memberName(conv, u)).join(', '),
               onclick: () => this._toggleReaction(m, emoji),
-            }, `${emoji} ${users.length}`))),
+            }, users.length > 1 ? `${emoji} ${users.length}` : emoji))),
           m.failed && h('div', { class: 'failed', role: 'alert' }, `${T('Not sent')} · ${m.failed} `,
             h('button', { class: 'linkbtn', onclick: () => this._deliver(m.conversationId, m.content, m.id) }, T('Retry')),
             h('button', { class: 'linkbtn', onclick: () => ((state.list = state.list.filter((x) => x.id !== m.id)), this._renderMessages()) }, T('Discard'))),
         ),
-        !m.deleted && !m.undecryptable && !m.pending && this._actions(m, mine, conv),
+        usable && this._actions(m, mine, conv),
       );
-      // Keyboard users open a message's actions with Enter or Space.
-      bubble.tabIndex = 0;
-      bubble.addEventListener('keydown', (e) => {
-        if (e.target === bubble && (e.key === 'Enter' || e.key === ' ')) (e.preventDefault(), row.classList.toggle('active'));
-      });
-      bubble.addEventListener('click', (e) => {
-        if (e.target.closest('a, button, audio, video')) return;
-        for (const el of box.querySelectorAll('.row.active')) if (el !== row) el.classList.remove('active');
-        row.classList.toggle('active');
-      });
+      if (usable) this._pressable(bubble, row, m, mine, conv);
       nodes.push(row);
-      prev = m;
-    }
+    });
 
     if (state.moreAfter) {
       nodes.push(h('button', { class: 'more', onclick: () => this._guard(this._loadNewer()) }, T('Load newer messages')));
@@ -1120,7 +1177,7 @@ class PlugChatElement extends HTMLElement {
       this._dialogTitle(T('Media and files')),
       list.length === 0 && h('div', { class: 'hint' }, T('Nothing has been shared here yet.')),
       h('div', { class: 'media' }, list.map((m) => h('div', { class: 'item' },
-        this._attachment(m),
+        this._attachment(m, true),
         h('button', { class: 'linkbtn', onclick: () => (this.$dialog.close(), this._jumpTo(m.id)) },
           `${first(this._memberName(conv, m.senderId))} · ${shortWhen(m.createdAt)}`)))),
     ));
@@ -1336,44 +1393,25 @@ class PlugChatElement extends HTMLElement {
       m.poll.options.map((label, i) => {
         const count = votes[i]?.length ?? 0;
         const on = mine.includes(i);
-        const fill = h('span', { class: 'fill' });
-        fill.style.width = `${total ? Math.round((count / total) * 100) : 0}%`;
+        const fillBar = h('span', { class: 'fill' });
+        fillBar.style.width = `${total ? Math.round((count / total) * 100) : 0}%`;
         return h('button', { class: `opt${on ? ' on' : ''}`, 'aria-pressed': String(on), onclick: () => {
           const picks = m.poll.multi ? (on ? mine.filter((x) => x !== i) : [...mine, i]) : on ? [] : [i];
           this._guard(this.chat.vote(m.id, picks));
-        } }, fill, h('span', { class: 'lbl' }, label), h('span', { class: 'cnt' }, String(count)));
+        } }, h('span', { class: 'radio' }), h('span', { class: 'lbl' }, label), h('span', { class: 'cnt' }, String(count)), h('span', { class: 'track' }, fillBar));
       }),
       h('small', {}, `${m.poll.multi ? T('Choose any') : T('Choose one')} · ${total === 1 ? T('1 vote') : T('{n} votes', { n: total })}`),
     );
   }
 
+  /** The two quiet buttons that appear beside a message under the mouse. */
   _actions(m, mine, conv) {
-    const role = this._role(conv);
-    const canDelete = mine || (conv.type === 'group' && role !== 'member');
-    const canPin = !(conv.announce && role === 'member');
-    const plain = m.kind === 'text' && !m.viewOnce;
-    const forwardable = !m.viewOnce || this.opened.has(m.id);
-    const picker = h('span', { hidden: true }, QUICK_REACTIONS.map((emoji) =>
-      h('button', { class: 'emoji', 'aria-label': T('React {emoji}', { emoji }), onclick: () => this._toggleReaction(m, emoji) }, emoji)),
-      h('button', { class: 'emoji', title: T('More reactions'), 'aria-label': T('More reactions'), onclick: () => this._openDialog(h('div', { class: 'panel' },
-        this._dialogTitle(T('React')), this._emojiGrid((emoji) => (this.$dialog.close(), this._toggleReaction(m, emoji))))) }, '+'));
-    const act = (icon, label, onclick, cls = '') => h('button', { class: `icon ${cls}`, icon, title: label, 'aria-label': label, onclick });
-    return h('div', { class: 'acts' },
-      picker,
-      act('smile', T('React'), () => (picker.hidden = !picker.hidden)),
-      act('reply', T('Reply'), () => this._setDraftMode({ replyTo: m })),
-      m.text && !m.viewOnce && act('copy', T('Copy text'), () => this._guard(navigator.clipboard.writeText(m.text))),
-      mine && conv.type === 'group' && act('info', T('Message info'), () => this._infoDialog(m, conv)),
-      forwardable && !m.viewOnce && m.kind !== 'call' && act('forward', T('Forward'), () => this._forwardDialog(m)),
-      canPin && act('pin', m.pinned ? T('Unpin') : T('Pin'), () => this._guard(m.pinned ? this.chat.unpin(m.id) : this.chat.pin(m.id)), m.pinned ? 'on' : ''),
-      mine && plain && act('edit', T('Edit'), () => this._setDraftMode({ editing: m })),
-      !mine && act('flag', T('Report'), () => this._reportDialog(m)),
-      act('star', m.starred ? T('Unstar') : T('Star'), () => this._guard(m.starred ? this.chat.unstar(m.id) : this.chat.star(m.id)), m.starred ? 'on' : ''),
-      canDelete && act('trash', T('Delete'), () => this._guard(this.chat.remove(m.id)), 'danger'),
-    );
+    const button = (icon, label, kind) => h('button', { class: 'mini', icon, title: label, 'aria-label': label, 'aria-haspopup': 'menu', onclick: (e) => this._pop(e.currentTarget, kind, m, mine, conv) });
+    return h('div', { class: 'acts' }, button('smile', T('React'), 'reactions'), button('chevron', T('More'), 'menu'));
   }
 
-  _attachment(m) {
+  /** A photo, a video, a voice note or audio player, or a file card. `fresh` builds a separate copy (for the media view). */
+  _attachment(m, fresh = false) {
     const label = `${m.file.name} (${size(m.file.size)})`;
     const blobUrl = () => {
       let url = this.blobs.get(m.file.fileId);
@@ -1387,16 +1425,20 @@ class PlugChatElement extends HTMLElement {
       return img;
     }
     if (PLAYABLE.test(m.file.mime) && small) {
-      const el = m.file.mime.startsWith('audio/') ? h('audio', { controls: true, preload: 'metadata', title: label }) : h('video', { class: 'media', controls: true, preload: 'metadata', playsinline: true, title: label });
-      blobUrl().then((u) => (el.src = u), () => {});
-      return el;
+      if (m.file.mime.startsWith('audio/')) return this._audio(m, fresh);
+      const video = h('video', { class: 'media', controls: true, preload: 'metadata', playsinline: true, title: label });
+      blobUrl().then((u) => (video.src = u), () => {});
+      return video;
     }
     const save = async () => {
       const url = URL.createObjectURL(await this.chat.download(m));
       h('a', { href: url, download: m.file.name }).click();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
     };
-    return h('button', { class: 'file', onclick: () => this._guard(save()) }, h('span', { icon: 'file' }), label);
+    return h('button', { class: 'filecard', title: T('Download'), onclick: () => this._guard(save()) },
+      h('span', { class: 'ext', icon: 'file' }),
+      h('span', { class: 'info' }, h('b', {}, m.file.name), h('small', {}, size(m.file.size))),
+      h('span', { icon: 'download' }));
   }
 
   async _loadOlder() {
@@ -1429,8 +1471,15 @@ class PlugChatElement extends HTMLElement {
   _onInput(restoring = false) {
     const el = this.$input;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight + 2, 120)}px`;
-    this.$send.disabled = !el.value.trim() && !this.pendingFile;
+    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+    // The main button is a microphone until there is something to send.
+    const canRecord = !!(navigator.mediaDevices && globalThis.MediaRecorder);
+    const sending = !!this._rec || !!el.value.trim() || !!this.pendingFile || !canRecord;
+    this.$action.innerHTML = ICON[sending ? 'send' : 'mic'];
+    this.$action.disabled = sending && !this._rec && !el.value.trim() && !this.pendingFile;
+    const label = this._rec ? T('Send voice message') : sending ? T('Send') : T('Record a voice note');
+    this.$action.title = label;
+    this.$action.setAttribute('aria-label', label);
     const t = Date.now();
     if (!restoring && el.value && t - (this._typedAt ?? 0) > 2000) {
       this._typedAt = t;
@@ -1510,7 +1559,7 @@ class PlugChatElement extends HTMLElement {
     const away = box.scrollHeight - box.scrollTop - box.clientHeight > 200;
     if (!away) this._below = 0;
     this.$toBottom.hidden = !away;
-    this.$toBottom.textContent = this._below ? `↓ ${this._below}` : '↓';
+    fill(this.$toBottom, h('span', { icon: 'chevron' }), this._below > 0 && h('span', { class: 'badge' }, String(this._below)));
   }
 
   _toLatest() {
@@ -1522,18 +1571,19 @@ class PlugChatElement extends HTMLElement {
   _toggleMenu(force) {
     const open = force ?? this.$menu.hidden;
     if (open) {
-      const item = (icon, label, onclick) => h('button', { type: 'button', role: 'menuitem', onclick: () => (this._toggleMenu(false), onclick()) }, h('span', { icon }), label);
-      fill(this.$menu, 
-        item('file', T('Photo or file'), () => this.$file.click()),
-        item('poll', T('Poll'), () => this._pollDialog()),
-        navigator.geolocation && item('map', T('Share my location'), () => this._shareLocation()),
-        item('eye', this.viewOnce ? T('View once: on') : T('View once: off'), () => {
+      const item = (icon, label, color, onclick) => h('button', { type: 'button', role: 'menuitem', onclick: () => (this._toggleMenu(false), onclick()) },
+        h('span', { class: 'ic', icon, style: `background:${color}` }), label);
+      fill(this.$menu,
+        item('image', T('Photo or file'), '#7c5cff', () => this.$file.click()),
+        item('poll', T('Poll'), '#f79009', () => this._pollDialog()),
+        navigator.geolocation && item('map', T('Location'), '#12b76a', () => this._shareLocation()),
+        item('eye', this.viewOnce ? T('View once: on') : T('View once: off'), this.viewOnce ? '#2f6fed' : '#667085', () => {
           this.viewOnce = !this.viewOnce;
           this._renderBanner();
         }),
-        item('timer', T('Send later'), () => this._scheduleDialog()),
+        item('timer', T('Send later'), '#0ea5e9', () => this._scheduleDialog()),
         // Whatever else the host platform offers: send money, share a product, book a slot...
-        (this.actions ?? []).map((a) => item(a.icon in ICON ? a.icon : 'plus', a.label, () =>
+        (this.actions ?? []).map((a) => item(a.icon in ICON ? a.icon : 'plus', a.label, a.color ?? '#e5484d', () =>
           this._guard(Promise.resolve().then(() => a.run({ conversation: this.convs.get(this.activeId), chat: this.chat, element: this }))))),
       );
     }
@@ -1606,7 +1656,7 @@ class PlugChatElement extends HTMLElement {
       if (!state) return;
       const pending = {
         id: pendingId, pending: true, conversationId: id, senderId: this.chat.me.id, kind: 'text',
-        text: content.text || (content.file ? `📎 ${content.file.name}` : ''), file: null, replyTo: content.replyTo ?? null,
+        text: content.text || (content.file ? this._fileLabel({ name: content.file.name, mime: content.file.type }) : ''), file: null, replyTo: content.replyTo ?? null,
         createdAt: Date.now(), reactions: {}, mentions: [], content, ...patch,
       };
       state.list = [...state.list.filter((m) => m.id !== pendingId), pending];
@@ -1635,40 +1685,70 @@ class PlugChatElement extends HTMLElement {
     );
   }
 
-  async _toggleRecording() {
-    if (this._rec) return this._stopRecording(false);
+  /**
+   * Record a voice note. The composer turns into a recording bar: a way to
+   * throw it away, a running timer, a live level, and the send button.
+   */
+  async _startRecording() {
+    if (this._rec) return;
     const id = this.activeId;
+    let stream;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const rec = (this._rec = new MediaRecorder(stream));
-      const chunks = [];
-      rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-      rec.onstop = () => {
-        for (const t of stream.getTracks()) t.stop();
-        if (rec.discard || !chunks.length) return;
-        const type = (rec.mimeType || 'audio/webm').split(';')[0];
-        const file = new File(chunks, `voice-note.${type.split('/')[1]}`, { type });
-        this._guard(this.chat.send(id, { file }));
-      };
-      rec.start();
-      this.$mic.classList.add('rec');
-      this.$mic.innerHTML = ICON.stop;
-      this.$mic.title = T('Stop and send');
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      this._error(T('Microphone permission was denied.'));
+      return this._error(T('Microphone permission was denied.'));
     }
+    if (this.activeId !== id || this._rec) return stream.getTracks().forEach((t) => t.stop());
+
+    const rec = (this._rec = new MediaRecorder(stream));
+    const chunks = [];
+    const started = Date.now();
+    const meter = new (globalThis.AudioContext ?? globalThis.webkitAudioContext)();
+    const analyser = meter.createAnalyser();
+    analyser.fftSize = 256;
+    meter.createMediaStreamSource(stream).connect(analyser);
+    const samples = new Uint8Array(analyser.fftSize);
+
+    const $time = h('span', { class: 'rectime', role: 'timer' }, '0:00');
+    const $wave = h('div', { class: 'wave', 'aria-hidden': 'true' });
+    fill(this.$rec,
+      h('button', { class: 'icon trash', icon: 'trash', type: 'button', title: T('Cancel recording'), 'aria-label': T('Cancel recording'), onclick: () => this._stopRecording(true) }),
+      h('span', { class: 'recdot' }), $time, $wave);
+    rec.ticker = setInterval(() => {
+      analyser.getByteTimeDomainData(samples);
+      let peak = 0;
+      for (const v of samples) peak = Math.max(peak, Math.abs(v - 128));
+      const bar = h('i');
+      bar.style.height = `${Math.max(10, Math.min(100, Math.round((peak / 64) * 100)))}%`;
+      $wave.append(bar);
+      while ($wave.children.length > 60) $wave.firstChild.remove();
+      $time.textContent = mmss(Date.now() - started);
+    }, 90);
+
+    rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    rec.onstop = () => {
+      for (const t of stream.getTracks()) t.stop();
+      meter.close().catch(() => {});
+      // Anything under half a second is a slip of the finger, not a message.
+      if (rec.discard || !chunks.length || Date.now() - started < 500) return;
+      const type = (rec.mimeType || 'audio/webm').split(';')[0];
+      this._deliver(id, { file: new File(chunks, `voice-note.${type.split('/')[1]}`, { type }) });
+    };
+    rec.start();
+    this.$composer.classList.add('recording');
+    this._onInput(true);
   }
 
   _stopRecording(discard) {
     const rec = this._rec;
     if (!rec) return;
     this._rec = null;
+    clearInterval(rec.ticker);
     rec.discard = discard;
     rec.stop();
-    if (this.$mic) {
-      this.$mic.classList.remove('rec');
-      this.$mic.innerHTML = ICON.mic;
-      this.$mic.title = T('Record a voice note');
+    if (this.$composer?.isConnected) {
+      this.$composer.classList.remove('recording');
+      this._onInput(true);
     }
   }
 

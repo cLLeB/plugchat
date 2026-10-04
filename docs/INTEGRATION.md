@@ -270,8 +270,16 @@ session your site already has. Give the element a height with CSS.
 | `dir` | `rtl` or `ltr`. Right-to-left is chosen automatically for Arabic, Hebrew, Persian and Urdu `lang` values |
 | `e2ee`, `calls`, `stories` | Set to `off` to hide that feature |
 
-Theme it with CSS variables: `--pc-accent`, `--pc-accent-fg`, `--pc-bg`,
-`--pc-surface`, `--pc-fg`, `--pc-muted`, `--pc-border`, `--pc-bubble`, `--pc-radius`.
+Theme it with CSS variables: `--pc-accent` (your brand colour: outgoing
+bubbles, buttons, badges) and `--pc-accent-fg` (text on it), `--pc-bg` (panels),
+`--pc-chat` (the backdrop behind messages), `--pc-bubble` (incoming bubbles),
+`--pc-surface`, `--pc-fg`, `--pc-muted`, `--pc-border`, `--pc-radius`. Pick an
+accent dark enough for `--pc-accent-fg` to read on it, in both light and dark.
+
+The layout follows the space it is given, not the device: two panes side by
+side from 700px wide, one pane at a time below that, with dialogs rising from
+the bottom edge and message actions on press-and-hold. On a phone, give the
+element the full screen (`height: 100dvh`).
 
 Events on the element: `plugchat:ready`, `plugchat:unread` (`detail.count`),
 `plugchat:message` (`detail.message`), `plugchat:call`, `plugchat:call-join`

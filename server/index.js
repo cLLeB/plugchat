@@ -13,7 +13,7 @@ import { diskStorage, createHooks, databaseBus } from './connectors.js';
 export { signToken, verifyToken, signWebhook, diskStorage, databaseBus };
 
 const CLIENT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'client');
-const CLIENT_FILES = new Set(['plugchat.js', 'e2ee.js', 'calls.js', 'element.js', 'i18n.js', 'launcher.js', 'embed.js', 'admin.js']);
+const CLIENT_FILES = new Set(['plugchat.js', 'e2ee.js', 'calls.js', 'element.js', 'styles.js', 'i18n.js', 'launcher.js', 'embed.js', 'admin.js']);
 // The moderation console for the host's staff. It holds no secrets: it asks for an admin token.
 const ADMIN_PAGE = `<!doctype html>
 <html lang="en">

@@ -439,7 +439,11 @@ export class PlugChat {
     return out;
   }
 
-  async _hydrateConversation(conv) {
+  async _hydrateConversation(fetched) {
+    // Refresh the object callers already hold rather than replacing it, so a
+    // list on screen keeps receiving updates after any later re-fetch.
+    const known = this._convs.get(fetched.id);
+    const conv = known ? Object.assign(known, fetched) : fetched;
     this._convs.set(conv.id, conv);
     if (conv.lastMessage) conv.lastMessage = await this._hydrate(conv.lastMessage, conv);
     this._shareKeys(conv).catch(() => {});

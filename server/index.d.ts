@@ -49,6 +49,8 @@ export interface Hooks {
   }): (Verdict & { body?: string }) | void | Promise<(Verdict & { body?: string }) | void>;
   'conversation.before'?(input: { type: 'dm' | 'group'; creatorId: string; memberIds: string[]; encrypted: boolean }): Verdict | void | Promise<Verdict | void>;
   'upload.before'?(input: { userId: string; conversationId: string | null; name: string; mime: string; size: number }): Verdict | void | Promise<Verdict | void>;
+  /** Fetch a link's title and description with your own fetcher. PlugChat never requests arbitrary URLs itself. */
+  'link.preview'?(input: { url: string; userId: string }): { title?: string; description?: string; siteName?: string } | void | Promise<{ title?: string; description?: string; siteName?: string } | void>;
   /** Return how this user joins the call on your vendor: a url, vendor data (tokens), or both. */
   'call.join'?(input: {
     call: { id: string; conversationId: string; startedBy: string; video: boolean; createdAt: number };

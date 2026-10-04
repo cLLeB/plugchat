@@ -189,6 +189,7 @@ export function createPlugChat(options = {}) {
   const removeFile = (id) => Promise.resolve().then(() => storage.remove(id)).catch(() => {});
 
   const store = new Store(join(dataDir, 'plugchat.db'));
+  const previews = new Map(); // url -> { at, value } (a small cache in front of the host's preview hook)
   const seen = new Map(); // sub -> "name\navatar" already written to the store
   const allowWrite = limiter(rateLimit.perSecond, rateLimit.burst);
 
@@ -446,7 +447,33 @@ export function createPlugChat(options = {}) {
   };
 
   const routes = [
-    ['GET', '/v1/me', (ctx) => ({ ...userView(store.getUser(ctx.auth.sub), ctx.auth), privacy: store.privacy(ctx.auth.sub), suspended: store.suspension(ctx.auth.sub), directory, features: { directory, stories, requireEncryption, calls: callMode } })],
+    ['GET', '/v1/me', (ctx) => ({ ...userView(store.getUser(ctx.auth.sub), ctx.auth), privacy: store.privacy(ctx.auth.sub), suspended: store.suspension(ctx.auth.sub), directory, features: { directory, stories, requireEncryption, calls: callMode, linkPreviews: hooks.has('link.preview') } })],
+
+    // Link previews come from the host's own fetcher (its `link.preview` hook),
+    // so this server never requests arbitrary URLs itself. Clients only ask for
+    // links in conversations that are not end-to-end encrypted.
+    ['GET', '/v1/preview', async (ctx) => {
+      if (!hooks.has('link.preview')) throw notFound('link previews are not enabled');
+      const target = str(ctx.url.searchParams.get('url'), 'url', 2000);
+      if (!/^https?:\/\//i.test(target)) throw bad('url must be http or https');
+      const cached = previews.get(target);
+      if (cached && cached.at > Date.now() - 3600_000) {
+        if (!cached.value) throw notFound('no preview');
+        return cached.value;
+      }
+      let value = null;
+      try {
+        const a = (await hooks.run('link.preview', { url: target, userId: ctx.auth.sub })) ?? {};
+        const clip = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined);
+        if (clip(a.title, 200)) value = { url: target, title: clip(a.title, 200), description: clip(a.description, 400), siteName: clip(a.siteName, 80) };
+      } catch (e) {
+        log.error('plugchat link.preview hook failed:', e.message);
+      }
+      if (previews.size >= 500) previews.delete(previews.keys().next().value);
+      previews.set(target, { at: Date.now(), value });
+      if (!value) throw notFound('no preview');
+      return value;
+    }],
 
     ['GET', '/v1/ice', () => ({ iceServers })],
 
@@ -468,7 +495,7 @@ export function createPlugChat(options = {}) {
       const b = await ctx.json();
       const fresh = store.registerDevice(ctx.auth.sub, str(b.deviceId, 'deviceId', 64), str(b.publicKey, 'publicKey', 256));
       if (fresh) for (const id of store.encryptedConversationIds(ctx.auth.sub)) pushConversation(id);
-      return { ...userView(store.getUser(ctx.auth.sub), ctx.auth), privacy: store.privacy(ctx.auth.sub), suspended: store.suspension(ctx.auth.sub), directory, features: { directory, stories, requireEncryption, calls: callMode } };
+      return { ...userView(store.getUser(ctx.auth.sub), ctx.auth), privacy: store.privacy(ctx.auth.sub), suspended: store.suspension(ctx.auth.sub), directory, features: { directory, stories, requireEncryption, calls: callMode, linkPreviews: hooks.has('link.preview') } };
     }],
 
     // The person's conversation keys, sealed with a passphrase the server never sees.

@@ -188,6 +188,8 @@ audio, video.media { display: block; max-width: 260px; margin-bottom: 4px; borde
 .media .item { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; min-width: 0; }
 .media .pic { max-width: 100%; max-height: 110px; margin: 0; }
 .media audio, .media video.media { max-width: 100%; }
+.bubble a.card { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; padding: 8px 10px; border-inline-start: 3px solid currentColor; border-radius: 8px; background: color-mix(in srgb, currentColor 10%, transparent); text-decoration: none; white-space: normal; max-width: 320px; }
+.card small, .card span { opacity: .8; font-size: 12px; }
 .notice { display: flex; gap: 8px; align-items: center; padding: 8px 14px; font-size: 13px; background: color-mix(in srgb, #f08c00 18%, var(--pc-bg)); border-bottom: 1px solid var(--pc-border); }
 .notice span:nth-child(2) { flex: 1; }
 .notice svg { width: 16px; height: 16px; }
@@ -1257,7 +1259,27 @@ class PlugChatElement extends HTMLElement {
       const url = `https://www.openstreetmap.org/?mlat=${Number(lat)}&mlon=${Number(lng)}#map=16/${Number(lat)}/${Number(lng)}`;
       return h('a', { class: 'file', href: url, target: '_blank', rel: 'noopener noreferrer' }, h('span', { icon: 'map' }), label || `${T('Location')} (${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)})`);
     }
-    return [m.file && this._attachment(m), linkify(m.text)];
+    return [m.file && this._attachment(m), linkify(m.text), this._linkCard(m, conv)];
+  }
+
+  /**
+   * A title-and-description card for the first link in a message. Never in
+   * encrypted conversations: asking for a preview would tell the server the link.
+   */
+  _linkCard(m, conv) {
+    if (conv.encrypted || m.kind !== 'text' || !this.chat.me.features?.linkPreviews) return null;
+    const url = /https?:\/\/[^\s<>"']+/.exec(m.text ?? '')?.[0];
+    if (!url) return null;
+    this.cards ??= new Map();
+    let pending = this.cards.get(url);
+    if (!pending) this.cards.set(url, (pending = this.chat.preview(url).catch(() => null)));
+    const card = h('a', { class: 'card', href: url, target: '_blank', rel: 'noopener noreferrer nofollow', hidden: true });
+    pending.then((p) => {
+      if (!p) return;
+      card.hidden = false;
+      fill(card, p.siteName && h('small', {}, p.siteName), h('strong', {}, p.title), p.description && h('span', {}, p.description));
+    });
+    return card;
   }
 
   _poll(m) {

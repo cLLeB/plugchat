@@ -709,6 +709,11 @@ export class PlugChat {
     return this._req('DELETE', `/scheduled/${id}`);
   }
 
+  /** Title and description for a link, from the platform's own fetcher. Resolves with null when there is none. */
+  preview(url) {
+    return this._req('GET', `/preview?url=${encodeURIComponent(url)}`).catch((e) => (e.status === 404 ? null : Promise.reject(e)));
+  }
+
   /** The messages in a conversation that carry a photo or file, newest first. */
   async attachments(conversationId) {
     const conv = await this._conv(conversationId);

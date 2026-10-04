@@ -76,7 +76,7 @@ export function databaseBus(store, { pollMs = 150 } = {}) {
   };
 }
 
-export const HOOK_EVENTS =['message.before', 'conversation.before', 'upload.before', 'call.join'];
+export const HOOK_EVENTS = ['message.before', 'conversation.before', 'upload.before', 'call.join', 'link.preview'];
 
 /**
  * Build `run(event, payload)`. Resolves to the host's answer, or `undefined`

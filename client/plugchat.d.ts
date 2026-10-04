@@ -26,7 +26,7 @@ export interface Me extends User {
   privacy: Privacy;
   /** The reason this account is suspended, or null. */
   suspended: string | null;
-  features: { directory: boolean; stories: boolean; requireEncryption: boolean; calls: 'p2p' | 'external' };
+  features: { directory: boolean; stories: boolean; requireEncryption: boolean; calls: 'p2p' | 'external'; linkPreviews: boolean };
 }
 
 export interface Device {
@@ -245,6 +245,8 @@ export class PlugChat {
   schedule(conversationId: string, content: { text: string; replyTo?: string; mentions?: string[] }, sendAt: Date | number): Promise<ScheduledMessage>;
   scheduled(): Promise<ScheduledMessage[]>;
   cancelScheduled(id: string): Promise<{ cancelled: true }>;
+  /** A link's title and description from the platform's own fetcher, or null. */
+  preview(url: string): Promise<{ url: string; title: string; description?: string; siteName?: string } | null>;
   message(messageId: string): Promise<Message>;
   /** Messages in a conversation that carry a photo or file, newest first. */
   attachments(conversationId: string): Promise<Message[]>;

@@ -1003,6 +1003,36 @@ test('scheduled messages go out on time, as their author, through the host hooks
   }
 });
 
+test('link previews come only from the host hook, are cached, and are off without one', async () => {
+  const alice = await client('alice');
+  assert.equal(alice.me.features.linkPreviews, false);
+  assert.equal(await alice.preview('https://example.com/a'), null, 'no hook, no preview');
+
+  const d = mkdtempSync(join(tmpdir(), 'plugchat-prev-'));
+  let asked = 0;
+  const inst = createPlugChat({
+    secret: SECRET, dataDir: d, log: { error() {} },
+    hooks: { 'link.preview': ({ url: target }) => (asked++, target.includes('known') ? { title: 'Annual meeting', description: 'Friday at 6pm', siteName: 'Alumni', image: 'ignored' } : {}) },
+  });
+  const srv = await inst.listen(0);
+  const user = new PlugChat({ url: `http://localhost:${srv.address().port}/plugchat`, getToken: async () => signToken({ sub: 'p1' }, SECRET) });
+  try {
+    await user.connect();
+    assert.equal(user.me.features.linkPreviews, true);
+    assert.deepEqual(await user.preview('https://site.example/known'), { url: 'https://site.example/known', title: 'Annual meeting', description: 'Friday at 6pm', siteName: 'Alumni' });
+    await user.preview('https://site.example/known');
+    assert.equal(asked, 1, 'the second request was served from the cache');
+    assert.equal(await user.preview('https://site.example/other'), null);
+    await assert.rejects(user.preview('javascript:alert(1)'), { status: 400 });
+  } finally {
+    user.close();
+    srv.close();
+    srv.closeAllConnections();
+    inst.close();
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
 test('platform notices arrive in a read-only inbox', async () => {
   const user = await client('notify-1', 'Nana');
   const arrived = next(user, 'message');

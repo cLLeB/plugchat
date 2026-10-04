@@ -46,6 +46,7 @@ your secret). Verify it, then answer with JSON within 4 seconds (`hookTimeoutMs`
 | `conversation.before` | `type`, `creatorId`, `memberIds`, `encrypted` | `{allow: false, reason}` or nothing |
 | `upload.before` | `userId`, `conversationId`, `name`, `mime`, `size` | `{allow: false, reason}` or nothing |
 | `call.join` | `call: {id, conversationId, startedBy, video}`, `userId`, `user`, `isStarter`, `memberIds` | `{url}` and/or `{data}` (required) |
+| `link.preview` | `url`, `userId` | `{title, description?, siteName?}`, or nothing for no preview |
 
 Notes:
 
@@ -56,6 +57,13 @@ Notes:
 - In end-to-end encrypted conversations `message.body` is ciphertext. You can
   still count, charge for and rate-limit messages, but you cannot read or rewrite them.
 - Admin-token requests skip the `*.before` hooks.
+- **Link previews** exist only if you register `link.preview`. Fetching a URL a
+  user typed is a classic way to reach into a private network, so PlugChat
+  leaves the fetching to you: do it from a service that cannot reach internal
+  addresses, with a size and time limit. Answers are cached for an hour.
+  Previews are never requested for links in end-to-end encrypted conversations,
+  and show text only (no remote images, which would reveal each viewer's IP
+  address to the linked site).
 
 ## Calls through your own vendor
 

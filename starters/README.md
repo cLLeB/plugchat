@@ -52,3 +52,21 @@ Name starters to require them: `node starters/verify.mjs python go`.
 Verified on the development machine so far: **Node.js**. The others are
 written to the same contract and to each language's standard library, and are
 checked by the same script wherever the language is installed.
+
+## Mobile apps
+
+[`mobile/`](mobile) holds a ready component for each platform that shows the
+chat in a WebView and hands it tokens from native code, so a mobile team has
+nothing to work out:
+
+| File | Platform |
+|---|---|
+| [`mobile/react-native/PlugChatScreen.tsx`](mobile/react-native/PlugChatScreen.tsx) | React Native (`react-native-webview`) |
+| [`mobile/flutter/plugchat_screen.dart`](mobile/flutter/plugchat_screen.dart) | Flutter (`webview_flutter`) |
+| [`mobile/android/PlugChatView.kt`](mobile/android/PlugChatView.kt) | Android (Kotlin, `android.webkit.WebView`) |
+| [`mobile/ios/PlugChatView.swift`](mobile/ios/PlugChatView.swift) | iOS (Swift, `WKWebView`) |
+
+Each takes the address of your PlugChat, a function that fetches a token from
+your backend, and a callback for the unread count. They are written to each
+platform's documented WebView API and have **not been run on a device here**:
+there is no mobile toolchain on the development machine.

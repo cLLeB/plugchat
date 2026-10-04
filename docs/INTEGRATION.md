@@ -404,7 +404,9 @@ sites are allowed to frame the chat at all.
 ### Mobile apps
 
 Open `https://chat.your-site.example/plugchat/embed` in a WebView and hand it
-tokens from native code. The page calls out when it needs one and accepts it back:
+tokens from native code. Ready components that do this for React Native,
+Flutter, Android and iOS are in [`starters/mobile`](../starters/mobile). The
+page calls out when it needs a token and accepts it back:
 
 | Platform | Page → app | App → page |
 |---|---|---|

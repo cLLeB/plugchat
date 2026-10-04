@@ -223,6 +223,36 @@ test('encryption: a second device gets the keys; the key is replaced when someon
   assert.equal((await ben.devices()).length, 1);
 });
 
+test('encryption: a forged key for a new device is discarded and replaced by a real one', async () => {
+  const e2ee = await import('../client/e2ee.js');
+  const ann = await client('fk-ann');
+  await client('fk-ben');
+  const group = await ann.createGroup({ title: 'Careful', memberIds: ['fk-ben'], encrypted: true });
+  await ann.send(group.id, { text: 'genuine' });
+
+  // Ben's new phone exists, and someone has planted a key for it that opens nothing.
+  const mem = new Map();
+  const keyStore = { get: async (k) => mem.get(k), set: async (k, v) => void mem.set(k, v) };
+  const identity = await e2ee.loadIdentity(keyStore, `identity:${url}:fk-ben`);
+  chat.store.registerDevice('fk-ben', identity.deviceId, identity.publicKey);
+  chat.store.addMemberKeys(group.id, [{ userId: 'fk-ben', deviceId: identity.deviceId, epoch: 1, by: 'fk-ann', byKey: ann.identity.publicKey, data: e2ee.b64(crypto.getRandomValues(new Uint8Array(60))) }]);
+
+  const phone = new PlugChat({ url, getToken: async () => signToken({ sub: 'fk-ben' }, SECRET), keyStore });
+  clients.push(phone);
+  const repaired = next(phone, 'conversation', (c) => c.id === group.id && c.members.find((m) => m.userId === 'fk-ben').devices.find((d) => d.deviceId === identity.deviceId).keyed);
+  await phone.connect();
+  await phone.conversation(group.id); // tries the planted key, finds it useless, drops it
+  await repaired;
+  assert.equal((await phone.messages(group.id))[0].text, 'genuine');
+
+  // and nobody can label a key as coming from someone else
+  const forged = await api(`/conversations/${group.id}/keys`, {
+    token: signToken({ sub: 'fk-ben' }, SECRET), method: 'POST',
+    json: { keys: [{ userId: 'fk-ann', deviceId: ann.identity.deviceId, epoch: 1, by: 'fk-ann', byKey: 'x', data: 'y' }] },
+  });
+  assert.equal(forged.status, 400);
+});
+
 test('encryption: a passphrase backup restores history on a device with no one else online', async () => {
   const laptop = await client('bk-user');
   const friend = await client('bk-friend');

@@ -388,13 +388,15 @@ export function createPlugChat(options = {}) {
    * a registered device of a conversation member; `mustCover` lists the people
    * who need at least one, so nobody is added to a chat they cannot read.
    */
-  function memberKeys(memberIds, keys, { epoch, maxEpoch, mustCover = [] } = {}) {
+  function memberKeys(memberIds, keys, { epoch, maxEpoch, mustCover = [], by } = {}) {
     if (!Array.isArray(keys) || keys.length > 10_000) throw bad('keys must be an array');
     const members = new Set(memberIds);
     const out = keys.map((k) => {
       const key = { userId: str(k?.userId, 'keys.userId', 128), deviceId: str(k.deviceId, 'keys.deviceId', 64), epoch: epoch ?? k.epoch, ...wrappedKey(k) };
       if (!Number.isInteger(key.epoch) || key.epoch < 1 || (maxEpoch && key.epoch > maxEpoch)) throw bad('keys.epoch is out of range');
       if (!members.has(key.userId) || !store.hasDevice(key.userId, key.deviceId)) throw bad('keys must be for devices of conversation members');
+      // A key is always labelled with who really wrapped it.
+      if (by && key.by !== by) throw bad('keys.by must be you');
       return key;
     });
     for (const id of mustCover) {
@@ -558,7 +560,7 @@ export function createPlugChat(options = {}) {
         memberIds,
         encrypted,
         ttlSeconds: b.ttlSeconds === undefined ? null : ttl(b.ttlSeconds),
-        keys: encrypted ? memberKeys(memberIds, b.keys, { epoch: 1, mustCover: memberIds }) : null,
+        keys: encrypted ? memberKeys(memberIds, b.keys, { epoch: 1, mustCover: memberIds, by: auth.admin ? undefined : auth.sub }) : null,
         announce: b.type === 'group' && b.announce === true,
         description: str(b.description, 'description', 500, { optional: true, allowEmpty: true }),
       });
@@ -667,12 +669,22 @@ export function createPlugChat(options = {}) {
     ['POST', '/v1/conversations/:id/keys', async (ctx) => {
       const { conv, member } = access(ctx, ctx.params.id);
       if (!conv.encrypted || !member) throw bad('not an encrypted conversation you belong to');
-      const keys = memberKeys(store.memberIds(conv.id), (await ctx.json()).keys, { maxEpoch: conv.key_epoch });
+      const keys = memberKeys(store.memberIds(conv.id), (await ctx.json()).keys, { maxEpoch: conv.key_epoch, by: ctx.auth.sub });
       store.addMemberKeys(conv.id, keys);
       for (const uid of new Set(keys.map((k) => k.userId))) {
         if (hub.isOnline(uid)) hub.emit([uid], { type: 'conversation.updated', conversation: store.conversationFor(conv.id, uid) });
       }
       return store.conversationFor(conv.id, ctx.auth.sub);
+    }],
+
+    // A device says "the key I was given does not open": it is removed so that an
+    // honest member can supply a working one. Only ever your own device's entry.
+    ['DELETE', '/v1/conversations/:id/keys/:deviceId/:epoch', (ctx) => {
+      const { conv, member } = access(ctx, ctx.params.id);
+      if (!member) throw forbidden();
+      const dropped = store.dropMemberKey(conv.id, ctx.auth.sub, ctx.params.deviceId, Number(ctx.params.epoch));
+      if (dropped) pushConversation(conv.id);
+      return { dropped };
     }],
 
     // Replace the conversation key. Required after someone leaves, so they
@@ -682,7 +694,7 @@ export function createPlugChat(options = {}) {
       if (!conv.encrypted || !member) throw bad('not an encrypted conversation you belong to');
       const b = await ctx.json();
       const memberIds = store.memberIds(conv.id);
-      const keys = memberKeys(memberIds, b.keys, { epoch: b.epoch, mustCover: [ctx.auth.sub] });
+      const keys = memberKeys(memberIds, b.keys, { epoch: b.epoch, mustCover: [ctx.auth.sub], by: ctx.auth.sub });
       if (!store.rotateKey(conv.id, b.epoch, keys)) throw new HttpError(409, 'stale_epoch', 'someone else already replaced the key; refresh');
       pushConversation(conv.id);
       return store.conversationFor(conv.id, ctx.auth.sub);
@@ -709,7 +721,7 @@ export function createPlugChat(options = {}) {
       const userIds = idList(b.userIds, 'userIds').filter((id) => !current.has(id));
       if (current.size + userIds.length > MAX_MEMBERS) throw bad('group is full');
       requireUsers(userIds);
-      store.addMembers(conv.id, userIds, conv.encrypted ? memberKeys([...current, ...userIds], b.keys, { maxEpoch: conv.key_epoch, mustCover: userIds }) : null);
+      store.addMembers(conv.id, userIds, conv.encrypted ? memberKeys([...current, ...userIds], b.keys, { maxEpoch: conv.key_epoch, mustCover: userIds, by: ctx.auth.admin ? undefined : ctx.auth.sub }) : null);
       pushConversation(conv.id);
       return store.conversationFor(conv.id, ctx.auth.sub);
     }],

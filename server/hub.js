@@ -105,7 +105,8 @@ export class Hub {
     if (++ws.signalCount > 60) return;
     if (typeof conversationId !== 'string' || typeof to !== 'string' || !data || typeof data !== 'object') return;
     if (!this.store.member(conversationId, ws.userId) || !this.store.member(conversationId, to)) return;
-    if (this.store.isBlocked(ws.userId, to)) return;
+    // Suspended people cannot place calls; hanging up one already in progress is still allowed.
+    if (this.store.isBlocked(ws.userId, to) || (data.t !== 'end' && this.store.suspension(ws.userId))) return;
     this.emit([to], { type: 'signal', conversationId, from: ws.userId, data });
   }
 

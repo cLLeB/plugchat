@@ -218,6 +218,9 @@ export class PlugChat {
         try {
           return { epoch, ...(await e2ee.unwrapKey(this.identity, wrapped, conv.id)) };
         } catch {
+          // It does not open (damaged, or forged by someone in the conversation):
+          // discard it so that an honest member's device can supply a working one.
+          this._req('DELETE', `/conversations/${conv.id}/keys/${encodeURIComponent(this.identity.deviceId)}/${epoch}`).catch(() => {});
           return null;
         }
       })();

@@ -366,6 +366,12 @@ export class Store {
     }
   }
 
+  /** A device discards a wrapped key it could not open, so another member can send a good one. */
+  dropMemberKey(conversationId, userId, deviceId, epoch) {
+    return this.run('DELETE FROM member_keys WHERE conversation_id = ? AND user_id = ? AND device_id = ? AND epoch = ?',
+      conversationId, userId, deviceId, epoch).changes > 0;
+  }
+
   /** Move a conversation to a fresh key. Fails (returns false) if someone else rotated first. */
   rotateKey(conversationId, epoch, keys) {
     return this.tx(() => {
@@ -387,6 +393,12 @@ export class Store {
       const files = this.all('SELECT id FROM files WHERE owner_id = ?', id).map((r) => r.id);
       this.run('DELETE FROM files WHERE owner_id = ?', id);
       this.run('DELETE FROM reactions WHERE user_id = ?', id);
+      this.run('DELETE FROM member_keys WHERE user_id = ?', id);
+      this.run('DELETE FROM stars WHERE user_id = ?', id);
+      this.run('DELETE FROM presence WHERE user_id = ?', id);
+      this.run('DELETE FROM invites WHERE created_by = ?', id);
+      // Groups they were in must move to a key they never held.
+      this.run('UPDATE conversations SET rotate_pending = 1 WHERE encrypted = 1 AND id IN (SELECT conversation_id FROM members WHERE user_id = ?)', id);
       this.run('DELETE FROM votes WHERE user_id = ?', id);
       this.run('DELETE FROM opens WHERE user_id = ?', id);
       this.run('DELETE FROM story_views WHERE user_id = ?', id);

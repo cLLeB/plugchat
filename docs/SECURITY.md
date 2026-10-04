@@ -85,9 +85,11 @@ What it does **not** protect against yet:
 - **A malicious server adding a device.** The list of each member's devices
   comes from the server, and members' devices hand conversation keys to any
   device on that list. A compromised server could therefore register a device
-  of its own for a member and be given the keys. The safety code covers every
-  device key, so the change is detectable, but only if members compare codes;
-  that check is manual and optional. This is the main reason not to describe
+  of its own for a member and be given the keys. Two things make that visible
+  rather than silent: the chat shows a warning in the conversation whenever a
+  member has a device it has not seen before, and the safety code covers every
+  device key. Both are detection, not prevention: the keys have already been
+  handed over by the time the warning shows, and comparing codes is manual. This is the main reason not to describe
   the encryption as protecting against the platform operator unconditionally.
 - **No forward secrecy within an epoch.** Keys are kept so history stays
   readable. Someone who obtains an epoch key and the stored ciphertext can read

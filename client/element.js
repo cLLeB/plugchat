@@ -179,6 +179,9 @@ audio, video.media { display: block; max-width: 260px; margin-bottom: 4px; borde
 .emojis { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; max-height: 210px; overflow-y: auto; width: min(300px, 80vw); }
 .emojis .emoji { font-size: 20px; width: 34px; height: 34px; border-radius: 8px; }
 .emojis .emoji:hover { background: var(--pc-surface); }
+.notice { display: flex; gap: 8px; align-items: center; padding: 8px 14px; font-size: 13px; background: color-mix(in srgb, #f08c00 18%, var(--pc-bg)); border-bottom: 1px solid var(--pc-border); }
+.notice span:nth-child(2) { flex: 1; }
+.notice svg { width: 16px; height: 16px; }
 .newline { display: flex; align-items: center; gap: 10px; color: var(--pc-accent); font-size: 12px; font-weight: 600; margin: 8px 0; }
 .newline::before, .newline::after { content: ""; flex: 1; height: 1px; background: var(--pc-accent); opacity: .5; }
 .bubble.pending { opacity: .65; }
@@ -518,7 +521,7 @@ class PlugChatElement extends HTMLElement {
       }
       this._renderList();
       this._announceUnread();
-      if (c.id === this.activeId) (this._renderHeader(), this._renderComposerState());
+      if (c.id === this.activeId) (this._renderHeader(), this._renderComposerState(), this._renderDeviceNotice());
     });
     chat.on('conversation.removed', (e) => {
       this.convs.delete(e.conversationId);
@@ -694,6 +697,43 @@ class PlugChatElement extends HTMLElement {
     }
   }
 
+  /**
+   * Encrypted chats: notice when a member has a device this one has not seen
+   * before. New devices are how keys spread, so an unexpected one deserves a
+   * look at the safety code. The first sighting of a conversation is trusted.
+   */
+  _renderDeviceNotice() {
+    const conv = this.convs.get(this.activeId);
+    if (!this.$notice) return;
+    this.$notice.hidden = true;
+    if (!conv?.encrypted) return;
+    const slot = `plugchat:devices:${this.chat.me.id}:${conv.id}`;
+    const now = Object.fromEntries(conv.members.map((m) => [m.userId, (m.devices ?? []).map((d) => d.publicKey).sort()]));
+    const remember = () => {
+      try {
+        localStorage.setItem(slot, JSON.stringify(now));
+      } catch {
+        // without storage every visit is a first sighting
+      }
+    };
+    let before = null;
+    try {
+      before = JSON.parse(localStorage.getItem(slot));
+    } catch {
+      // unreadable: treat as a first sighting
+    }
+    const changed = before
+      ? conv.members.filter((m) => m.userId !== this.chat.me.id && before[m.userId] && now[m.userId].some((k) => !before[m.userId].includes(k)))
+      : [];
+    if (!changed.length) return remember();
+    this.$notice.hidden = false;
+    fill(this.$notice,
+      h('span', { icon: 'lock' }),
+      h('span', {}, T('{names} added a new device. If that is unexpected, compare the safety code before sharing anything sensitive.', { names: changed.map((m) => m.name).join(', ') })),
+      h('button', { class: 'linkbtn', onclick: () => this._detailsDialog(conv) }, T('Safety code')),
+      h('button', { class: 'linkbtn', onclick: () => (remember(), (this.$notice.hidden = true)) }, T('OK')));
+  }
+
   // Unsent text is kept per conversation, across reloads, on this device only.
   _draftKey(id) {
     return `plugchat:draft:${this.chat.me.id}:${id}`;
@@ -730,6 +770,7 @@ class PlugChatElement extends HTMLElement {
 
     this.$header = h('div', { class: 'bar' });
     this.$pins = h('button', { class: 'pinbar', hidden: true });
+    this.$notice = h('div', { class: 'notice', hidden: true, role: 'status' });
     this.$msgs = h('div', { class: 'msgs', role: 'log', 'aria-live': 'polite' });
     this.$typing = h('div', { class: 'typing' });
     this.$error = h('div', { class: 'error', hidden: true, role: 'alert' });
@@ -777,12 +818,13 @@ class PlugChatElement extends HTMLElement {
       this.$input, this.$mic, this.$send,
     );
     this.$readonly = h('div', { class: 'hint', hidden: true }, T('Only admins can post in this channel.'));
-    fill(this.$main, this.$header, this.$pins, this.$msgs, this.$typing, this.$error, this.$banner, this.$composer, this.$readonly);
+    fill(this.$main, this.$header, this.$pins, this.$notice, this.$msgs, this.$typing, this.$error, this.$banner, this.$composer, this.$readonly);
     this._renderHeader();
     this._renderComposerState();
     this.chat.pins(id).then((p) => this.activeId === id && ((this.pins = p), this._renderPins()), () => {});
     this.$input.value = this._draft(id);
     this._onInput(true);
+    this._renderDeviceNotice();
 
     // Dropping a file anywhere on the conversation attaches it.
     this.$main.ondragover = (e) => e.dataTransfer?.types.includes('Files') && (e.preventDefault(), this.$main.classList.add('drop'));

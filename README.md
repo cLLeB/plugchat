@@ -78,6 +78,12 @@ menu actions (payments, orders, bookings).
 **Identity** — people are found by whatever your platform uses: user id, email,
 phone number, username, or custom kinds such as a membership number.
 
+**Personal** — starred messages, read-receipt and online-status privacy
+switches, a list of your devices, download of your own data.
+
+**History** — jump to any message from search, pins, stars or a reply, however
+far back it is.
+
 **Groups that grow themselves** — invite codes your site can turn into its own
 join links.
 
@@ -97,10 +103,11 @@ email through your own providers; DOM events (`plugchat:unread`,
   your backend; the algorithm is pinned to HS256 and tokens must expire.
 - Every read and write is checked against conversation membership. A
   conversation you are not in is indistinguishable from one that does not exist.
-- **End-to-end encryption** per conversation: keys are generated in the
-  browser, private keys are non-extractable, and the server stores only
-  ciphertext for messages and attachments. It refuses plaintext sent to an
-  encrypted conversation.
+- **End-to-end encryption** per conversation: keys are generated on each
+  device, private keys are non-extractable, and the server stores only
+  ciphertext for messages and attachments. It works across a person's devices,
+  and the key is replaced when someone leaves. The server refuses plaintext
+  sent to an encrypted conversation.
 - Uploads are never served as a renderable type, so a malicious file cannot run
   as a page on your domain.
 - Per-user write rate limiting, body size caps, origin allow-list for browsers.
@@ -123,20 +130,21 @@ what the encryption does **not** yet protect against.
 
 Stated plainly so you can plan around them:
 
-- **One process.** Realtime fan-out is in memory, so run a single PlugChat
-  instance. Running several behind a load balancer needs a shared pub/sub layer
-  that is not built yet.
-- **SQLite storage.** Data lives in one file on your server. All SQL is in
-  `server/store.js` so another database can be added, but only SQLite exists today.
-- **Encryption is per device.** A person who opens chat on a second device gets
-  a new key and cannot read earlier encrypted conversations there. There is no
-  forward secrecy or key rotation when a member leaves. See the security doc.
+- **SQLite storage only.** Data lives in one file on your server. Several
+  PlugChat instances can share it (`cluster: true`) when they can all reach the
+  same file, which in practice means the same machine or a volume that supports
+  SQLite locking. There is no Postgres or MySQL backend: all SQL is in
+  `server/store.js`, but it is written against a synchronous API and has not
+  been ported.
+- **Encryption trusts the server's device list** unless members compare safety
+  codes, and has no forward secrecy within a key epoch. See the security doc.
 - **Built-in calls are one-to-one**, and need a TURN server of yours to connect
   across strict networks. Group calls need your own call vendor (see connectors).
 - **No native mobile SDKs.** Mobile apps open the embed page in a WebView or
   call the REST/WebSocket API.
 - **Push notifications are yours to send**, driven by the webhook.
-- **The interface is English only** for now.
+- **The interface ships in English, French and Spanish.** Other languages are
+  added by the host through `strings`. Right-to-left layouts are not handled.
 - **Not yet exercised here:** the Dockerfile, the token snippets for languages
   other than Node, the native WebView bridges, and calls between two real
   devices on different networks (the call flow is tested in one browser with

@@ -14,11 +14,16 @@ call signalling). That keeps a native or server-side integration to plain HTTP.
 | | |
 |---|---|
 | `GET /v1/me` | The caller, with their handles and the server's enabled features |
-| `PUT /v1/me/key` `{publicKey}` | Publish this device's encryption key |
+| `PUT /v1/me/key` `{deviceId, publicKey}` | Register this device's encryption key |
+| `GET /v1/me/devices`, `DELETE /v1/me/devices/:deviceId` | The caller's devices; remove a lost one |
+| `PUT /v1/me/settings` `{readReceipts?, presence?}` | Privacy switches |
 | `GET /v1/users?q=` | Search by name (substring) or handle (exact). Needs the directory on |
 | `GET /v1/users/lookup?handle=&kind=` | Exact lookup by email, phone, username or custom kind |
 | `GET /v1/users/:id` | Profile and online state |
-| `GET /v1/users/:id/key` | Public encryption key |
+| `GET /v1/users/:id/devices` | That person's device keys, to set up encryption with them |
+| `PUT /v1/users/:id/suspension` `{suspended, reason?}` | **Admin.** Suspend or reinstate. Suspended people can read but not write |
+| `GET /v1/users/:id/unread` | **Admin.** `{total, conversations}` for your own email or push digests |
+| `GET /v1/stats` | **Admin.** Counts of users, conversations, messages, files and bytes stored |
 | `PUT /v1/users/:id` `{name, avatar, handles}` | **Admin.** Create or update a user ahead of their first visit |
 | `DELETE /v1/users/:id` | **Admin.** Erase the user and everything they sent |
 | `GET /v1/me/export` | Everything held about the caller: profile, memberships, sent messages, reactions, stories, files |
@@ -35,7 +40,9 @@ call signalling). That keeps a native or server-side integration to plain HTTP.
 | `PATCH /v1/conversations/:id` `{title?, description?, announce?, ttlSeconds?}` | Group admins; either member of a dm may set `ttlSeconds` |
 | `PUT /v1/conversations/:id/settings` `{muted?, archived?, pinned?}` | Private to the caller |
 | `POST /v1/conversations/:id/members` `{userIds, keys?}` | Add members (group admins) |
-| `PATCH /v1/conversations/:id/members/:userId` `{role}` | `admin` or `member` (owner only) |
+| `PATCH /v1/conversations/:id/members/:userId` `{role}` | `admin`, `member`, or `owner` to hand the group over (owner only) |
+| `POST /v1/conversations/:id/keys` `{keys}` | Encrypted: give wrapped keys to member devices that have none. Never overwrites |
+| `POST /v1/conversations/:id/rotate` `{epoch, keys}` | Encrypted: start the next key epoch. Required after a member leaves |
 | `DELETE /v1/conversations/:id/members/:userId` | Remove a member, or leave by naming yourself |
 | `POST /v1/conversations/:id/read` `{seq}` | Mark read up to a message's `seq` |
 | `GET /v1/conversations/:id/pins` | Pinned messages |
@@ -51,7 +58,9 @@ complete list, `createdBy` optional).
 
 | | |
 |---|---|
-| `GET /v1/conversations/:id/messages?before=<seq>&limit=` | A page, oldest first. Default 50, max 200 |
+| `GET /v1/conversations/:id/messages?limit=` | A page, oldest first (default 50, max 200). No range: the latest. `before=<seq>` / `after=<seq>` page backwards and forwards; `around=<seq>` returns the messages either side of one |
+| `GET /v1/messages/:id` | One message |
+| `PUT` / `DELETE /v1/messages/:id/star`, `GET /v1/starred` | Private bookmarks |
 | `POST /v1/conversations/:id/messages` | Send (see below) |
 | `PATCH /v1/messages/:id` `{body}` | Edit your own text message |
 | `DELETE /v1/messages/:id` | Delete (author, group admin, or admin token) |
@@ -84,8 +93,10 @@ Sending:
 - `kind: "custom"` — `body` is `{"type": "...", "data": {...}, "text": "fallback"}` as a JSON string.
 - `kind: "system"` — admin tokens only; shown as a centred notice. Admin tokens
   may also set `senderId`.
-- In encrypted conversations `body` must be ciphertext (`e1.` prefix); the
-  server cannot check its contents.
+- In encrypted conversations `body` must be ciphertext, `e1.<key epoch>.<base64>`.
+  The server cannot read it, but refuses anything not on the current epoch
+  (`409 stale_epoch`) and everything while a key replacement is due
+  (`409 rotation_required`).
 
 A message:
 
@@ -153,6 +164,7 @@ Server to client:
 | `message.deleted` | `conversationId`, `messageId`, `expired?` |
 | `reaction` | `conversationId`, `messageId`, `reactions` |
 | `read` | `conversationId`, `userId`, `seq` |
+| `star` | `conversationId`, `messageId`, `starred` (sent only to the person's own devices) |
 | `typing` | `conversationId`, `userId` |
 | `presence` | `userId`, `online`, `lastSeen?` |
 | `conversation.new`, `conversation.updated` | `conversation` (as seen by the recipient) |

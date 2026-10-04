@@ -12,17 +12,34 @@
     "plugchat": "bin/plugchat.js"
   },
   "exports": {
-    ".": "./server/index.js",
-    "./client": "./client/plugchat.js",
-    "./element": "./client/element.js"
+    ".": {
+      "types": "./server/index.d.ts",
+      "default": "./server/index.js"
+    },
+    "./client": {
+      "types": "./client/plugchat.d.ts",
+      "default": "./client/plugchat.js"
+    },
+    "./element": {
+      "types": "./client/element.d.ts",
+      "default": "./client/element.js"
+    },
+    "./launcher": {
+      "types": "./client/element.d.ts",
+      "default": "./client/launcher.js"
+    }
   },
   "scripts": {
     "start": "node bin/plugchat.js start",
     "demo": "node examples/host-app/server.js",
-    "test": "node --test --test-timeout=20000 --test-force-exit"
+    "test": "node --test --test-timeout=20000 --test-force-exit",
+    "check:types": "tsc -p ."
   },
   "dependencies": {
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2"
   }
 }
-

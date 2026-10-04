@@ -6,7 +6,6 @@
 //   - parent page:   postMessage({ type: 'plugchat:token', token }) in reply to 'plugchat:token-request'
 //   - native app:    window.plugchatSetToken(token) via its WebView's JS injection
 //   - one-off:       #token=... in the URL fragment (never sent to the server)
-import './element.js';
 
 const el = document.querySelector('plug-chat');
 const query = new URLSearchParams(location.search);
@@ -79,3 +78,6 @@ el.addEventListener('plugchat:call-join', (e) => {
 });
 
 el.setAttribute('server', new URL('..', import.meta.url).pathname.replace(/\/$/, ''));
+
+// Loaded last, so the element starts with its language and options already in place.
+await import('./element.js');

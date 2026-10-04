@@ -38,6 +38,8 @@ const ICON = {
   edit: svg('<path d="M4 20h4L19 9l-4-4L4 16v4z"/>'),
   trash: svg('<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>'),
   smile: svg('<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 007 0M9 9.5v.5M15 9.5v.5"/>'),
+  star: svg('<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z"/>'),
+  gear: svg('<circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>'),
   timer: svg('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/>'),
   close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
   pin: svg('<path d="M9 4h6l-1 6 3 3H7l3-3-1-6zM12 13v7"/>'),
@@ -144,6 +146,8 @@ input[type="text"], input[type="search"], select { font: inherit; color: inherit
 .sender { font-size: 12px; font-weight: 600; color: var(--pc-accent); margin-bottom: 2px; }
 .tag { font-size: 11px; opacity: .75; display: flex; align-items: center; gap: 4px; margin-bottom: 2px; font-style: italic; }
 .tag svg { width: 12px; height: 12px; }
+.linkbtn { color: var(--pc-accent); font-size: 12px; padding: 2px 4px; flex: none; }
+button.quote { display: block; text-align: left; color: inherit; }
 .quote { font-size: 12px; opacity: .8; border-left: 3px solid currentColor; padding: 1px 8px; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
 .meta { font-size: 11px; opacity: .7; margin-left: 8px; float: right; margin-top: 4px; display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
 .meta svg { width: 11px; height: 11px; }
@@ -405,6 +409,7 @@ class PlugChatElement extends HTMLElement {
       h('aside', { class: 'side' },
         h('div', { class: 'bar' },
           (this.$heading = h('h2', {}, this.getAttribute('heading') ?? T('Chats'))),
+          h('button', { class: 'icon', icon: 'gear', title: T('Settings'), 'aria-label': T('Settings'), onclick: () => this._settingsDialog() }),
           h('button', { class: 'icon', icon: 'plus', title: T('New chat'), 'aria-label': T('New chat'), onclick: () => this._newChatDialog() }),
         ),
         h('div', { class: 'find' }, h('input', { type: 'search', placeholder: T('Search chats and messages'), 'aria-label': T('Search chats and messages'),
@@ -426,7 +431,8 @@ class PlugChatElement extends HTMLElement {
   _subscribe(chat) {
     chat.on('message', (m) => {
       const state = this.msgs.get(m.conversationId);
-      if (state && !state.list.some((x) => x.id === m.id)) state.list.push(m);
+      // While looking at an older stretch of history, new messages wait until the person jumps back to the latest.
+      if (state && !state.moreAfter && !state.list.some((x) => x.id === m.id)) state.list.push(m);
       this._renderList();
       if (m.conversationId === this.activeId) {
         this._clearTyping(m.conversationId, m.senderId);
@@ -444,7 +450,7 @@ class PlugChatElement extends HTMLElement {
         this.pins.sort((a, b) => b.pinned.at - a.pinned.at);
         this._renderPins();
       }
-      this._patch(m.conversationId, m.id, () => m);
+      this._patch(m.conversationId, m.id, (old) => ({ ...m, starred: old.starred }));
     });
     chat.on('message.deleted', (e) => {
       const state = this.msgs.get(e.conversationId);
@@ -456,6 +462,7 @@ class PlugChatElement extends HTMLElement {
       this._renderList();
       if (e.conversationId === this.activeId) (this._renderPins(), this._renderMessages());
     });
+    chat.on('star', (e) => this._patch(e.conversationId, e.messageId, (m) => ({ ...m, starred: e.starred })));
     chat.on('reaction', (e) => this._patch(e.conversationId, e.messageId, (m) => ({ ...m, reactions: e.reactions })));
     chat.on('read', (e) => {
       if (e.userId === chat.me.id) (this._renderList(), this._announceUnread());
@@ -703,7 +710,7 @@ class PlugChatElement extends HTMLElement {
       fill(this.$msgs, h('div', { class: 'hint' }, T('Loading…')));
       try {
         const list = await this.chat.messages(id);
-        this.msgs.set(id, { list, more: list.length === 50 });
+        this.msgs.set(id, { list, more: list.length === 50, moreAfter: false });
       } catch (e) {
         if (this.activeId === id) fill(this.$msgs, h('div', { class: 'hint' }, T('Could not load messages: {reason}', { reason: e.message })));
         return;
@@ -757,14 +764,39 @@ class PlugChatElement extends HTMLElement {
     this.$pins.onclick = () => this._jumpTo(top.id);
   }
 
-  _jumpTo(messageId) {
-    const row = this.$msgs?.querySelector(`[data-id="${CSS.escape(messageId)}"]`);
-    if (!row) return this._error(T('That message is further back. Load earlier messages to see it.'));
+  /** Scroll to a message, loading the stretch of history around it if it is not on screen. */
+  async _jumpTo(messageId) {
+    const find = () => this.$msgs?.querySelector(`[data-id="${CSS.escape(messageId)}"]`);
+    let row = find();
+    if (!row) {
+      const id = this.activeId;
+      try {
+        const target = await this.chat.message(messageId);
+        if (target.conversationId !== id) return;
+        const list = await this.chat.messages(id, { around: target.seq });
+        if (this.activeId !== id) return;
+        this.msgs.set(id, { list, more: (list[0]?.seq ?? 1) > 1, moreAfter: (list.at(-1)?.seq ?? 0) < this.convs.get(id).lastSeq });
+        this._renderMessages();
+        row = find();
+      } catch (e) {
+        return this._error(e.message);
+      }
+    }
+    if (!row) return;
     row.scrollIntoView({ block: 'center' });
     row.classList.add('flash');
     setTimeout(() => row.classList.remove('flash'), 1600);
   }
 
+  async _loadNewer() {
+    const id = this.activeId;
+    const state = this.msgs.get(id);
+    if (!state?.list.length) return;
+    const newer = await this.chat.messages(id, { after: state.list.at(-1).seq });
+    state.list = [...state.list, ...newer];
+    state.moreAfter = newer.length === 50;
+    if (this.activeId === id) this._renderMessages();
+  }
   _renderTyping() {
     const conv = this.convs.get(this.activeId);
     if (!conv || !this.$typing) return;
@@ -790,7 +822,7 @@ class PlugChatElement extends HTMLElement {
     const othersRead = Math.min(...conv.members.filter((m) => m.userId !== me).map((m) => m.lastReadSeq), Infinity);
 
     const nodes = [];
-    if (state.more) nodes.push(h('button', { class: 'more', onclick: () => this._loadOlder() }, T('Load earlier messages')));
+    if (state.more) nodes.push(h('button', { class: 'more', onclick: () => this._guard(this._loadOlder()) }, T('Load earlier messages')));
     if (!state.list.length) nodes.push(h('div', { class: 'hint' }, conv.encrypted ? T('Messages here are end-to-end encrypted. Say hello.') : T('No messages yet. Say hello.')));
 
     let prev = null;
@@ -815,9 +847,10 @@ class PlugChatElement extends HTMLElement {
         bubble = h('div', { class: `bubble${m.mentions?.includes(me) ? ' mention' : ''}` },
           showAvatars && isFirst && h('div', { class: 'sender' }, name),
           m.forwarded && h('div', { class: 'tag' }, h('span', { icon: 'forward' }), T('Forwarded')),
-          m.replyTo && h('div', { class: 'quote' }, parent ? `${this._memberName(conv, parent.senderId)}: ${this._snippet(parent)}` : T('Earlier message')),
+          m.replyTo && h('button', { class: 'quote', onclick: () => this._jumpTo(m.replyTo) }, parent ? `${this._memberName(conv, parent.senderId)}: ${this._snippet(parent)}` : T('Earlier message')),
           this._content(m, conv, mine),
           h('span', { class: 'meta' },
+            m.starred && h('span', { icon: 'star', title: T('Starred') }),
             m.pinned && h('span', { icon: 'pin', title: T('Pinned') }),
             m.expiresAt && h('span', { icon: 'timer', title: T('Disappearing message') }),
             m.editedAt && T('edited ·'),
@@ -850,6 +883,10 @@ class PlugChatElement extends HTMLElement {
       prev = m;
     }
 
+    if (state.moreAfter) {
+      nodes.push(h('button', { class: 'more', onclick: () => this._guard(this._loadNewer()) }, T('Load newer messages')));
+      nodes.push(h('button', { class: 'more', onclick: () => (this.msgs.delete(this.activeId), this._select(this.activeId)) }, T('Jump to latest')));
+    }
     const keep = box.scrollHeight - box.scrollTop;
     fill(box, ...nodes);
     if (stick) {
@@ -939,6 +976,7 @@ class PlugChatElement extends HTMLElement {
       canPin && act('pin', m.pinned ? T('Unpin') : T('Pin'), () => this._guard(m.pinned ? this.chat.unpin(m.id) : this.chat.pin(m.id)), m.pinned ? 'on' : ''),
       mine && plain && act('edit', T('Edit'), () => this._setDraftMode({ editing: m })),
       !mine && act('flag', T('Report'), () => this._reportDialog(m)),
+      act('star', m.starred ? T('Unstar') : T('Star'), () => this._guard(m.starred ? this.chat.unstar(m.id) : this.chat.star(m.id)), m.starred ? 'on' : ''),
       canDelete && act('trash', T('Delete'), () => this._guard(this.chat.remove(m.id)), 'danger'),
     );
   }
@@ -1269,6 +1307,8 @@ class PlugChatElement extends HTMLElement {
       }
     } }, T('Create invite code')));
     const $name = h('input', { type: 'text', value: conv.title ?? '', maxlength: '120', 'aria-label': T('Group name') });
+    const isOwner = isGroup && this._role(conv) === 'owner';
+    const $desc = h('input', { type: 'text', value: conv.description ?? '', maxlength: '500', placeholder: T('Description'), 'aria-label': T('Description') });
     const adder = isGroup && canManage && this._peoplePicker({
       exclude: new Set(conv.members.map((m) => m.userId)),
       render: (u) => h('button', { class: 'person', type: 'button', onclick: () => run(this.chat.addMembers(conv.id, [u.id]), true) },
@@ -1278,9 +1318,13 @@ class PlugChatElement extends HTMLElement {
     this._openDialog(h('div', { class: 'panel' },
       this._dialogTitle(this._title(conv)),
       isGroup && canManage && h('div', { class: 'inline' }, $name, h('button', { class: 'btn plain', onclick: () => $name.value.trim() && run(this.chat.update(conv.id, { title: $name.value.trim() }), true) }, T('Rename'))),
+      isGroup && canManage && h('div', { class: 'inline' }, $desc, h('button', { class: 'btn plain', onclick: () => run(this.chat.update(conv.id, { description: $desc.value.trim() }), true) }, T('Save'))),
+      isGroup && !canManage && conv.description && h('div', { class: 'field' }, conv.description),
       h('div', { class: 'people' }, conv.members.map((m) =>
         h('div', { class: 'person' }, this._avatar(m.name, m.avatar, { small: true, online: this.chat.online.has(m.userId) }),
           h('span', {}, m.userId === me ? T('{name} (you)', { name: m.name }) : m.name), m.role !== 'member' && h('small', {}, T(m.role)),
+          isOwner && m.userId !== me && h('button', { class: 'linkbtn', onclick: () => run(this.chat.setRole(conv.id, m.userId, m.role === 'admin' ? 'member' : 'admin'), true) }, m.role === 'admin' ? T('Remove admin') : T('Make admin')),
+          isOwner && m.userId !== me && h('button', { class: 'linkbtn', onclick: () => run(this.chat.setRole(conv.id, m.userId, 'owner'), true) }, T('Make owner')),
           isGroup && canManage && m.userId !== me && m.role !== 'owner'
             && h('button', { class: 'icon', icon: 'close', title: T('Remove {name}', { name: m.name }), 'aria-label': T('Remove {name}', { name: m.name }), onclick: () => run(this.chat.removeMember(conv.id, m.userId), true) })))),
       adder && h('div', { class: 'field' }, T('Add people'), adder.$search, adder.$people),
@@ -1414,6 +1458,57 @@ class PlugChatElement extends HTMLElement {
       if (m) return m.name;
     }
     return T('Someone');
+  }
+
+  // ---- personal settings ----
+
+  async _settingsDialog() {
+    if (!this.chat?.me) return;
+    const $err = h('div', { class: 'error', hidden: true, role: 'alert' });
+    const run = (p) => p.catch((e) => {
+      $err.textContent = e.message;
+      $err.hidden = false;
+    });
+    const toggle = (label, checked, onchange, hint) => {
+      const box = h('input', { type: 'checkbox', checked, onchange: () => run(onchange(box.checked)) });
+      return h('label', { class: 'check' }, box, h('span', {}, label, hint && h('small', {}, hint)));
+    };
+    const privacy = this.chat.me.privacy ?? { readReceipts: true, presence: true };
+    const mine = this.chat.identity?.deviceId;
+    const devices = mine ? await this.chat.devices().catch(() => []) : [];
+    const download = async () => {
+      const blob = new Blob([JSON.stringify(await this.chat.exportMyData(), null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      h('a', { href: url, download: 'my-chat-data.json' }).click();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    };
+    this._openDialog(h('div', { class: 'panel' },
+      this._dialogTitle(T('Settings')),
+      toggle(T('Send read receipts'), privacy.readReceipts, (v) => this.chat.setPrivacy({ readReceipts: v }), T('Others see when you have read their messages.')),
+      toggle(T('Show when I am online'), privacy.presence, (v) => this.chat.setPrivacy({ presence: v })),
+      h('button', { class: 'btn plain', onclick: () => this._starredDialog() }, T('Starred messages')),
+      devices.length > 0 && h('div', { class: 'field' }, T('Devices that can read your encrypted chats.'),
+        h('div', { class: 'people' }, devices.map((d) => h('div', { class: 'person' },
+          h('span', {}, d.deviceId === mine ? T('This device') : new Date(d.lastSeen).toLocaleDateString(LOCALE, { dateStyle: 'medium' })),
+          d.deviceId !== mine && h('button', { class: 'linkbtn', onclick: (e) => run(this.chat.removeDevice(d.deviceId).then(() => e.target.closest('.person').remove())) }, T('Remove')))))),
+      h('button', { class: 'btn plain', onclick: () => run(download()) }, T('Download my data')),
+      $err,
+    ));
+  }
+
+  async _starredDialog() {
+    const list = await this.chat.starred().catch(() => []);
+    this._openDialog(h('div', { class: 'panel' },
+      this._dialogTitle(T('Starred messages')),
+      list.length === 0 && h('div', { class: 'hint' }, T('No starred messages yet.')),
+      h('div', { class: 'people' }, list.map((m) => {
+        const conv = this.convs.get(m.conversationId);
+        if (!conv) return null;
+        return h('button', { class: 'person', onclick: () => (this.$dialog.close(), this._select(conv.id, m.id)) },
+          this._avatar(this._title(conv), null, { small: true }),
+          h('span', {}, `${first(this._memberName(conv, m.senderId))}: ${this._snippet(m)}`), h('small', {}, shortWhen(m.createdAt)));
+      })),
+    ));
   }
 
   // ---- calls ----

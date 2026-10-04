@@ -50,6 +50,29 @@ location /plugchat/ {
 }
 ```
 
+### Acting from your own Node code
+
+When PlugChat runs inside your server you can skip HTTP for back-office work:
+
+```js
+await chat.admin.upsertUser(user.id, { name: user.name, handles: { email: user.email } });
+const group = await chat.admin.createGroup({ title: `Order #${order.id}`, memberIds: [buyer.id, seller.id] });
+await chat.admin.post(group.id, 'Your order has shipped');
+const { total } = await chat.admin.unread(user.id); // for an email digest
+await chat.admin.suspend(user.id, 'Suspended for spam');
+```
+
+`chat.api(method, path, body)` reaches every other JSON endpoint the same way.
+From other languages, call the same endpoints over HTTP with an admin token.
+
+### More than one instance
+
+Start each instance with `cluster: true` (or `PLUGCHAT_CLUSTER=on`) pointing at
+the same data directory. A message sent through one reaches people connected
+to another, and presence is shared. Events travel through the shared database,
+polled a few times a second, so no extra infrastructure is needed; pass your
+own `bus` to use Redis or similar instead. Rate limits are counted per instance.
+
 ### Settings
 
 | Option (Node) | Environment variable | Default | Meaning |
@@ -68,6 +91,9 @@ location /plugchat/ {
 | `rateLimit` | — | 5 writes/s, burst 30 | Per-user write limit |
 | `maxTokenLifetimeSeconds` | `PLUGCHAT_MAX_TOKEN_SECONDS` | 86400 | Tokens valid for longer than this are refused |
 | `previousSecrets` | `PLUGCHAT_PREVIOUS_SECRETS` | none | Outgoing secrets still accepted while you rotate |
+| `userStorageBytes` | `PLUGCHAT_USER_STORAGE_MB` | unlimited | Upload allowance per person |
+| `cluster` | `PLUGCHAT_CLUSTER=on` | off | Let several instances that share one data directory act as one |
+| `bus` | — | — | Your own pub/sub (Redis, NATS…) in place of the built-in one for `cluster` |
 | `storage` | — | local disk | Where uploads are kept (see [CONNECTORS.md](CONNECTORS.md)) |
 | `hooks`, `hookUrl`, `hookEvents`, `hookFailOpen` | `PLUGCHAT_HOOK_URL`, `PLUGCHAT_HOOK_EVENTS`, `PLUGCHAT_HOOK_FAIL_OPEN=on` | none | Your billing, moderation and call-vendor hooks |
 
@@ -217,6 +243,7 @@ session your site already has. Give the element a height with CSS.
 | `invite` | Join a group by invite code on load, e.g. from your own `/join/CODE` links |
 | `heading` | Sidebar title |
 | `theme` | `light` or `dark`; follows the system by default |
+| `lang` | Interface language: `en`, `fr` or `es`. Defaults to the page's `<html lang>` |
 | `e2ee`, `calls`, `stories` | Set to `off` to hide that feature |
 
 Theme it with CSS variables: `--pc-accent`, `--pc-accent-fg`, `--pc-bg`,
@@ -227,7 +254,15 @@ Events on the element: `plugchat:ready`, `plugchat:unread` (`detail.count`),
 (cancelable, see [CONNECTORS.md](CONNECTORS.md)) and `plugchat:invite` (set
 `detail.text` to the shareable link your site wants shown for `detail.code`).
 
-Properties: `getToken`, `renderers` and `actions` (see connectors).
+Properties: `getToken`, `renderers` and `actions` (see connectors), and
+`strings` to translate or reword the interface. Keys are the English text:
+
+```js
+chatEl.strings = { 'Send': 'Tuma', 'New chat': 'Mazungumzo mapya' };
+```
+
+TypeScript definitions ship with the package for the server, the headless
+client and both elements.
 
 ### React, Vue, Angular, Svelte
 

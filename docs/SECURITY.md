@@ -50,12 +50,21 @@ other users unless `handleVisibility: 'all'`.
 
 What is implemented:
 
-- Each device generates an ECDH P-256 key pair with WebCrypto. The private key
-  is non-extractable and stored in IndexedDB; script on the page can use it but
-  cannot read it out.
-- Each encrypted conversation has one random AES-256-GCM key. It is wrapped
-  separately for every member using a key derived from ECDH between the wrapper
-  and that member, through HKDF-SHA-256 salted with the conversation id.
+- Each device (browser or phone) generates its own ECDH P-256 key pair with
+  WebCrypto. The private key is non-extractable and stored in IndexedDB; script
+  on the page can use it but cannot read it out.
+- Each encrypted conversation has a random AES-256-GCM key per *epoch*. It is
+  wrapped separately for every device of every member, using a key derived from
+  ECDH between the wrapping device and the receiving one, through HKDF-SHA-256
+  salted with the conversation id.
+- **Several devices.** When someone signs in on a new device, any online device
+  that holds the conversation keys (their own or another member's) wraps them
+  for the new device, which can then read the history. A person can list and
+  remove their devices.
+- **Key replacement when someone leaves.** Removing a member (or a member
+  leaving) deletes their wrapped keys and marks the conversation; the server
+  then refuses every message until a member starts a new epoch with a fresh key
+  that the person who left is never given. Any member can also rotate at will.
 - Message bodies, poll questions and options, shared locations, attachment
   bytes and attachment names/types are encrypted with the conversation key. The
   conversation id is bound in as associated data.
@@ -69,25 +78,38 @@ positions, and mention targets.
 
 What it does **not** protect against yet:
 
-- **A malicious server substituting keys.** Public keys are distributed by the
-  server. Unless members compare safety codes, a compromised server could hand
-  out its own key for a member. This is the same trust-on-first-use limit most
-  messengers have, but here verification is manual and optional.
-- **No forward secrecy.** The conversation key is long-lived. Someone who
-  obtains it and has the stored ciphertext can read past messages.
-- **No rotation on removal.** A removed member keeps the key they had. They no
-  longer receive new ciphertext from the server, but the key is not changed.
-- **One device per person.** Opening chat on a second browser creates a new
-  identity key; that device cannot read conversations keyed to the first, and
-  it replaces the published key.
+- **A malicious server adding a device.** The list of each member's devices
+  comes from the server, and members' devices hand conversation keys to any
+  device on that list. A compromised server could therefore register a device
+  of its own for a member and be given the keys. The safety code covers every
+  device key, so the change is detectable, but only if members compare codes;
+  that check is manual and optional. This is the main reason not to describe
+  the encryption as protecting against the platform operator unconditionally.
+- **No forward secrecy within an epoch.** Keys are kept so history stays
+  readable. Someone who obtains an epoch key and the stored ciphertext can read
+  every message of that epoch. Rotation limits the damage to one epoch.
+- **Past messages stay readable to someone who left.** They keep the keys for
+  the epochs they were present for; the server stops serving them the
+  ciphertext, which is access control, not cryptography.
+- **A device that loses its storage loses its keys** (cleared browser data,
+  private windows). It is treated as a new device and waits for another device
+  to be online to hand over the keys. If no other device ever comes online,
+  that history is unreadable there. There is no key backup.
 - **The page itself.** Chat runs inside your site. Script injected into your
   page (XSS, a compromised dependency) can read what the user can read. A strict
   Content-Security-Policy on the host site matters.
 - Stories and call signalling are not end-to-end encrypted. Call media is
   encrypted in transit by WebRTC (DTLS-SRTP), with keys negotiated through the server.
 
-The planned route to closing the first four is the IETF Messaging Layer
-Security protocol (RFC 9420) with multi-device support.
+The planned route to closing the first two is the IETF Messaging Layer
+Security protocol (RFC 9420), together with verified device lists.
+
+## Privacy controls
+
+Each person can turn off read receipts (others never learn what they have
+read) and online status (they are never announced or listed as online). The
+host can suspend an account: a suspended person can still read but cannot send,
+upload, react or call.
 
 ## Ephemeral content
 
@@ -122,6 +144,7 @@ uploaded HTML or SVG file can therefore never execute on your origin.
 - Set `origins` to your site's origin(s) rather than `*`.
 - Put PlugChat behind your reverse proxy and apply connection limits there;
   unauthenticated connection floods are not handled in-process.
-- Back up the data directory. There is no per-user storage quota yet.
+- Back up the data directory, and set `userStorageBytes` to cap what each
+  person may upload.
 - The default call configuration uses a public STUN server, which sees
   participants' IP addresses. Configure your own STUN/TURN if that matters.

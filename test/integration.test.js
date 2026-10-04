@@ -8,6 +8,8 @@ import { join } from 'node:path';
 import { createServer } from 'node:http';
 import { createPlugChat, signToken, FEATURES, EVENTS } from '../server/index.js';
 import { signV4, s3Storage } from '../server/connectors.js';
+import { loadConfig, review } from '../server/config.js';
+import { writeFileSync } from 'node:fs';
 
 const SECRET = 'test-secret-test-secret-test-secret-0123456789';
 const quiet = { error() {} };
@@ -178,4 +180,67 @@ test('uploads can live in the host\'s own S3-compatible bucket, set up with plai
     bucket.close();
     bucket.closeAllConnections();
   }
+});
+
+test('a side service is set up with a config file, a .env file and environment variables, in that order', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'plugchat-cfg-'));
+  try {
+    writeFileSync(join(dir, 'plugchat.config.json'), JSON.stringify({
+      port: 5000, origins: ['https://alumni.example'], features: { stories: false },
+      ui: { theme: { accent: '#0b6b4f' }, layout: 'flat' }, storage: { type: 's3', bucket: 'from-file', accessKeyId: 'file-key', secretAccessKey: 'file-secret' },
+    }));
+    writeFileSync(join(dir, '.env'), 'PLUGCHAT_SECRET="secret-from-dotenv-secret-from-dotenv-0123"\nPLUGCHAT_RETENTION_DAYS=30\n');
+    const { options, port, file } = loadConfig({ cwd: dir, env: { PORT: '5001', PLUGCHAT_FEATURES_OFF: 'polls, calls', PLUGCHAT_S3_BUCKET: 'from-env', PLUGCHAT_RETENTION_DAYS: '90', PLUGCHAT_WEBHOOK_EVENTS: 'message.new,member.added' } });
+    assert.equal(file, 'plugchat.config.json');
+    assert.equal(port, 5001, 'the environment wins over the file');
+    assert.equal(options.secret, 'secret-from-dotenv-secret-from-dotenv-0123');
+    assert.equal(options.retentionDays, 90, 'the real environment wins over .env');
+    assert.deepEqual(options.features, { stories: false, polls: false, calls: false });
+    assert.deepEqual(options.storage, { type: 's3', bucket: 'from-env', accessKeyId: 'file-key', secretAccessKey: 'file-secret' });
+    assert.deepEqual(options.webhookEvents, ['message.new', 'member.added']);
+    assert.equal(options.ui.layout, 'flat');
+    assert.ok(review(options, { port }).every(([level]) => level !== 'FAIL'));
+
+    // The same settings object starts a server.
+    const chat = createPlugChat({ ...options, dataDir: join(dir, 'data'), log: quiet });
+    assert.equal(chat.features.polls, false);
+    chat.close();
+
+    writeFileSync(join(dir, 'plugchat.config.json'), JSON.stringify({ colour: 'green' }));
+    assert.throws(() => loadConfig({ cwd: dir, env: {} }), /does not know: colour/);
+    assert.ok(review({ secret: 'short', origins: ['alumni.example/path'], features: { teleport: false } }).filter(([level]) => level === 'FAIL').length >= 3);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the look a platform configures reaches every client, and the setup studio stays off unless asked for', async () => {
+  await withChat({ ui: { theme: { accent: '#0b6b4f' }, strings: { Chats: 'Messages' }, layout: 'flat' } }, async ({ as }) => {
+    const me = await (await as('ama')('/me')).json();
+    assert.deepEqual(me.ui, { theme: { accent: '#0b6b4f' }, strings: { Chats: 'Messages' }, layout: 'flat' });
+    assert.equal((await fetch(new URL('../studio', (await as('ama')('/me')).url))).status, 404, 'no studio unless switched on');
+  });
+
+  await withChat({ studio: true }, async ({ as }) => {
+    const root = new URL('..', (await as('ama')('/me')).url).href; // .../plugchat/
+    const page = await fetch(`${root}studio`);
+    assert.equal(page.status, 200);
+    assert.match(page.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+    assert.match(await page.text(), /client\/studio\.js/);
+
+    const state = await (await fetch(`${root}studio/state`)).json();
+    assert.deepEqual(state.starters.map((s) => s.id), ['node', 'python', 'php', 'go', 'ruby', 'java', 'csharp']);
+    assert.ok(state.starters.every((s) => s.code.includes('chat-token') && s.code.includes('demo-user')));
+    assert.equal(state.users.length, 3);
+
+    const post = (body, headers = {}) => fetch(`${root}studio/token`, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
+    const { token } = await (await post({ user: 'studio-ama' })).json();
+    const who = await (await fetch(`${root}v1/me`, { headers: { authorization: `Bearer ${token}` } })).json();
+    assert.equal(who.name, 'Ama Owusu');
+    const seeded = await (await fetch(`${root}v1/conversations`, { headers: { authorization: `Bearer ${token}` } })).json();
+    assert.equal(seeded.conversations.length, 2, 'the preview has a one-to-one chat and a group to show');
+
+    assert.equal((await post({ user: 'ama' })).status, 400, 'only the test members');
+    assert.equal((await post({ user: 'studio-ama' }, { 'x-forwarded-for': '203.0.113.9' })).status, 403, 'never through a proxy');
+  });
 });

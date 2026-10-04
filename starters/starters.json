@@ -1,0 +1,9 @@
+[
+  { "id": "node", "name": "Node.js", "frameworks": "Express, Fastify, Next.js, NestJS", "file": "node/server.mjs", "language": "javascript", "check": ["node", "--version"], "run": ["node", "server.mjs"] },
+  { "id": "python", "name": "Python", "frameworks": "Django, Flask, FastAPI", "file": "python/app.py", "language": "python", "check": ["python", "--version"], "run": ["python", "app.py"] },
+  { "id": "php", "name": "PHP", "frameworks": "Laravel, Symfony, WordPress", "file": "php/index.php", "language": "php", "check": ["php", "--version"], "run": ["php", "-S", "127.0.0.1:{port}", "index.php"] },
+  { "id": "go", "name": "Go", "frameworks": "net/http, Gin, Echo, Fiber", "file": "go/main.go", "language": "go", "check": ["go", "version"], "run": ["go", "run", "main.go"] },
+  { "id": "ruby", "name": "Ruby", "frameworks": "Rails, Sinatra", "file": "ruby/app.rb", "language": "ruby", "check": ["ruby", "--version"], "run": ["ruby", "app.rb"] },
+  { "id": "java", "name": "Java", "frameworks": "Spring Boot, Jakarta EE, Quarkus", "file": "java/Server.java", "language": "java", "check": ["java", "--version"], "run": ["java", "Server.java"] },
+  { "id": "csharp", "name": "C# / .NET", "frameworks": "ASP.NET Core", "file": "csharp/Program.cs", "language": "csharp", "check": ["dotnet", "--version"], "run": ["dotnet", "run"] }
+]

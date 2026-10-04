@@ -1,20 +1,64 @@
 #!/usr/bin/env node
 import { randomBytes } from 'node:crypto';
 import { createPlugChat, signToken } from '../server/index.js';
+import { loadConfig, review } from '../server/config.js';
 
 const [cmd = 'start', ...args] = process.argv.slice(2);
 const env = process.env;
 
+/** Settings from plugchat.config.json and the environment, or a clear message about what is wrong with them. */
+function settings() {
+  try {
+    return loadConfig();
+  } catch (e) {
+    console.error(e.message);
+    process.exit(1);
+  }
+}
+
 const requireSecret = () => {
-  if (!env.PLUGCHAT_SECRET) {
+  const { secret } = settings().options;
+  if (!secret) {
     console.error('Set PLUGCHAT_SECRET first. Generate one with: plugchat secret');
     process.exit(1);
   }
-  return env.PLUGCHAT_SECRET;
+  return secret;
 };
 
 if (cmd === 'secret') {
   console.log(randomBytes(48).toString('base64url'));
+} else if (cmd === 'init') {
+  // plugchat init [--studio]   — writes a starting plugchat.config.json and a .env with a fresh secret
+  const { existsSync, writeFileSync, appendFileSync, readFileSync } = await import('node:fs');
+  const wrote = [];
+  if (existsSync('plugchat.config.json')) console.log('plugchat.config.json already exists; left as it is.');
+  else {
+    writeFileSync('plugchat.config.json', JSON.stringify({
+      port: 4400,
+      dataDir: './plugchat-data',
+      origins: ['http://localhost:3000'],
+      webhookUrl: '',
+      webhookEvents: ['message.new', 'message.reported', 'call.started'],
+      features: { stories: true, polls: true, calls: true },
+      ui: { theme: { accent: '#2f6fed' }, layout: 'bubbles' },
+      studio: true,
+    }, null, 2) + '\n');
+    wrote.push('plugchat.config.json');
+  }
+  const hasSecret = env.PLUGCHAT_SECRET || (existsSync('.env') && /^PLUGCHAT_SECRET=/m.test(readFileSync('.env', 'utf8')));
+  if (hasSecret) console.log('A PLUGCHAT_SECRET is already set; left as it is.');
+  else {
+    appendFileSync('.env', `${existsSync('.env') && !readFileSync('.env', 'utf8').endsWith('\n') ? '\n' : ''}PLUGCHAT_SECRET=${randomBytes(48).toString('base64url')}\n`);
+    wrote.push('.env (keep it out of version control)');
+  }
+  if (wrote.length) console.log(`Wrote ${wrote.join(' and ')}.`);
+  console.log(`
+Next:
+  1. Give your backend the same PLUGCHAT_SECRET, and add the token endpoint.
+     Ready-made versions for Node, Python, PHP, Go, Ruby, Java and C# are in the starters folder.
+  2. Start it:        plugchat start
+  3. Shape the look:  open http://localhost:4400/plugchat/studio  (pick colours, layout and features; copy the code)
+  4. Before going live: set "origins" to your real site, set "studio" to false, and run: plugchat doctor`);
 } else if (cmd === 'token') {
   // plugchat token <userId> [display name] [--admin]
   const admin = args.includes('--admin');
@@ -25,31 +69,19 @@ if (cmd === 'secret') {
   }
   console.log(signToken(admin ? { sub, admin: true } : { sub, name }, requireSecret(), 3600));
 } else if (cmd === 'start') {
-  const port = Number(env.PORT ?? 4400);
-  const chat = createPlugChat({
-    secret: requireSecret(),
-    dataDir: env.PLUGCHAT_DATA ?? './plugchat-data',
-    basePath: env.PLUGCHAT_BASE_PATH ?? '/plugchat',
-    origins: env.PLUGCHAT_ORIGINS ? env.PLUGCHAT_ORIGINS.split(',').map((s) => s.trim()) : '*',
-    webhookUrl: env.PLUGCHAT_WEBHOOK_URL,
-    directory: env.PLUGCHAT_DIRECTORY !== 'off',
-    stories: env.PLUGCHAT_STORIES !== 'off',
-    cluster: env.PLUGCHAT_CLUSTER === 'on',
-    retentionDays: env.PLUGCHAT_RETENTION_DAYS ? Number(env.PLUGCHAT_RETENTION_DAYS) : 0,
-    userStorageBytes: env.PLUGCHAT_USER_STORAGE_MB ? Number(env.PLUGCHAT_USER_STORAGE_MB) * 1024 * 1024 : 0,
-    previousSecrets: env.PLUGCHAT_PREVIOUS_SECRETS ? env.PLUGCHAT_PREVIOUS_SECRETS.split(',') : [],
-    maxTokenLifetimeSeconds: env.PLUGCHAT_MAX_TOKEN_SECONDS ? Number(env.PLUGCHAT_MAX_TOKEN_SECONDS) : undefined,
-    hookUrl: env.PLUGCHAT_HOOK_URL,
-    hookEvents: env.PLUGCHAT_HOOK_EVENTS ? env.PLUGCHAT_HOOK_EVENTS.split(',').map((s) => s.trim()) : [],
-    hookFailOpen: env.PLUGCHAT_HOOK_FAIL_OPEN === 'on',
-    requireEncryption: env.PLUGCHAT_REQUIRE_E2EE === 'on',
-    handleVisibility: env.PLUGCHAT_HANDLE_VISIBILITY === 'all' ? 'all' : 'none',
-    iceServers: env.PLUGCHAT_ICE_SERVERS ? JSON.parse(env.PLUGCHAT_ICE_SERVERS) : undefined,
-    maxFileBytes: env.PLUGCHAT_MAX_FILE_MB ? Number(env.PLUGCHAT_MAX_FILE_MB) * 1024 * 1024 : undefined,
-  });
-  const server = await chat.listen(port, env.HOST);
-  console.log(`PlugChat listening on http://localhost:${port}${chat.basePath}`);
-  if (!env.PLUGCHAT_ORIGINS) console.log('Note: PLUGCHAT_ORIGINS is not set, so any website may call this API with a valid token.');
+  const { options, port, host, file } = settings();
+  requireSecret();
+  let chat;
+  try {
+    chat = createPlugChat(options);
+  } catch (e) {
+    console.error(e.message);
+    process.exit(1);
+  }
+  const server = await chat.listen(port, host);
+  console.log(`PlugChat listening on http://localhost:${port}${chat.basePath}${file ? ` (settings from ${file})` : ''}`);
+  if (!options.origins || options.origins === '*') console.log('Note: origins is not set, so any website may call this API with a valid token.');
+  if (options.studio) console.log(`Setup studio: http://localhost:${port}${chat.basePath}/studio (switch it off in production)`);
   const stop = () => {
     server.close();
     chat.close();
@@ -62,7 +94,7 @@ if (cmd === 'secret') {
   const { Store } = await import('../server/store.js');
   const { cpSync, existsSync, mkdirSync } = await import('node:fs');
   const { join, resolve } = await import('node:path');
-  const dataDir = env.PLUGCHAT_DATA ?? './plugchat-data';
+  const { dataDir } = settings().options;
   const dest = args[0] && resolve(args[0]);
   if (!dest || !existsSync(join(dataDir, 'plugchat.db'))) {
     console.error(dest ? `No database found in ${resolve(dataDir)} (set PLUGCHAT_DATA).` : 'usage: plugchat backup <destination folder>');
@@ -89,45 +121,28 @@ if (cmd === 'secret') {
   const [major, minor] = process.versions.node.split('.').map(Number);
   say(major > 22 || (major === 22 && minor >= 13) ? 'ok' : 'FAIL', `Node.js ${process.versions.node} (22.13 or newer is required)`);
 
-  const secret = env.PLUGCHAT_SECRET ?? '';
-  if (!secret) say('FAIL', 'PLUGCHAT_SECRET is not set. Generate one with: plugchat secret');
-  else if (secret.length < 32) say('FAIL', `PLUGCHAT_SECRET is ${secret.length} characters; it must be at least 32`);
-  else say('ok', 'PLUGCHAT_SECRET is set');
-
-  const dataDir = env.PLUGCHAT_DATA ?? './plugchat-data';
+  let loaded;
   try {
-    mkdirSync(dataDir, { recursive: true });
-    accessSync(dataDir, constants.W_OK);
-    say('ok', `Data folder ${dataDir} is writable`);
-  } catch {
-    say('FAIL', `Data folder ${dataDir} cannot be written to`);
+    loaded = loadConfig();
+    say('ok', loaded.file ? `Settings read from ${loaded.file} and the environment` : 'Settings read from the environment (no plugchat.config.json)');
+  } catch (e) {
+    say('FAIL', e.message);
   }
-
-  if (!env.PLUGCHAT_ORIGINS) say('warn', 'PLUGCHAT_ORIGINS is not set: any website may call the API with a valid token, and any site may frame the embed page');
-  else {
-    const bad = env.PLUGCHAT_ORIGINS.split(',').map((s) => s.trim()).filter((o) => !/^https?:\/\/[^/]+$/.test(o));
-    say(bad.length ? 'FAIL' : 'ok', bad.length ? `PLUGCHAT_ORIGINS entries must look like https://example.com (no path): ${bad.join(', ')}` : 'PLUGCHAT_ORIGINS is set');
-  }
-
-  for (const name of ['PLUGCHAT_WEBHOOK_URL', 'PLUGCHAT_HOOK_URL']) {
-    if (!env[name]) continue;
-    let target;
+  if (loaded) {
+    const { options, port } = loaded;
     try {
-      target = new URL(env[name]);
+      mkdirSync(options.dataDir, { recursive: true });
+      accessSync(options.dataDir, constants.W_OK);
+      say('ok', `Data folder ${options.dataDir} is writable`);
     } catch {
-      say('FAIL', `${name} is not a valid URL`);
-      continue;
+      say('FAIL', `Data folder ${options.dataDir} cannot be written to`);
     }
-    const local = ['localhost', '127.0.0.1', '[::1]'].includes(target.hostname);
-    say(target.protocol === 'https:' || local ? 'ok' : 'warn', `${name} → ${target.origin}${target.protocol === 'https:' || local ? '' : ' (not HTTPS: message content would cross the network unencrypted)'}`);
+    for (const [level, text] of review(options, { port })) say(level, text);
   }
-  if (env.PLUGCHAT_HOOK_URL && !env.PLUGCHAT_HOOK_EVENTS) say('warn', 'PLUGCHAT_HOOK_URL is set but PLUGCHAT_HOOK_EVENTS is empty, so no hooks will be called');
-  if (env.PLUGCHAT_HOOK_FAIL_OPEN === 'on') say('warn', 'PLUGCHAT_HOOK_FAIL_OPEN is on: if your hook endpoint is down, messages go through unchecked');
-  if (!env.PLUGCHAT_WEBHOOK_URL) say('warn', 'PLUGCHAT_WEBHOOK_URL is not set: people who are offline will not be notified of new messages');
 
   console.log(failed ? '\nNot ready: fix the FAIL lines above.' : '\nReady to start.');
   process.exit(failed ? 1 : 0);
 } else {
-  console.error('usage: plugchat <start|secret|token|backup|doctor>');
+  console.error('usage: plugchat <init|start|secret|token|backup|doctor>');
   process.exit(1);
 }

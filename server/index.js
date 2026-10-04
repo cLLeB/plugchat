@@ -9,6 +9,7 @@ import { Store } from './store.js';
 import { Hub } from './hub.js';
 import { signToken, verifyToken, signWebhook } from './auth.js';
 import { diskStorage, s3Storage, storageFromConfig, createHooks, databaseBus } from './connectors.js';
+import { review } from './config.js';
 
 export { signToken, verifyToken, signWebhook, diskStorage, s3Storage, databaseBus };
 
@@ -55,7 +56,81 @@ export const EVENTS = [
 ];
 
 const CLIENT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'client');
-const CLIENT_FILES = new Set(['plugchat.js', 'e2ee.js', 'calls.js', 'element.js', 'styles.js', 'i18n.js', 'launcher.js', 'embed.js', 'admin.js']);
+const CLIENT_FILES = new Set(['plugchat.js', 'e2ee.js', 'calls.js', 'element.js', 'styles.js', 'i18n.js', 'launcher.js', 'embed.js', 'admin.js', 'studio.js']);
+const STARTERS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'starters');
+// Test members the setup studio signs in as. They exist only where the studio has been opened.
+const STUDIO_USERS = [['studio-ama', 'Ama Owusu'], ['studio-kofi', 'Kofi Mensah'], ['studio-esi', 'Esi Appiah']];
+// The setup studio: a development page for shaping the chat and collecting integration code.
+const STUDIO_PAGE = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>PlugChat setup studio</title>
+<style>
+:root { color-scheme: light dark; --bg: #f4f5f7; --card: #fff; --fg: #16181d; --muted: #667085; --line: #e3e5ea; --accent: #3b5bdb; --code: #0f1420; --codefg: #dfe5f2; }
+@media (prefers-color-scheme: dark) { :root { --bg: #0f1115; --card: #191c23; --fg: #e8eaee; --muted: #98a2b3; --line: #2a2e37; --accent: #8ea2ff; --code: #0a0c11; } }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; display: flex; flex-direction: column; }
+header { display: flex; align-items: baseline; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--card); flex: none; }
+header h1 { font-size: 17px; margin: 0; } header span { color: var(--muted); }
+main { flex: 1; min-height: 0; display: grid; grid-template-columns: 300px minmax(0, 1fr) minmax(340px, 26vw); }
+main > section { min-height: 0; overflow: auto; padding: 16px; }
+#controls, #output { background: var(--card); }
+#controls { border-right: 1px solid var(--line); } #output { border-left: 1px solid var(--line); }
+#preview { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+h2 { font-size: 15px; margin: 0 0 6px; }
+.lead, .note { color: var(--muted); margin: 0 0 12px; font-size: 13px; }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.presets button, .seg button, .tabs button, .copy { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 5px 10px; }
+.presets button:hover, .copy:hover { border-color: var(--accent); }
+details { border-top: 1px solid var(--line); padding: 4px 0; }
+summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
+.body { display: flex; flex-direction: column; gap: 10px; padding-bottom: 12px; }
+.field { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px; font-size: 13px; }
+.field > span { color: var(--muted); }
+.field input[type="text"], .field select { grid-column: 1 / -1; }
+.field input[type="range"] { grid-column: 1 / 3; width: 100%; } .field output { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 44px; text-align: right; }
+.field:has(input[type="range"]) > span { grid-column: 1 / -1; }
+input[type="text"], select, textarea { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; width: 100%; }
+textarea { font: 12px/1.5 ui-monospace, Consolas, monospace; resize: vertical; }
+input[type="color"] { width: 38px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; }
+.reset { border: 0; background: none; color: var(--accent); font-size: 12px; padding: 0; }
+.checks { display: grid; grid-template-columns: 1fr; gap: 4px; font-size: 13px; }
+.checks label { display: flex; gap: 8px; align-items: center; }
+.toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: none; }
+.toolbar .label { color: var(--muted); font-size: 13px; } .toolbar .gap { flex: 1; }
+.seg { display: inline-flex; } .seg button { border-radius: 0; margin-left: -1px; } .seg button:first-child { border-radius: 8px 0 0 8px; margin: 0; } .seg button:last-child { border-radius: 0 8px 8px 0; }
+.seg button[aria-checked="true"], .tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.stage { flex: 1; min-height: 0; display: flex; justify-content: center; }
+.stage plug-chat { height: 100%; width: 100%; box-shadow: 0 10px 40px rgba(16, 24, 40, .12); border-radius: 16px; }
+.stage[data-device="phone"] plug-chat { width: 390px; max-width: 100%; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 12px; }
+.tabbody { display: flex; flex-direction: column; gap: 12px; }
+.code { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.codehead { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); }
+.copy { font-size: 12px; padding: 3px 9px; flex: none; }
+pre { margin: 0; padding: 12px; background: var(--code); color: var(--codefg); font: 12px/1.55 ui-monospace, Consolas, monospace; overflow: auto; max-height: 52vh; white-space: pre; tab-size: 2; }
+.checklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.checklist li { display: flex; gap: 8px; } .checklist b { flex: none; width: 36px; text-transform: uppercase; font-size: 11px; line-height: 20px; }
+.checklist .ok b { color: #12a150; } .checklist .warn b { color: #d98206; } .checklist .fail b { color: #e03131; }
+@media (max-width: 1100px) { body { height: auto; } main { grid-template-columns: 1fr; } main > section { overflow: visible; } #preview { height: 80vh; } #controls, #output { border: 0; border-top: 1px solid var(--line); } }
+</style>
+</head>
+<body>
+<header><h1>PlugChat setup studio</h1><span>Shape the chat for your platform, then copy the code. A development tool: switch it off in production.</span></header>
+<main>
+  <section id="controls"></section>
+  <section id="preview"></section>
+  <section id="output"></section>
+</main>
+<script type="module" src="client/studio.js"></script>
+</body>
+</html>
+`;
 // The moderation console for the host's staff. It holds no secrets: it asks for an admin token.
 const ADMIN_PAGE = `<!doctype html>
 <html lang="en">
@@ -302,6 +377,39 @@ export function createPlugChat(options = {}) {
   const allowOrigin = (origin) => !origin || origins === '*' || origins.includes(origin);
   const bus = customBus ?? (cluster ? databaseBus(store) : undefined);
   const hub = new Hub({ store, authenticate, allowOrigin, bus, features: feat, onPresence: (userId, online) => publish({ type: online ? 'user.connected' : 'user.disconnected', userId }) });
+
+  // ---- setup studio ----
+  async function studioState() {
+    if (!store.get('SELECT 1 AS found FROM users WHERE id = ?', STUDIO_USERS[0][0])) {
+      // A little life for the preview: a one-to-one chat and a group, so every part of the look is on show.
+      for (const [id, name] of STUDIO_USERS) await admin.upsertUser(id, { name });
+      const [ama, kofi, esi] = STUDIO_USERS.map(([id]) => id);
+      const say = (conversationId, senderId, body) => admin.post(conversationId, { kind: 'text', senderId, body });
+      const dm = await admin.openDm(ama, kofi);
+      await say(dm.id, kofi, 'Hi Ama, are we still on for Saturday?');
+      await say(dm.id, ama, 'Yes! I booked the hall this morning 🎉');
+      await say(dm.id, kofi, 'Perfect. I will bring the *projector* and the sign-in sheet.');
+      const group = await admin.createGroup({ title: 'Reunion planning', memberIds: [ama, kofi, esi], createdBy: ama });
+      await say(group.id, esi, 'Welcome everyone. The agenda is at https://example.com/agenda');
+      await say(group.id, kofi, 'Thanks @Ama for booking the hall.');
+      await say(group.id, ama, 'Happy to. Catering is next: any preferences?');
+      await say(group.id, esi, 'Jollof, obviously.');
+    }
+    let starters = [];
+    try {
+      const list = JSON.parse(await readFile(join(STARTERS_DIR, 'starters.json'), 'utf8'));
+      starters = await Promise.all(list.map(async (s) => ({
+        id: s.id, name: s.name, frameworks: s.frameworks, language: s.language, file: s.file,
+        run: s.run.join(' ').replace('{port}', '8080'), code: await readFile(join(STARTERS_DIR, s.file), 'utf8'),
+      })));
+    } catch {
+      // this copy was installed without the starters folder
+    }
+    return {
+      basePath: base, features: feat, featureNames: FEATURES, events: EVENTS, webhookEvents, ui,
+      users: STUDIO_USERS.map(([id, name]) => ({ id, name })), checks: review(options), starters,
+    };
+  }
 
   // What the server tells the interface about this platform's setup.
   const featureView = () => ({ ...feat, calls: feat.calls ? callMode : false, requireEncryption, linkPreviews: hooks.has('link.preview') });
@@ -1512,6 +1620,37 @@ export function createPlugChat(options = {}) {
         });
         res.end(EMBED_PAGE);
         return true;
+      }
+
+      if (path === '/studio' || path.startsWith('/studio/')) {
+        if (!studio) throw notFound();
+        // It can sign in as test members, so unless told otherwise it answers only this machine, and never through a proxy.
+        const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) && !req.headers['x-forwarded-for'] && !req.headers.forwarded;
+        if (studio !== 'remote' && !local) throw forbidden('the setup studio only answers requests made on the machine it runs on');
+        if (req.method === 'GET' && path === '/studio') {
+          res.writeHead(200, {
+            'content-type': 'text/html; charset=utf-8',
+            'cache-control': 'no-store',
+            'x-content-type-options': 'nosniff',
+            'referrer-policy': 'no-referrer',
+            'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self' ws: wss:; img-src blob: data: https:; media-src blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+          });
+          res.end(STUDIO_PAGE);
+          return true;
+        }
+        if (req.method === 'GET' && path === '/studio/state') return send(res, 200, await studioState()), true;
+        if (req.method === 'POST' && path === '/studio/token') {
+          let wanted;
+          try {
+            wanted = JSON.parse((await raw(req, 4096)).toString() || '{}').user;
+          } catch {
+            throw bad('body must be JSON');
+          }
+          const user = STUDIO_USERS.find(([id]) => id === wanted);
+          if (!user) throw bad('unknown test member');
+          return send(res, 200, { token: signToken({ sub: user[0], name: user[1] }, secret, 300) }), true;
+        }
+        throw notFound();
       }
 
       if (req.method === 'GET' && path.startsWith('/client/')) {

@@ -25,6 +25,10 @@ const chat = createPlugChat({
   // Demo only: a real host keeps one fixed secret in its environment.
   secret: process.env.PLUGCHAT_SECRET ?? randomBytes(48).toString('base64url'),
   dataDir: here(vendorCalls ? './data-vendor' : './data'),
+  // The developer's workbench at /plugchat/studio. It only answers this machine; leave it off in production.
+  studio: true,
+  // A plugin is a function given the running chat. This one greets people who are added to a group.
+  plugins: [(chat) => chat.on('member.added', (e) => chat.admin.post(e.conversationId, 'Welcome! Please read the pinned messages.').catch(() => {}))],
   hooks: {
     // The association's own rule, enforced before anything is stored. A real
     // platform would check credits, call a moderation service, and so on.

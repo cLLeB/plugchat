@@ -32,7 +32,10 @@ plug-chat { height: 100%; --pc-accent: inherit; --pc-accent-fg: inherit; }
 const CHAT = '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>';
 const CLOSE = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 const OWN = new Set(['position', 'label', 'class', 'style', 'id', 'hidden']);
-const FORWARDED = ['plugchat:ready', 'plugchat:unread', 'plugchat:message', 'plugchat:call', 'plugchat:call-join'];
+const FORWARDED = ['plugchat:ready', 'plugchat:unread', 'plugchat:message', 'plugchat:call', 'plugchat:call-join', 'plugchat:invite', 'plugchat:theme'];
+
+// Everything else a host can set on <plug-chat> is handed straight to the chat inside.
+const PASSED_ON = ['ui', 'features', 'css', 'strings', 'messageActions', 'headerActions'];
 
 class PlugChatLauncher extends HTMLElement {
   constructor() {
@@ -40,7 +43,7 @@ class PlugChatLauncher extends HTMLElement {
     this.attachShadow({ mode: 'open' });
     this._chat = document.createElement('plug-chat');
     // Properties a host may have set before this class loaded.
-    for (const prop of ['getToken', 'actions', 'renderers']) {
+    for (const prop of ['getToken', 'actions', 'renderers', ...PASSED_ON]) {
       if (Object.hasOwn(this, prop)) {
         const value = this[prop];
         delete this[prop];
@@ -119,6 +122,13 @@ class PlugChatLauncher extends HTMLElement {
     if (this._panel.hidden) this.open();
     else this.close();
   }
+}
+
+for (const prop of PASSED_ON) {
+  Object.defineProperty(PlugChatLauncher.prototype, prop, {
+    get() { return this._chat[prop]; },
+    set(value) { this._chat[prop] = value; },
+  });
 }
 
 if (!customElements.get('plug-chat-launcher')) customElements.define('plug-chat-launcher', PlugChatLauncher);

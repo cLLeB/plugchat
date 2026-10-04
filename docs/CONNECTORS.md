@@ -32,6 +32,7 @@ createPlugChat({
 
 ```bash
 # Over HTTP, for a backend in any language
+# (every starter in starters/ answers message.before this way, and is checked doing it)
 PLUGCHAT_HOOK_URL=https://your-site.example/internal/chat-hooks
 PLUGCHAT_HOOK_EVENTS=message.before,call.join
 ```

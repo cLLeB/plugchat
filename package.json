@@ -29,7 +29,8 @@
     "bench",
     "Dockerfile",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "examples"
   ],
   "exports": {
     ".": {
@@ -49,7 +50,15 @@
       "types": "./client/element.d.ts",
       "default": "./client/launcher.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./react": {
+      "types": "./client/react.d.ts",
+      "default": "./client/react.js"
+    },
+    "./vue": {
+      "types": "./client/vue.d.ts",
+      "default": "./client/vue.js"
+    }
   },
   "scripts": {
     "start": "node bin/plugchat.js start",
@@ -59,16 +68,33 @@
     "check:types": "tsc -p .",
     "verify:starters": "node starters/verify.mjs",
     "bench": "node bench/load.mjs",
-    "prepublishOnly": "npm test && npm run check:types"
+    "prepublishOnly": "npm test && npm run check:types",
+    "verify:proxy": "node examples/behind-proxy/run.mjs --check"
   },
   "dependencies": {
     "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
-    "typescript": "^7.0.2"
+    "esbuild": "^0.28.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "^7.0.2",
+    "vue": "^3.5.43"
   },
   "optionalDependencies": {
     "pg": "^8.23.1"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "vue": ">=3.3"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    }
   }
 }

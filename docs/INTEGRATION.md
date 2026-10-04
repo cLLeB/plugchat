@@ -68,7 +68,7 @@ table below that is plain data, under the option's own name:
 An unknown key stops the start with a message naming it, so a typo is never
 silently ignored.
 
-Or build the included `Dockerfile`. Nginx needs WebSocket upgrade headers on the proxied path:
+Or build the included `Dockerfile`. A complete, runnable version of this arrangement (a PHP site, PlugChat beside it, nginx in front) is in [`examples/behind-proxy`](../examples/behind-proxy): `node examples/behind-proxy/run.mjs --check` starts all three and checks the page, the token, the WebSocket upgrade, realtime delivery, an upload and the origin rules through the proxy. Nginx needs WebSocket upgrade headers on the proxied path:
 
 ```nginx
 location /plugchat/ {
@@ -346,6 +346,20 @@ There are two dozen tokens in all (fonts, corner radii, border width, picture
 shape, sizes), plus `::part()` hooks on every element, your own CSS, slots and
 feature switches: see [CUSTOMIZING.md](CUSTOMIZING.md).
 
+**Sites with a strict Content-Security-Policy.** The chat needs no
+`unsafe-inline` and no `unsafe-eval`. With PlugChat on the same origin, this
+is enough:
+
+```
+script-src 'self'; style-src 'self'; connect-src 'self' wss:; img-src 'self' blob: data:; media-src blob:
+```
+
+Add PlugChat's origin to `script-src` and `connect-src` (with its `wss://`
+address) if it runs on another one, `frame-src` for your call vendor if calls
+open in a frame, and the policy name `plugchat` to `trusted-types` if you
+enforce Trusted Types. The demo's `/strict` page runs under exactly such a
+policy.
+
 The layout follows the space it is given, not the device: two panes side by
 side from 700px wide, one pane at a time below that, with dialogs rising from
 the bottom edge and message actions on press-and-hold. On a phone, give the
@@ -368,7 +382,46 @@ chatEl.strings = { 'Send': 'Tuma', 'New chat': 'Mazungumzo mapya' };
 TypeScript definitions ship with the package for the server, the headless
 client and both elements.
 
-### React, Vue, Angular, Svelte
+### React, Next.js, Vue, Nuxt
+
+Ready components, with props for everything and events as callbacks. They
+render on the server as an empty tag and come alive in the browser, so they
+work unchanged in Next.js, Remix and Nuxt.
+
+```jsx
+import { PlugChat } from 'plugchat/react';
+
+<PlugChat server="/plugchat" tokenUrl="/api/chat-token" features={{ stories: false }}
+          onUnread={({ count }) => setBadge(count)} style={{ height: 640 }} />
+```
+
+```vue
+<script setup>
+import { PlugChat } from 'plugchat/vue';
+</script>
+<template>
+  <PlugChat server="/plugchat" token-url="/api/chat-token" :features="{ stories: false }"
+            @unread="({ count }) => (badge = count)" style="height: 640px" />
+</template>
+```
+
+Both also export `PlugChatLauncher`. Elements with a `slot` attribute placed
+inside fill the chat's slots. Working apps are in
+[`examples/frameworks`](../examples/frameworks); the tests render both on a
+server.
+
+### Angular, Svelte, Solid, Astro, plain templates
+
+Anything that can output an HTML tag can use the element directly. It is safe
+to import on a server (it defines nothing there).
+
+- **Angular**: add `CUSTOM_ELEMENTS_SCHEMA` to the component, `import 'plugchat/element'`, then `<plug-chat server="/plugchat" token-url="/api/chat-token" [ui]="ui" (plugchat:unread)="badge = $event.detail.count">`.
+- **Svelte / SvelteKit**: `import 'plugchat/element'` and use `<plug-chat>`; bind the element (`bind:this`) to set `ui`, `features` and the other properties.
+- **Server templates** (Django, Rails, Laravel Blade, Razor, Thymeleaf, Go templates, plain PHP): the two lines under "Any web page" above, written into the template.
+
+Angular and Svelte have not been run here; they use only the standard custom-element behaviour that the React and Vue examples exercise.
+
+### Custom elements in any other framework
 
 Custom elements work as ordinary tags. Load the script once, then:
 

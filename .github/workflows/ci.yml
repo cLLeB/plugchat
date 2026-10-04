@@ -1,0 +1,84 @@
+# Runs on Linux, where platforms deploy, everything that is run by hand on the
+# development machine: the test suite on SQLite and on PostgreSQL, the backend
+# starters in all seven languages, the deployment behind nginx, the framework
+# examples, and a build and smoke test of the Docker image.
+#
+# Written on a Windows machine with no Linux or Docker available: this file has
+# not been executed yet. Expect to adjust it on its first run.
+name: ci
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: plugchat
+          POSTGRES_DB: plugchat_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: npm ci
+      - name: Tests on SQLite
+        run: npm test
+      - name: Types
+        run: npm run check:types
+      - name: Tests on PostgreSQL
+        run: npm run test:postgres
+        env:
+          PLUGCHAT_TEST_DATABASE: postgres://postgres:plugchat@localhost:5432/plugchat_test
+      - name: The package installs and starts from a tarball
+        run: |
+          npm pack
+          mkdir /tmp/fresh && cd /tmp/fresh && npm init -y
+          npm install "$GITHUB_WORKSPACE"/plugchat-*.tgz
+          npx plugchat init && npx plugchat doctor
+
+  starters:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.13' }
+      - uses: shivammathur/setup-php@v2
+        with: { php-version: '8.4' }
+      - uses: actions/setup-go@v5
+        with: { go-version: stable }
+      - uses: ruby/setup-ruby@v1
+        with: { ruby-version: '3.4' }
+      - run: gem install webrick
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: 8.0.x }
+      - run: npm ci
+      - name: Every starter against a real PlugChat
+        run: node starters/verify.mjs node python php go ruby java csharp
+      - name: A PHP site and PlugChat behind nginx
+        run: |
+          sudo apt-get update && sudo apt-get install -y nginx
+          sudo systemctl stop nginx
+          node examples/behind-proxy/run.mjs --check
+      - name: The React and Vue examples build
+        run: node examples/frameworks/build.mjs
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t plugchat .
+      - name: The container starts, answers and keeps its data in the volume
+        run: |
+          docker run -d --name chat -p 4400:4400 -v chat-data:/data -e PLUGCHAT_SECRET=ci-secret-ci-secret-ci-secret-0123456789 plugchat
+          for i in $(seq 1 30); do curl -fs http://127.0.0.1:4400/plugchat/health && break; sleep 1; done
+          curl -fs http://127.0.0.1:4400/plugchat/health
+          curl -fs http://127.0.0.1:4400/plugchat/client/element.js > /dev/null
+          docker exec chat ls /data/plugchat.db

@@ -11,7 +11,8 @@
 // Needs the `pg` package: npm install pg
 import { Worker, MessageChannel, receiveMessageOnPort } from 'node:worker_threads';
 
-const QUERY_TIMEOUT_MS = 30_000;
+// The database cancels a statement after 10 seconds; the server waits a little longer than that before giving up itself.
+const QUERY_TIMEOUT_MS = 12_000;
 // Tables whose id is assigned by the database and read back by the caller.
 const SERIAL_INSERT = /^\s*INSERT INTO (bus|audit|webhook_queue)\b/i;
 

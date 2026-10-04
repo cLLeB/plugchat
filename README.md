@@ -174,8 +174,12 @@ what the encryption does **not** yet protect against.
   hooks, events and plugins, storage, custom message types.
 - [docs/SIZING.md](docs/SIZING.md) — measured capacity of one server, and how to
   measure yours.
+- [docs/STABILITY.md](docs/STABILITY.md) — what an integration can rely on
+  across upgrades, enforced by a test.
 - [starters/](starters) — the backend half of the integration, runnable, in
   seven languages.
+- [examples/](examples) — a Node host, a PHP site behind nginx, and React and
+  Vue apps.
 - [docs/API.md](docs/API.md) — REST endpoints, realtime events, webhooks.
 - [docs/SECURITY.md](docs/SECURITY.md) — threat model and limits.
 
@@ -199,8 +203,12 @@ Stated plainly so you can plan around them:
   (with a mirrored right-to-left layout). The translations are mine and have
   not been reviewed by native speakers. Other languages are added by the host
   through `strings`.
+- **Never run on Linux.** Everything was developed and tested on Windows.
+  `.github/workflows/ci.yml` runs the tests (both databases), all starters,
+  the nginx deployment and the Docker build on Linux, but has not itself been
+  executed yet: it runs the first time the repository is pushed to GitHub.
 - **Not yet exercised here:** the Dockerfile (there is no Docker on the
-  development machine); S3 storage against a live bucket (request signing is
+  development machine); Angular and Svelte (React and Vue are); S3 storage against a live bucket (request signing is
   checked against Amazon's published example and a stand-in bucket); the mobile
   WebView wrappers and native bridges; and calls between two real devices on
   different networks (the call flow is tested in one browser with synthetic

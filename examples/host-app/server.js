@@ -90,6 +90,17 @@ const server = createServer(async (req, res) => {
     }).end(await readFile(here('./strict.html'), 'utf8'));
   } else if (url.pathname === '/strict.css') {
     res.writeHead(200, { 'content-type': 'text/css' }).end('html, body { margin: 0; height: 100%; } plug-chat { height: 100dvh; --pc-radius: 0; }');
+  } else if (url.pathname === '/frameworks/react' || url.pathname === '/frameworks/vue') {
+    // The chat as a React or Vue component (build first: node examples/frameworks/build.mjs).
+    if (!MEMBERS[sessionUser(req)]) return res.writeHead(302, { location: '/' }).end();
+    const name = url.pathname.split('/').pop();
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PlugChat in ${name}</title><style>body{margin:0;font:15px system-ui,sans-serif}#status{margin:0;padding:8px 14px;height:44px;box-sizing:border-box}</style><div id="root"></div><script type="module" src="/frameworks/dist/${name}.js"></script>`);
+  } else if (url.pathname.startsWith('/frameworks/dist/') && /^[\w.-]+\.js$/.test(url.pathname.slice(17))) {
+    try {
+      res.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'no-cache' }).end(await readFile(here(`../frameworks/dist/${url.pathname.slice(17)}`)));
+    } catch {
+      res.writeHead(404).end('run: node examples/frameworks/build.mjs');
+    }
   } else if (url.pathname === '/iframe' || url.pathname === '/widget') {
     // Two other ways to embed the same chat; see iframe.html and widget.html.
     if (!MEMBERS[sessionUser(req)]) return res.writeHead(302, { location: '/' }).end();

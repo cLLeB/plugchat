@@ -19,6 +19,7 @@ const ready = (async () => {
   client = new pg.Client({ connectionString: url });
   client.on('error', () => {}); // a dropped connection surfaces on the next query
   await client.connect();
+  await client.query('SET statement_timeout = 10000; SET lock_timeout = 5000');
   if (schema) {
     await client.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
     await client.query(`SET search_path TO "${schema}"`);

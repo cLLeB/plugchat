@@ -25,6 +25,9 @@ if 8080 is taken).
 2. **`POST /webhooks/plugchat`** receives events such as `message.new`, after
    checking the `x-plugchat-signature` header so nobody else can post to it.
    This is where you send your own push notifications or emails.
+3. **`POST /hooks/plugchat`** (optional) is asked before a message is stored
+   and can refuse it: the place for credit checks, moderation and your own
+   rules. Switch it on with `hookUrl` and `hookEvents: ["message.before"]`.
 
 ## Putting it in your own app
 
@@ -46,7 +49,8 @@ node starters/verify.mjs
 
 starts every starter whose language is installed on the machine and checks,
 against a real PlugChat, that the token is accepted as the right person, that
-a genuine webhook is accepted, and that forged and unsigned ones are refused.
+a genuine webhook is accepted and forged and unsigned ones refused, and that
+the hook lets an ordinary message through and vetoes one its rule refuses.
 Name starters to require them: `node starters/verify.mjs python go`.
 
 All seven pass this check as of October 2026, run with Node 24, Python 3.13,

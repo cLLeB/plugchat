@@ -242,7 +242,9 @@ textarea { scrollbar-width: none; flex: 1; resize: none; border: 0; outline: 0; 
 .menu button { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 10px; text-align: start; }
 .menu button:hover, .menu .sel { background: var(--pc-surface); }
 .menu svg { width: 18px; height: 18px; color: var(--pc-muted); }
-.emojis { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; max-height: 230px; overflow-y: auto; width: min(320px, 82vw); }
+/* The grid still scrolls (wheel, touch, keyboard); it just does not draw scroll bars. */
+.emojis { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 2px; max-height: 230px; overflow: hidden auto; scrollbar-width: none; width: min(320px, 82vw); }
+.emojis::-webkit-scrollbar { display: none; }
 .emojis .emoji { border-radius: 10px; width: 100%; height: 38px; }
 /* attach sheet: a grid of labelled, coloured circles */
 .sheet { position: absolute; inset-inline-start: 10px; bottom: calc(100% + 4px); z-index: 2; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 14px 12px; background: var(--pc-bg); border: 1px solid var(--pc-border); border-radius: 18px; box-shadow: 0 8px 28px rgba(16, 24, 40, .22); width: min(320px, calc(100% - 20px)); }
@@ -364,8 +366,8 @@ input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
 
 /* ---- emoji picker ---- */
 .emojipicker { display: flex; flex-direction: column; gap: 4px; width: min(336px, 84vw); }
-.emojitabs { display: flex; gap: 2px; border-bottom: 1px solid var(--pc-border); padding-bottom: 4px; overflow-x: auto; }
-.emojitabs .emoji { width: 38px; height: 34px; font-size: 18px; border-radius: 10px; flex: none; opacity: .6; }
+.emojitabs { display: flex; gap: 2px; border-bottom: 1px solid var(--pc-border); padding-bottom: 4px; overflow: hidden; }
+.emojitabs .emoji { flex: 1 1 0; min-width: 0; width: auto; height: 34px; font-size: 18px; border-radius: 10px; opacity: .6; }
 .emojitabs .emoji[aria-pressed="true"] { opacity: 1; background: var(--pc-surface); }
 .emojipicker .emojis { width: 100%; }
 .emojis .hint { grid-column: 1 / -1; font-size: 13px; padding: 20px 8px; }

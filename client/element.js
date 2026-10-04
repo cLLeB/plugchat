@@ -119,6 +119,8 @@ input[type="text"], input[type="search"], input[type="password"], select { font:
 .avatar { width: 40px; height: 40px; border-radius: 50%; flex: none; display: grid; place-items: center; font-weight: 600; color: #fff; position: relative; background-size: cover; background-position: center; font-size: 15px; }
 .avatar.sm { width: 28px; height: 28px; font-size: 11px; }
 .avatar .dot { position: absolute; inset-inline-end: -1px; bottom: -1px; width: 12px; height: 12px; border-radius: 50%; background: #2f9e44; border: 2px solid var(--pc-bg); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.bubble:focus-visible { outline: 2px solid var(--pc-accent); outline-offset: 2px; }
 .hint { color: var(--pc-muted); text-align: center; padding: 28px 16px; }
 
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
@@ -148,6 +150,9 @@ input[type="text"], input[type="search"], input[type="password"], select { font:
 .sender { font-size: 12px; font-weight: 600; color: var(--pc-accent); margin-bottom: 2px; }
 .tag { font-size: 11px; opacity: .75; display: flex; align-items: center; gap: 4px; margin-bottom: 2px; font-style: italic; }
 .tag svg { width: 12px; height: 12px; }
+button.sender { display: block; text-align: start; }
+button.sender:hover, .namebtn:hover { text-decoration: underline; }
+.namebtn { flex: 1; text-align: start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .linkbtn { color: var(--pc-accent); font-size: 12px; padding: 2px 4px; flex: none; }
 button.quote { display: block; text-align: start; color: inherit; }
 .quote { font-size: 12px; opacity: .8; border-inline-start: 3px solid currentColor; padding: 1px 8px; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
@@ -450,6 +455,12 @@ class PlugChatElement extends HTMLElement {
     this.$root.dir = this._dir;
     this.$dialog = h('dialog', { dir: this._dir });
     this.$dialog.addEventListener('click', (e) => e.target === this.$dialog && this.$dialog.close());
+    // Clicking anywhere else puts the pop-up menus away.
+    this.shadowRoot.addEventListener('click', (e) => {
+      if (e.target.closest('.menu, .composer > .icon')) return;
+      for (const menu of this.shadowRoot.querySelectorAll('.composer > .menu')) menu.hidden = true;
+      this._mention = null;
+    });
     this.shadowRoot.append(style, this.$root, this.$dialog);
   }
 
@@ -462,6 +473,7 @@ class PlugChatElement extends HTMLElement {
       if (m.conversationId === this.activeId) {
         this._clearTyping(m.conversationId, m.senderId);
         if (m.senderId !== chat.me.id && !this.$toBottom.hidden) this._below += 1;
+        if (m.senderId !== chat.me.id) this.$live.textContent = this._preview(this.convs.get(m.conversationId), m);
         this._renderMessages({ stick: true });
         this._markRead();
       }
@@ -771,7 +783,9 @@ class PlugChatElement extends HTMLElement {
     this.$header = h('div', { class: 'bar' });
     this.$pins = h('button', { class: 'pinbar', hidden: true });
     this.$notice = h('div', { class: 'notice', hidden: true, role: 'status' });
-    this.$msgs = h('div', { class: 'msgs', role: 'log', 'aria-live': 'polite' });
+    this.$msgs = h('div', { class: 'msgs', role: 'log' });
+    // Screen readers hear each new message once, from here, instead of the whole thread being re-read.
+    this.$live = h('div', { class: 'sr', 'aria-live': 'polite' });
     this.$typing = h('div', { class: 'typing' });
     this.$error = h('div', { class: 'error', hidden: true, role: 'alert' });
     this.$banner = h('div', { class: 'banner', hidden: true });
@@ -786,7 +800,10 @@ class PlugChatElement extends HTMLElement {
           return;
         }
         if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) (e.preventDefault(), this._submit());
-        if (e.key === 'Escape') this._setDraftMode(null);
+        if (e.key === 'Escape') {
+          for (const menu of [this.$menu, this.$emoji]) menu.hidden = true;
+          this._setDraftMode(null);
+        }
       },
       onpaste: (e) => {
         const file = [...(e.clipboardData?.files ?? [])][0];
@@ -818,7 +835,7 @@ class PlugChatElement extends HTMLElement {
       this.$input, this.$mic, this.$send,
     );
     this.$readonly = h('div', { class: 'hint', hidden: true }, T('Only admins can post in this channel.'));
-    fill(this.$main, this.$header, this.$pins, this.$notice, this.$msgs, this.$typing, this.$error, this.$banner, this.$composer, this.$readonly);
+    fill(this.$main, this.$header, this.$pins, this.$notice, this.$live, this.$msgs, this.$typing, this.$error, this.$banner, this.$composer, this.$readonly);
     this._renderHeader();
     this._renderComposerState();
     this.chat.pins(id).then((p) => this.activeId === id && ((this.pins = p), this._renderPins()), () => {});
@@ -993,7 +1010,7 @@ class PlugChatElement extends HTMLElement {
       else {
         const parent = m.replyTo && byId.get(m.replyTo);
         bubble = h('div', { class: `bubble${m.mentions?.includes(me) ? ' mention' : ''}` },
-          showAvatars && isFirst && h('div', { class: 'sender' }, name),
+          showAvatars && isFirst && h('button', { class: 'sender', onclick: () => this._profileDialog(m.senderId) }, name),
           m.forwarded && h('div', { class: 'tag' }, h('span', { icon: 'forward' }), T('Forwarded')),
           m.replyTo && h('button', { class: 'quote', onclick: () => this._jumpTo(m.replyTo) }, parent ? `${this._memberName(conv, parent.senderId)}: ${this._snippet(parent)}` : T('Earlier message')),
           this._content(m, conv, mine),
@@ -1026,6 +1043,11 @@ class PlugChatElement extends HTMLElement {
         ),
         !m.deleted && !m.undecryptable && !m.pending && this._actions(m, mine, conv),
       );
+      // Keyboard users open a message's actions with Enter or Space.
+      bubble.tabIndex = 0;
+      bubble.addEventListener('keydown', (e) => {
+        if (e.target === bubble && (e.key === 'Enter' || e.key === ' ')) (e.preventDefault(), row.classList.toggle('active'));
+      });
       bubble.addEventListener('click', (e) => {
         if (e.target.closest('a, button, audio, video')) return;
         for (const el of box.querySelectorAll('.row.active')) if (el !== row) el.classList.remove('active');
@@ -1047,6 +1069,36 @@ class PlugChatElement extends HTMLElement {
       box.scrollTop = nearBottom ? box.scrollHeight : box.scrollHeight - keep;
     }
     this._onScroll();
+  }
+
+  /** A person's card: who they are, whether they are around, and what you can do. */
+  async _profileDialog(userId) {
+    if (userId === this.chat.me.id) return this._settingsDialog();
+    let user;
+    try {
+      user = await this.chat.user(userId);
+    } catch (e) {
+      return this._error(e.message);
+    }
+    const blocked = (await this.chat.blocked().catch(() => [])).includes(userId);
+    const $err = h('div', { class: 'error', hidden: true, role: 'alert' });
+    const run = (p) => p.then(() => this.$dialog.close(), (e) => (($err.textContent = e.message), ($err.hidden = false)));
+    this._openDialog(h('div', { class: 'panel' },
+      this._dialogTitle(T('Profile')),
+      h('div', { class: 'storyview' },
+        this._avatar(user.name, user.avatar, { online: user.online }),
+        h('strong', {}, user.name),
+        h('small', {}, user.online ? T('Online') : user.lastSeen ? T('Last seen {when}', { when: shortWhen(user.lastSeen) }) : T('Offline')),
+        // Shown only when the platform chose to make identifiers visible.
+        Object.values(user.handles ?? {}).map((value) => h('small', {}, value))),
+      $err,
+      h('button', { class: 'btn', onclick: () => run(this.chat.openDm(userId, { encrypted: !!this.chat.me.features?.requireEncryption }).then((conv) => {
+        this.convs.set(conv.id, conv);
+        return this._select(conv.id);
+      })) }, T('Send a message')),
+      h('button', { class: 'btn warn', onclick: () => run(blocked ? this.chat.unblock(userId) : this.chat.block(userId)) },
+        blocked ? T('Unblock {name}', { name: user.name }) : T('Block {name}', { name: user.name })),
+    ));
   }
 
   _emojiGrid(onPick) {
@@ -1662,7 +1714,8 @@ class PlugChatElement extends HTMLElement {
       isGroup && !canManage && conv.description && h('div', { class: 'field' }, conv.description),
       h('div', { class: 'people' }, conv.members.map((m) =>
         h('div', { class: 'person' }, this._avatar(m.name, m.avatar, { small: true, online: this.chat.online.has(m.userId) }),
-          h('span', {}, m.userId === me ? T('{name} (you)', { name: m.name }) : m.name), m.role !== 'member' && h('small', {}, T(m.role)),
+          m.userId === me ? h('span', {}, T('{name} (you)', { name: m.name })) : h('button', { class: 'namebtn', onclick: () => this._profileDialog(m.userId) }, m.name),
+          m.role !== 'member' && h('small', {}, T(m.role)),
           isOwner && m.userId !== me && h('button', { class: 'linkbtn', onclick: () => run(this.chat.setRole(conv.id, m.userId, m.role === 'admin' ? 'member' : 'admin'), true) }, m.role === 'admin' ? T('Remove admin') : T('Make admin')),
           isOwner && m.userId !== me && h('button', { class: 'linkbtn', onclick: () => run(this.chat.setRole(conv.id, m.userId, 'owner'), true) }, T('Make owner')),
           isGroup && canManage && m.userId !== me && m.role !== 'owner'

@@ -48,7 +48,7 @@ parentPort.on('message', async (job) => {
   } catch (e) {
     reply = { error: e.message, code: e.code };
   }
-  port.postMessage(reply);
+  port.postMessage({ ...reply, id: job.id });
   Atomics.store(flag, 0, 1);
   Atomics.notify(flag, 0);
 });

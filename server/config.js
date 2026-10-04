@@ -148,6 +148,17 @@ export function review(options, { port } = {}) {
     const missing = ['bucket', 'accessKeyId', 'secretAccessKey'].filter((key) => !options.storage[key]);
     say(missing.length ? 'FAIL' : 'ok', missing.length ? `S3 storage is missing: ${missing.join(', ')}` : `Uploads go to the bucket "${options.storage.bucket}"`);
   }
+  if (options.database) {
+    const url = typeof options.database === 'string' ? options.database : options.database.url;
+    let where = 'PostgreSQL';
+    try {
+      const u = new URL(url);
+      where = `PostgreSQL at ${u.host}${u.pathname}`; // never the password
+    } catch {
+      say('FAIL', 'database is not a valid postgres:// URL');
+    }
+    say('ok', `Data is kept in ${where} (back it up with pg_dump)`);
+  }
   if (options.studio) say('warn', `The setup studio is on${options.studio === 'remote' ? ' and reachable from other machines' : ''}: it can sign in as test users. Switch it off in production.`);
   if (port !== undefined && (!Number.isInteger(port) || port < 0 || port > 65535)) say('FAIL', `port ${port} is not a valid port`);
   return out;

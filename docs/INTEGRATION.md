@@ -95,10 +95,31 @@ await chat.admin.suspend(user.id, 'Suspended for spam');
 `chat.api(method, path, body)` reaches every other JSON endpoint the same way.
 From other languages, call the same endpoints over HTTP with an admin token.
 
+### Choosing the database
+
+By default everything is in one SQLite file in the data folder: nothing to
+install, and the fastest option for a single server ([SIZING.md](SIZING.md)).
+
+If your platform already runs PostgreSQL, or you want several PlugChat
+instances on different machines, point it at your database instead:
+
+```bash
+npm install pg
+```
+
+```json
+{ "database": { "url": "postgres://chat:secret@db.internal:5432/platform", "schema": "chat" } }
+```
+
+PlugChat creates its tables on first start (in the schema you name, so they
+stay apart from your own). The same code and the same test suite run on both
+databases. Back a PostgreSQL deployment up with `pg_dump`; uploads stay in the
+data folder or your bucket.
+
 ### More than one instance
 
 Start each instance with `cluster: true` (or `PLUGCHAT_CLUSTER=on`) pointing at
-the same data directory. A message sent through one reaches people connected
+the same PostgreSQL database, or at the same data directory when using SQLite. A message sent through one reaches people connected
 to another, and presence is shared. Events travel through the shared database,
 polled a few times a second, so no extra infrastructure is needed; pass your
 own `bus` to use Redis or similar instead. Rate limits are counted per instance.
@@ -152,6 +173,7 @@ with the token's `sub` and are visible in the moderation console and at
 | `webhookEvents` | `PLUGCHAT_WEBHOOK_EVENTS` | `message.new`, `message.reported`, `call.started` | Which events go to `webhookUrl` |
 | `plugins` | — | none | Functions that receive the running chat (Node) |
 | `studio` | `PLUGCHAT_STUDIO=on` | off | Serve the setup studio at `/plugchat/studio`. For development: it answers only the machine it runs on unless set to `remote` |
+| `database` | `PLUGCHAT_DATABASE_URL` | a SQLite file in `dataDir` | Keep the data in your own PostgreSQL: `postgres://user:password@host:5432/dbname`, or `{ "url": "…", "schema": "chat" }` to give PlugChat its own schema. Needs `npm install pg` |
 | `port`, `host` | `PORT`, `HOST` | 4400, all interfaces | Where the side service listens |
 | `hooks`, `hookUrl`, `hookEvents`, `hookFailOpen` | `PLUGCHAT_HOOK_URL`, `PLUGCHAT_HOOK_EVENTS`, `PLUGCHAT_HOOK_FAIL_OPEN=on` | none | Your billing, moderation and call-vendor hooks |
 

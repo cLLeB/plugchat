@@ -25,6 +25,27 @@ machine using real HTTP requests and real WebSocket connections.
 
 At rest, with nobody connected, the process uses about 55 MB.
 
+### With PostgreSQL instead of SQLite
+
+The same test with 2,000 people connected and PostgreSQL 17 on the same
+machine:
+
+| | SQLite | PostgreSQL |
+|---|---|---|
+| Messages stored and delivered per second | 1,355 | 357 |
+| A message is stored and acknowledged (half / 99%) | 44 ms / 105 ms | 182 ms / 236 ms |
+| A message to a group of 500 reaches everyone | 16 ms | 16 ms |
+| Loading the last 50 messages (95%) | 13 ms | 30 ms |
+| Memory with 2,000 connected | 84 MB | 158 MB |
+
+PostgreSQL is about a quarter of the speed per message, because every query
+crosses a connection instead of being a call into a local file, and PlugChat
+uses one connection per instance. It is still fifteen times the average load
+of the 50,000-person example below. Choose it for what it gives you (your
+existing database, your existing backups, instances on several machines), not
+for speed. Raw output: [`bench/results-postgres.json`](../bench/results-postgres.json).
+Measure your own with `BENCH_DATABASE=postgres://… node bench/load.mjs`.
+
 The raw output is in [`bench/results.json`](../bench/results.json) and
 [`bench/results-large.json`](../bench/results-large.json).
 
@@ -79,8 +100,8 @@ In the order to try them:
    disk only holds the database.
 3. **A retention period** (`retentionDays`) if your platform does not need
    messages kept forever: the database stops growing.
-4. **Several instances** (`cluster: true`) when they can share the database
-   file. This spreads connections, not writes.
+4. **Several instances** (`cluster: true`) sharing one PostgreSQL database, or
+   one SQLite file on the same machine. This spreads connections, not writes.
 
 ## Disk
 

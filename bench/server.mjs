@@ -6,7 +6,10 @@ import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { createPlugChat } from '../server/index.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'plugchat-bench-'));
-const chat = createPlugChat({ secret: process.env.PLUGCHAT_SECRET, dataDir: dir, rateLimit: { perSecond: 1e6, burst: 1e6 }, log: { error() {} } });
+// BENCH_DATABASE=postgres://... measures PostgreSQL instead of SQLite, in a schema of its own that is dropped afterwards.
+const schema = `bench_${Date.now().toString(36)}`;
+const database = process.env.BENCH_DATABASE ? { url: process.env.BENCH_DATABASE, schema } : undefined;
+const chat = createPlugChat({ secret: process.env.PLUGCHAT_SECRET, dataDir: dir, database, rateLimit: { perSecond: 1e6, burst: 1e6 }, log: { error() {} } });
 const server = await chat.listen(0, '127.0.0.1');
 const lag = monitorEventLoopDelay({ resolution: 10 });
 lag.enable();
@@ -19,6 +22,7 @@ process.on('message', (message) => {
   if (message === 'stop') {
     server.close();
     server.closeAllConnections();
+    if (database) chat.store.db.exec(`DROP SCHEMA "${schema}" CASCADE`);
     chat.close();
     rmSync(dir, { recursive: true, force: true });
     process.exit(0);

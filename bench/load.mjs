@@ -174,7 +174,7 @@ const end = await stats();
 const results = {
   when: new Date().toISOString(),
   machine: { cpu: cpus()[0].model.trim(), cores: cpus().length, memoryGB: Math.round(totalmem() / 2 ** 30), os: `${platform()} ${release()}`, node: process.version },
-  settings: { connections: CONNECTIONS, senders: SENDERS, seconds: SECONDS, group: GROUP },
+  settings: { connections: CONNECTIONS, senders: SENDERS, seconds: SECONDS, group: GROUP, database: process.env.BENCH_DATABASE ? 'postgres' : 'sqlite' },
   connections: { count: CONNECTIONS, secondsToOpen: +openSeconds.toFixed(2), memoryAtRestMB: Math.round(idle.rss / 1048576), memoryConnectedMB: Math.round(connected.rss / 1048576), kbPerConnection: Math.round(perConnection / 1024) },
   messaging: { perSecond: Math.round(rate), stored: answers.length, failed, acknowledgedMs: answered, deliveredMs: delivered, serverLagP99Ms: +busy.lagP99.toFixed(1), memoryMB: Math.round(busy.rss / 1048576) },
   group: { members: GROUP, reachEveryoneMs: spread, slowestMs: +Math.max(...fanout).toFixed(1) },

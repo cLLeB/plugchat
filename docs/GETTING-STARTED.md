@@ -168,6 +168,7 @@ checks the settings and says what must be fixed. The short list:
 - `origins` set to your real site
 - `studio` off
 - HTTPS in front of it (your existing reverse proxy)
+- the database: the built-in SQLite file, or your own PostgreSQL (`database`)
 - the data folder on a disk that is backed up (`plugchat backup <folder>` makes
   a consistent copy while it runs)
 - [SIZING.md](SIZING.md) for what one server handles

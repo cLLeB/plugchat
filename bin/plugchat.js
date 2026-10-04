@@ -94,7 +94,11 @@ Next:
   const { Store } = await import('../server/store.js');
   const { cpSync, existsSync, mkdirSync } = await import('node:fs');
   const { join, resolve } = await import('node:path');
-  const { dataDir } = settings().options;
+  const { dataDir, database } = settings().options;
+  if (database) {
+    console.error('This PlugChat keeps its data in PostgreSQL: back it up with pg_dump. (Uploads are in the data folder or your bucket.)');
+    process.exit(1);
+  }
   const dest = args[0] && resolve(args[0]);
   if (!dest || !existsSync(join(dataDir, 'plugchat.db'))) {
     console.error(dest ? `No database found in ${resolve(dataDir)} (set PLUGCHAT_DATA).` : 'usage: plugchat backup <destination folder>');

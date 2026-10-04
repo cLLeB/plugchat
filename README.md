@@ -183,12 +183,11 @@ what the encryption does **not** yet protect against.
 
 Stated plainly so you can plan around them:
 
-- **SQLite storage only.** Data lives in one file on your server. Several
-  PlugChat instances can share it (`cluster: true`) when they can all reach the
-  same file, which in practice means the same machine or a volume that supports
-  SQLite locking. There is no Postgres or MySQL backend: all SQL is in
-  `server/store.js`, but it is written against a synchronous API and has not
-  been ported.
+- **Two databases.** SQLite (the default: one file on your server, nothing to
+  install) or your own PostgreSQL (`database`), which also lets instances on
+  different machines share their data. The whole test suite passes on both.
+  PostgreSQL is slower per message here because each query is a network round
+  trip (see [docs/SIZING.md](docs/SIZING.md)). There is no MySQL backend.
 - **Encryption trusts the server's device list** unless members compare safety
   codes, and has no forward secrecy within a key epoch. See the security doc.
 - **Built-in calls are one-to-one**, and need a TURN server of yours to connect

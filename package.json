@@ -55,6 +55,7 @@
     "start": "node bin/plugchat.js start",
     "demo": "node examples/host-app/server.js",
     "test": "node --test --test-timeout=20000 --test-force-exit",
+    "test:postgres": "node --test --test-timeout=30000 --test-force-exit --test-concurrency=1",
     "check:types": "tsc -p .",
     "verify:starters": "node starters/verify.mjs",
     "bench": "node bench/load.mjs",

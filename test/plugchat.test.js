@@ -936,10 +936,15 @@ test('admin actions are audited; backup and doctor commands work', async () => {
 
   const cli = fileURLToPath(new URL('../bin/plugchat.js', import.meta.url));
   const envFor = (extra) => ({ ...process.env, PLUGCHAT_DATA: join(d, 'data'), ...extra });
-  execFileSync(process.execPath, [cli, 'backup', join(d, 'copy')], { env: envFor({}) });
-  assert.ok(existsSync(join(d, 'copy', 'plugchat.db')));
-  assert.ok(readFileSync(join(d, 'copy', 'plugchat.db')).length > 4096);
-  assert.equal(spawnSync(process.execPath, [cli, 'backup', join(d, 'copy')], { env: envFor({}) }).status, 1, 'never overwrites an existing backup');
+  if (inst.store.postgres) {
+    // With PostgreSQL the database's own tools do this job.
+    assert.throws(() => inst.store.backupTo(join(d, 'copy.db')), /pg_dump/);
+  } else {
+    execFileSync(process.execPath, [cli, 'backup', join(d, 'copy')], { env: envFor({}) });
+    assert.ok(existsSync(join(d, 'copy', 'plugchat.db')));
+    assert.ok(readFileSync(join(d, 'copy', 'plugchat.db')).length > 4096);
+    assert.equal(spawnSync(process.execPath, [cli, 'backup', join(d, 'copy')], { env: envFor({}) }).status, 1, 'never overwrites an existing backup');
+  }
 
   const good = spawnSync(process.execPath, [cli, 'doctor'], { env: envFor({ PLUGCHAT_SECRET: SECRET, PLUGCHAT_ORIGINS: 'https://example.com' }), encoding: 'utf8' });
   assert.equal(good.status, 0, good.stdout);

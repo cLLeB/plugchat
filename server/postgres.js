@@ -59,11 +59,19 @@ export class PostgresDatabase {
 
   /** Send one job to the worker and wait for its answer. */
   _call(job) {
+    // After close() there is nobody to answer: fail at once, as a closed SQLite database does.
+    if (this._closed) throw new Error('PlugChat: the database is closed');
+    const id = (this._jobs = (this._jobs ?? 0) + 1);
     Atomics.store(this._flag, 0, 0);
-    this._worker.postMessage(job);
-    if (Atomics.wait(this._flag, 0, 0, QUERY_TIMEOUT_MS) === 'timed-out') throw new Error('PlugChat: the database did not answer in time');
-    const reply = receiveMessageOnPort(this._port)?.message;
-    if (!reply) throw new Error('PlugChat: the database connection was lost');
+    this._worker.postMessage({ ...job, id });
+    let reply;
+    // An answer to an earlier question that timed out may still arrive: skip anything that is not for this one.
+    while (reply?.id !== id) {
+      reply = receiveMessageOnPort(this._port)?.message;
+      if (reply) continue;
+      if (Atomics.wait(this._flag, 0, 0, QUERY_TIMEOUT_MS) === 'timed-out') throw new Error('PlugChat: the database did not answer in time');
+      Atomics.store(this._flag, 0, 0);
+    }
     if (reply.error) throw Object.assign(new Error(`PlugChat database: ${reply.error}`), { code: reply.code });
     return reply;
   }
@@ -92,6 +100,7 @@ export class PostgresDatabase {
     } catch {
       // already gone
     }
+    this._closed = true;
     this._worker.terminate();
     this._port.close();
   }

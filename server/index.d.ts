@@ -131,6 +131,8 @@ export interface PlugChatServerOptions {
   webhookEvents?: EventName[];
   /** Functions that receive the running chat: listen to events, call the API, post messages. */
   plugins?: ((chat: PlugChatServer) => void)[];
+  /** Keep the data in your own PostgreSQL instead of a SQLite file: a connection URL, or { url, schema }. Needs the `pg` package. */
+  database?: string | { url: string; schema?: string };
   /** Serve the setup studio at <basePath>/studio. For development: 'local' (default when true) answers only this machine. */
   studio?: boolean | 'local' | 'remote';
   hooks?: Hooks;

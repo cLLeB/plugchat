@@ -6,7 +6,7 @@
   <title>Alumni Association — Members</title>
   <style>
     :root { --brand: #0b3d2e; --accent: #0b6b4f; --page: #f2f4f3; --card: #fff; --ink: #14201b; --soft: #5f6f68; --line: #dfe5e2; }
-    @media (prefers-color-scheme: dark) { :root { --brand: #0c2a21; --accent: #1f8f6a; --page: #0f1211; --card: #191d1b; --ink: #e8eeeb; --soft: #9aa8a2; --line: #2a302d; } }
+    :root[data-theme="dark"] { --brand: #0c2a21; --accent: #1f8f6a; --page: #0f1211; --card: #191d1b; --ink: #e8eeeb; --soft: #9aa8a2; --line: #2a302d; }
     * { box-sizing: border-box; }
     body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--page); color: var(--ink); }
 
@@ -97,6 +97,9 @@
     who.addEventListener('change', () => (location.href = `/login?as=${who.value}`));
 
     const chatEl = document.querySelector('plug-chat');
+    // The page around the chat follows the chat's light/dark switch.
+    document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    chatEl.addEventListener('plugchat:theme', (e) => (document.documentElement.dataset.theme = e.detail.theme));
     chatEl.addEventListener('plugchat:unread', (e) => {
       document.getElementById('unread').textContent = e.detail.count || '';
     });

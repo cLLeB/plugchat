@@ -51,6 +51,8 @@ const ICON = {
   camera: svg('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>'),
   clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   archive: svg('<path d="M3 5h18v4H3zM5 9v10h14V9M10 13h4"/>'),
+  sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/>'),
+  moon: svg('<path d="M20 14.5A8.5 8.5 0 019.5 4a7 7 0 1010.5 10.5z"/>'),
   copy: svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/>'),
   star: svg('<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z"/>'),
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>'),
@@ -293,8 +295,9 @@ class PlugChatElement extends HTMLElement {
       h('aside', { class: 'side' },
         h('div', { class: 'bar' },
           (this.$heading = h('h2', {}, this.getAttribute('heading') ?? T('Chats'))),
+          (this.$theme = h('button', { class: 'icon', onclick: () => this._setTheme(this._dark() ? 'light' : 'dark') })),
           h('button', { class: 'icon', icon: 'gear', title: T('Settings'), 'aria-label': T('Settings'), onclick: () => this._settingsDialog() }),
-          h('button', { class: 'icon', icon: 'plus', title: T('New chat'), 'aria-label': T('New chat'), onclick: () => this._newChatDialog() }),
+          h('button', { class: 'icon newbtn', icon: 'plus', title: T('New chat'), 'aria-label': T('New chat'), onclick: () => this._newChatDialog() }),
         ),
         h('div', { class: 'find' }, h('input', { type: 'search', placeholder: T('Search chats and messages'), 'aria-label': T('Search chats and messages'),
           oninput: (e) => {
@@ -312,7 +315,10 @@ class PlugChatElement extends HTMLElement {
     this.$root.dir = this._dir;
     this.$dialog = h('dialog', { dir: this._dir });
     this.$toast = h('div', { class: 'toast', hidden: true, role: 'status' });
-    this.$root.append(this.$toast);
+    this.$net = h('div', { class: 'net', hidden: true, role: 'status' }, h('span', { class: 'spin' }), T('Connecting…'));
+    this.$root.append(this.$toast, this.$net);
+    this._hostTheme = this.getAttribute('theme');
+    this._setTheme(this._themeChoice(), false);
     this._holdable(this.$list, (e) => {
       const conv = this.convs.get(e.target.closest('.conv[data-id]')?.dataset.id);
       if (conv) this._chatSheet(conv);
@@ -342,6 +348,7 @@ class PlugChatElement extends HTMLElement {
         this._markRead();
       }
       if (m.senderId !== chat.me.id) this._notify(m);
+      if (m.conversationId !== this.activeId) this._renderHeader();
       if (m.kind === 'call' && m.senderId !== chat.me.id && Date.now() - m.createdAt < 45_000) this._ring(m);
       this._announceUnread();
       if (m.senderId !== chat.me.id) this.dispatchEvent(new CustomEvent('plugchat:message', { detail: { message: m } }));
@@ -413,6 +420,8 @@ class PlugChatElement extends HTMLElement {
     });
     for (const type of ['story.new', 'story.deleted', 'story.viewed']) chat.on(type, () => this._loadStories());
     chat.on('connection', (e) => {
+      // Say so while the link to the server is down; messages typed meanwhile wait with a retry.
+      this.$net.hidden = e.state === 'connected';
       if (!e.reconnected) return;
       // Catch up on whatever happened while we were offline.
       this.msgs.clear();
@@ -738,6 +747,45 @@ class PlugChatElement extends HTMLElement {
     if (navigator.mediaDevices && globalThis.MediaRecorder) this._startRecording();
   }
 
+  // ---- appearance: follow the device, or a choice the person made here ----
+
+  _themeChoice() {
+    try {
+      const saved = localStorage.getItem('plugchat:theme');
+      return saved === 'light' || saved === 'dark' ? saved : 'system';
+    } catch {
+      return 'system';
+    }
+  }
+
+  /** Is the dark look showing right now? */
+  _dark() {
+    const set = this.getAttribute('theme');
+    return set ? set === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+
+  /** 'light', 'dark', or 'system' to go back to whatever the host page or the device says. */
+  _setTheme(choice, remember = true) {
+    if (remember) {
+      try {
+        if (choice === 'system') localStorage.removeItem('plugchat:theme');
+        else localStorage.setItem('plugchat:theme', choice);
+      } catch {
+        // no storage: the choice lasts until the page reloads
+      }
+    }
+    const theme = choice === 'system' ? this._hostTheme : choice;
+    if (theme) this.setAttribute('theme', theme);
+    else this.removeAttribute('theme');
+    const dark = this._dark();
+    this.$theme.innerHTML = ICON[dark ? 'sun' : 'moon'];
+    const label = dark ? T('Switch to light') : T('Switch to dark');
+    this.$theme.title = label;
+    this.$theme.setAttribute('aria-label', label);
+    // Lets the page around the chat follow, if it wants to.
+    this.dispatchEvent(new CustomEvent('plugchat:theme', { detail: { theme: dark ? 'dark' : 'light', choice } }));
+  }
+
   /** Is the single-pane (phone) layout showing? */
   _narrow() {
     return this.$root.clientWidth <= 700;
@@ -1030,6 +1078,7 @@ class PlugChatElement extends HTMLElement {
     this.$banner = h('div', { class: 'extras', hidden: true });
     this.$input = h('textarea', { rows: '1', placeholder: T('Message'), 'aria-label': T('Message'),
       oninput: () => (this._onInput(), this._mentionLookup()),
+      onfocus: () => setTimeout(() => this.$msgs.scrollHeight - this.$msgs.scrollTop - this.$msgs.clientHeight < 400 && (this.$msgs.scrollTop = this.$msgs.scrollHeight), 300),
       onkeydown: (e) => {
         if (this._mention && this._mentionKey(e)) return;
         // Arrow-up in an empty box edits your last message, as people expect.
@@ -1068,10 +1117,16 @@ class PlugChatElement extends HTMLElement {
     this.$action = h('button', { class: 'action', type: 'submit', icon: 'mic' });
     this.$composer = h('form', { class: 'composer', onsubmit: (e) => (e.preventDefault(), this._primary()) },
       this.$file, this.$menu, this.$mentions, this.$toBottom, this.$emoji,
-      h('button', { class: 'icon attach', icon: 'plus', type: 'button', title: T('Attach'), 'aria-label': T('Attach'), 'aria-haspopup': 'menu', onclick: () => this._toggleMenu() }),
       h('div', { class: 'pill' },
         h('button', { class: 'icon', icon: 'smile', type: 'button', title: T('Emoji'), 'aria-label': T('Emoji'), onclick: () => (this.$emoji.hidden = !this.$emoji.hidden) }),
-        this.$input),
+        this.$input,
+        h('button', { class: 'icon attach', icon: 'clip', type: 'button', title: T('Attach'), 'aria-label': T('Attach'), 'aria-haspopup': 'menu', onclick: () => this._toggleMenu() }),
+        // Straight to the phone's camera; hidden once there is text, to leave room for it.
+        h('button', { class: 'icon cambtn', icon: 'camera', type: 'button', title: T('Camera'), 'aria-label': T('Camera'), onclick: () => this.$camera.click() }),
+        (this.$camera = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: () => {
+          this._attach(this.$camera.files);
+          this.$camera.value = '';
+        } }))),
       this.$rec, this.$action,
     );
     this.$readonly = h('div', { class: 'hint', hidden: true }, T('Only admins can post in this channel.'));
@@ -1164,6 +1219,9 @@ class PlugChatElement extends HTMLElement {
       canCall && h('button', { class: 'icon', icon: 'phone', title: T('Voice call'), 'aria-label': T('Voice call'), onclick: () => this._call(conv, other, false) }),
       h('button', { class: 'icon', icon: 'more', title: T('Conversation details'), 'aria-label': T('Conversation details'), onclick: () => this._detailsDialog(conv) }),
     );
+    // On a phone the list is out of sight, so the back arrow carries the count of what is waiting there.
+    const waiting = [...this.convs.values()].reduce((n, c) => n + (c.id !== conv.id && !c.muted ? c.unread : 0), 0);
+    if (waiting) this.$header.querySelector('.backbtn').append(h('span', { class: 'badge' }, waiting > 99 ? '99+' : String(waiting)));
   }
 
   _renderPins() {
@@ -1693,6 +1751,7 @@ class PlugChatElement extends HTMLElement {
     const sending = !!this._rec || !!el.value.trim() || !!this.pendingFile || !canRecord;
     this.$action.innerHTML = ICON[sending ? 'send' : 'mic'];
     this.$action.disabled = sending && !this._rec && !el.value.trim() && !this.pendingFile;
+    this.$composer.classList.toggle('typing', !!el.value.trim());
     const label = this._rec ? T('Send voice message') : sending ? T('Send') : T('Record a voice note');
     this.$action.title = label;
     this.$action.setAttribute('aria-label', label);
@@ -2407,6 +2466,13 @@ class PlugChatElement extends HTMLElement {
         me.avatar?.startsWith('pc:') && h('button', { class: 'linkbtn', onclick: () => run(this.chat.removeAvatar().then(() => this._settingsDialog())) }, T('Remove photo'))),
       h('div', { class: 'inline' }, $about,
         h('button', { class: 'btn plain', onclick: () => run(this.chat.setAbout($about.value).then(() => this._toast(T('Saved')))) }, T('Save'))),
+
+      h('div', { class: 'group' }, h('h4', {}, T('Appearance')),
+        h('div', { class: 'seg', role: 'radiogroup', 'aria-label': T('Appearance') }, [['system', T('Automatic')], ['light', T('Light')], ['dark', T('Dark')]].map(([key, label]) =>
+          h('button', { role: 'radio', 'aria-checked': String(this._themeChoice() === key), onclick: (e) => {
+            this._setTheme(key);
+            for (const b of e.currentTarget.parentElement.children) b.setAttribute('aria-checked', String(b === e.currentTarget));
+          } }, label)))),
 
       h('div', { class: 'group' }, h('h4', {}, T('Privacy')),
         row(T('Send read receipts'), privacy.readReceipts, (v) => this.chat.setPrivacy({ readReceipts: v }), T('Others see when you have read their messages.')),

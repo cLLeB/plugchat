@@ -334,6 +334,18 @@ label.field, .field { font-size: 13px; color: var(--pc-muted); display: flex; fl
 .row.new .col { animation: pc-in .2s ease-out; }
 @keyframes pc-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
 
+/* ---- appearance switch, connection state, composer details ---- */
+.seg { display: flex; gap: 4px; background: var(--pc-bg); border-radius: 12px; padding: 4px; margin: 6px 0 12px; }
+.seg button { flex: 1; padding: 8px 6px; border-radius: 9px; font-size: 14px; font-weight: 500; color: var(--pc-muted); }
+.seg button[aria-checked="true"] { background: var(--pc-accent); color: var(--pc-accent-fg); }
+.net { position: absolute; top: 10px; inset-inline: 0; margin: 0 auto; width: max-content; display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 16px; background: var(--pc-fg); color: var(--pc-bg); font-size: 13px; z-index: 6; box-shadow: 0 4px 14px rgba(16, 24, 40, .25); }
+.spin { width: 12px; height: 12px; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; animation: pc-spin .8s linear infinite; }
+@keyframes pc-spin { to { transform: rotate(360deg); } }
+.pill .icon { width: 38px; height: 38px; margin-bottom: 1px; }
+.cambtn { display: none; }
+.conv:active, .person:active, .setrow.link:active { background: var(--pc-surface); }
+.msgs { background-image: radial-gradient(color-mix(in srgb, var(--pc-fg) 6%, transparent) 1px, transparent 1.4px); background-size: 20px 20px; }
+
 /* ---- small confirmations, and the new-chat button on phones ---- */
 .toast { position: absolute; inset-inline: 0; bottom: 84px; margin: 0 auto; width: max-content; max-width: 80%; padding: 9px 16px; border-radius: 20px; background: color-mix(in srgb, var(--pc-fg) 92%, transparent); color: var(--pc-bg); font-size: 14px; z-index: 6; box-shadow: 0 6px 20px rgba(16, 24, 40, .25); animation: pc-in .16s ease-out; pointer-events: none; }
 .side { position: relative; }
@@ -428,7 +440,8 @@ dialog .emojipicker { width: 100%; }
   .main { display: none; }
   .root.open .side { display: none; }
   .root.open .main { display: flex; }
-  .backbtn { display: inline-grid; }
+  .backbtn { display: inline-flex; align-items: center; width: auto; min-width: 40px; padding-inline: 6px 2px; border-radius: 20px; }
+  .backbtn .badge { margin-inline-start: -2px; }
   .col { max-width: 84%; }
   .msgs { padding-inline: 10px; }
   .acts { display: none; }
@@ -436,7 +449,21 @@ dialog .emojipicker { width: 100%; }
   .menu { inset-inline: 8px; }
   .emojis { width: 100%; }
   .fab { display: grid; }
+  .newbtn { display: none; } /* the floating button does this job on a phone */
+  .cambtn { display: inline-grid; }
+  .composer.typing .cambtn { display: none; }
   .list { padding-bottom: 84px; }
+  /* room for the notch and the home indicator when the chat fills the screen */
+  .side > .bar, .main > .bar { padding-top: calc(8px + env(safe-area-inset-top, 0px)); }
+  .bubble { font-size: 16px; }
+  .meta { font-size: 11px; }
+  .conv { padding: 10px 12px; border-radius: 0; }
+  .list { padding-inline: 0; }
+  .conv .body { border-bottom: 1px solid var(--pc-border); padding-bottom: 10px; margin-bottom: -10px; }
+  .main > .bar { gap: 0; padding-inline: 4px; }
+  .who { padding-inline: 2px; gap: 8px; }
+  .composer { padding-inline: 8px; }
+  .row .acts { display: none; }
   .toast { bottom: 76px; }
   /* 16px inputs stop phones zooming the page when a field is focused */
   textarea, input[type="text"], input[type="search"], input[type="password"], input[type="datetime-local"], select { font-size: 16px; }

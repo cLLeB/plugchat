@@ -265,7 +265,7 @@ session your site already has. Give the element a height with CSS.
 | `peer-handle` | Same, by email, phone or username |
 | `invite` | Join a group by invite code on load, e.g. from your own `/join/CODE` links |
 | `heading` | Sidebar title |
-| `theme` | `light` or `dark`; follows the system by default |
+| `theme` | `light` or `dark`; follows the system by default. People can also switch it themselves (the sun/moon button, or Appearance in settings); their choice is remembered on that device and announced with a `plugchat:theme` event (`detail.theme`) so your page can match |
 | `lang` | Interface language: `en`, `fr`, `es`, `pt` or `ar`. Defaults to the page's `<html lang>` |
 | `dir` | `rtl` or `ltr`. Right-to-left is chosen automatically for Arabic, Hebrew, Persian and Urdu `lang` values |
 | `e2ee`, `calls`, `stories` | Set to `off` to hide that feature |

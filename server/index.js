@@ -170,6 +170,7 @@ export function createPlugChat(options = {}) {
     maxTokenLifetimeSeconds = 86_400,
     cluster = false,
     retentionDays = 0,
+    schedulePollMs = 5000,
     webhookRetryBaseMs = 5000,
     bus: customBus,
     userStorageBytes = 0,
@@ -332,6 +333,31 @@ export function createPlugChat(options = {}) {
       }
     }
   }
+
+  // Scheduled messages go out as their author, through the same checks as if
+  // they had pressed send at that moment (hooks, blocks, suspension, key epoch).
+  const schedulePump = setInterval(async () => {
+    let due = [];
+    try {
+      due = store.claimDueScheduled();
+    } catch {
+      return; // database closed during shutdown
+    }
+    for (const job of due) {
+      try {
+        await call({ sub: job.senderId }, 'POST', `/v1/conversations/${job.conversationId}/messages`, { ...job.message, clientId: `scheduled-${job.id}` });
+        store.finishScheduled(job.id);
+      } catch (e) {
+        try {
+          store.failScheduled(job.id, String(e.message).slice(0, 300));
+          hub.emit([job.senderId], { type: 'scheduled.failed', id: job.id, conversationId: job.conversationId, error: e.message });
+        } catch {
+          // shutting down
+        }
+      }
+    }
+  }, schedulePollMs);
+  schedulePump.unref();
 
   const webhookPump = setInterval(() => {
     try {
@@ -784,6 +810,30 @@ export function createPlugChat(options = {}) {
         return { messages: [...store.listMessages(ctx.params.id, { before: around + 1, limit: half, userId: ctx.auth.sub }), ...store.listMessages(ctx.params.id, { after: around, limit: half, userId: ctx.auth.sub })] };
       }
       return { messages: page({ before: num('before'), after: num('after') }) };
+    }],
+
+    // Send later. The message is stored as written (ciphertext in encrypted
+    // chats) and posted at the chosen time as if its author had pressed send.
+    ['POST', '/v1/conversations/:id/scheduled', async (ctx) => {
+      const { conv, member } = access(ctx, ctx.params.id);
+      if (!member) throw forbidden();
+      const b = await ctx.json();
+      const sendAt = b.sendAt;
+      if (!Number.isInteger(sendAt) || sendAt < Date.now() + 5000 || sendAt > Date.now() + 366 * 86_400_000) throw bad('sendAt must be a time between a few seconds and a year from now, in milliseconds');
+      const m = b.message;
+      if (!m || typeof m !== 'object' || m.attachment) throw bad('message is required, and scheduled messages cannot carry files');
+      if (m.kind !== undefined && !USER_KINDS.has(m.kind)) throw bad('unknown kind');
+      const body = str(m.body, 'message.body', MAX_BODY_CHARS);
+      if (conv.encrypted) checkCipher(conv, body);
+      if (store.countScheduled(ctx.auth.sub) >= 50) throw bad('you already have 50 messages scheduled');
+      const payload = { kind: m.kind, body, replyTo: m.replyTo, mentions: m.mentions, poll: m.poll };
+      ctx.status = 201;
+      return store.addScheduled({ conversationId: conv.id, senderId: ctx.auth.sub, payload, sendAt });
+    }],
+    ['GET', '/v1/scheduled', (ctx) => ({ scheduled: store.listScheduled(ctx.auth.sub) })],
+    ['DELETE', '/v1/scheduled/:id', (ctx) => {
+      if (!store.deleteScheduled(ctx.params.id, ctx.auth.sub)) throw notFound('scheduled message not found');
+      return { cancelled: true };
     }],
 
     ['GET', '/v1/conversations/:id/attachments', (ctx) => {
@@ -1369,6 +1419,7 @@ export function createPlugChat(options = {}) {
   function close() {
     clearInterval(sweeper);
     clearInterval(webhookPump);
+    clearInterval(schedulePump);
     clearInterval(retention);
     hub.close();
     bus?.close?.();
@@ -1380,8 +1431,11 @@ export function createPlugChat(options = {}) {
    * no network hop, same validation and realtime events as an HTTP call.
    * JSON endpoints only.
    */
-  async function api(method, path, body) {
-    const token = signToken({ sub: 'host', admin: true }, secret, 60);
+  const api = (method, path, body) => call({ sub: 'host', admin: true }, method, path, body);
+
+  // Run a request through the normal handler as a given identity, without a network hop.
+  async function call(claims, method, path, body) {
+    const token = signToken(claims, secret, 60);
     const req = Object.assign(Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))]), {
       method, url: base + path, headers: { authorization: `Bearer ${token}` },
     });

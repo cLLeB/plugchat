@@ -952,6 +952,57 @@ test('admin actions are audited; backup and doctor commands work', async () => {
   rmSync(d, { recursive: true, force: true });
 });
 
+test('scheduled messages go out on time, as their author, through the host hooks', async () => {
+  const d = mkdtempSync(join(tmpdir(), 'plugchat-sched-'));
+  const seenByHook = [];
+  const inst = createPlugChat({
+    secret: SECRET, dataDir: d, log: { error() {} }, schedulePollMs: 100,
+    hooks: { 'message.before': ({ message }) => (seenByHook.push(message.senderId), message.body.includes('blocked word') ? { allow: false, reason: 'Not allowed here' } : undefined) },
+  });
+  const srv = await inst.listen(0);
+  const mk = async (sub) => {
+    const c = new PlugChat({ url: `http://localhost:${srv.address().port}/plugchat`, getToken: async () => signToken({ sub }, SECRET) });
+    await c.connect();
+    return c;
+  };
+  const sam = await mk('sam');
+  const tia = await mk('tia');
+  try {
+    const dm = await sam.openDm('tia');
+    await assert.rejects(sam.schedule(dm.id, { text: 'too soon' }, Date.now() + 100), { status: 400 });
+    const job = await sam.schedule(dm.id, { text: 'happy birthday!' }, Date.now() + 6000);
+    const doomed = await sam.schedule(dm.id, { text: 'a blocked word inside' }, Date.now() + 6000);
+    assert.deepEqual((await sam.scheduled()).map((s) => s.text), ['happy birthday!', 'a blocked word inside']);
+    assert.equal((await tia.scheduled()).length, 0, 'only the author sees their scheduled messages');
+    await assert.rejects(tia.cancelScheduled(job.id), { status: 404 });
+    assert.equal((await tia.messages(dm.id)).length, 0, 'nothing is delivered early');
+
+    // Bring the time forward instead of waiting.
+    const arrived = next(tia, 'message');
+    const failed = next(sam, 'scheduled.failed');
+    inst.store.run('UPDATE scheduled SET send_at = ?', Date.now() - 1);
+    const got = await arrived;
+    assert.equal(got.text, 'happy birthday!');
+    assert.equal(got.senderId, 'sam');
+    assert.equal((await failed).id, doomed.id);
+    assert.ok(seenByHook.includes('sam'), 'the host hook saw it as a normal send');
+
+    const left = await sam.scheduled();
+    assert.equal(left.length, 1);
+    assert.equal(left[0].error, 'Not allowed here');
+    await sam.cancelScheduled(doomed.id);
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal((await tia.messages(dm.id)).length, 1, 'sent exactly once');
+  } finally {
+    sam.close();
+    tia.close();
+    srv.close();
+    srv.closeAllConnections();
+    inst.close();
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
 test('platform notices arrive in a read-only inbox', async () => {
   const user = await client('notify-1', 'Nana');
   const arrived = next(user, 'message');

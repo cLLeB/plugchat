@@ -119,6 +119,15 @@ export interface Message {
   consumed?: boolean;
 }
 
+export interface ScheduledMessage {
+  id: string;
+  conversationId: string;
+  sendAt: number;
+  text: string;
+  /** Why it could not be sent, once its time came. */
+  error: string | null;
+}
+
 export interface Story {
   id: string;
   userId: string;
@@ -232,6 +241,10 @@ export class PlugChat {
 
   // messages
   messages(conversationId: string, range?: { before?: number; after?: number; around?: number; limit?: number }): Promise<Message[]>;
+  /** Send a text message later; it goes out as you, through the platform's usual checks at that moment. */
+  schedule(conversationId: string, content: { text: string; replyTo?: string; mentions?: string[] }, sendAt: Date | number): Promise<ScheduledMessage>;
+  scheduled(): Promise<ScheduledMessage[]>;
+  cancelScheduled(id: string): Promise<{ cancelled: true }>;
   message(messageId: string): Promise<Message>;
   /** Messages in a conversation that carry a photo or file, newest first. */
   attachments(conversationId: string): Promise<Message[]>;

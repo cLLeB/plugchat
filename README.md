@@ -80,7 +80,7 @@ menu actions (payments, orders, bookings).
 **Identity** — people are found by whatever your platform uses: user id, email,
 phone number, username, or custom kinds such as a membership number.
 
-**Everyday comfort** — drafts kept per conversation, an @-mention picker,
+**Everyday comfort** — scheduled messages, drafts kept per conversation, an @-mention picker,
 messages that appear instantly and offer a retry if they fail, drag-and-drop
 and paste for attachments, a "new messages" line where you left off, desktop
 notifications, last seen.

@@ -90,7 +90,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .icon:hover { background: var(--pc-surface); color: var(--pc-fg); }
 .icon.on { color: var(--pc-accent); }
 .icon.rec { color: #fff; background: var(--pc-danger); }
-input[type="text"], input[type="search"], input[type="password"], select { font: inherit; color: inherit; background: var(--pc-surface); border: 1px solid var(--pc-border); border-radius: 10px; padding: 8px 12px; width: 100%; min-width: 0; }
+input[type="text"], input[type="search"], input[type="password"], input[type="datetime-local"], select { font: inherit; color: inherit; background: var(--pc-surface); border: 1px solid var(--pc-border); border-radius: 10px; padding: 8px 12px; width: 100%; min-width: 0; }
 
 .side { width: 300px; flex: none; display: flex; flex-direction: column; border-inline-end: 1px solid var(--pc-border); min-width: 0; }
 .bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; min-height: 58px; border-bottom: 1px solid var(--pc-border); }
@@ -510,6 +510,7 @@ class PlugChatElement extends HTMLElement {
       this.msgs.clear();
       this._reload().then(() => this.activeId && this._select(this.activeId));
     });
+    chat.on('scheduled.failed', (e) => this._error(T('Could not be sent: {reason}', { reason: e.error })));
     chat.on('star', (e) => this._patch(e.conversationId, e.messageId, (m) => ({ ...m, starred: e.starred })));
     chat.on('reaction', (e) => this._patch(e.conversationId, e.messageId, (m) => ({ ...m, reactions: e.reactions })));
     chat.on('read', (e) => {
@@ -1076,6 +1077,34 @@ class PlugChatElement extends HTMLElement {
     this._onScroll();
   }
 
+  /** Send what is in the message box at a later time, and manage what is already waiting. */
+  async _scheduleDialog() {
+    const id = this.activeId;
+    const text = this.$input.value.trim();
+    const waiting = (await this.chat.scheduled().catch(() => [])).filter((s) => s.conversationId === id);
+    const local = (t) => new Date(t - new Date(t).getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+    const $when = h('input', { type: 'datetime-local', 'aria-label': T('When'), value: local(Date.now() + 3600_000), min: local(Date.now() + 60_000) });
+    const $err = h('div', { class: 'error', hidden: true, role: 'alert' });
+    const fail = (e) => (($err.textContent = e.message), ($err.hidden = false));
+    this._openDialog(h('div', { class: 'panel' },
+      this._dialogTitle(T('Send later')),
+      text
+        ? [h('div', { class: 'storyview' }, text), h('label', { class: 'field' }, T('When'), $when),
+          h('button', { class: 'btn', onclick: () => this.chat.schedule(id, { text }, new Date($when.value)).then(() => {
+            this.$input.value = '';
+            this._saveDraft(id, '');
+            this._onInput(true);
+            this._scheduleDialog();
+          }, fail) }, T('Schedule'))]
+        : h('div', { class: 'hint' }, T('Type a message first, then choose Send later.')),
+      $err,
+      waiting.length > 0 && h('div', { class: 'people' }, waiting.map((s) => h('div', { class: 'person' },
+        h('span', {}, s.text),
+        h('small', {}, s.error ? T('Could not be sent: {reason}', { reason: s.error }) : T('Scheduled for {when}', { when: new Date(s.sendAt).toLocaleString(LOCALE, { dateStyle: 'medium', timeStyle: 'short' }) })),
+        h('button', { class: 'linkbtn', onclick: (e) => this.chat.cancelScheduled(s.id).then(() => e.target.closest('.person').remove(), fail) }, T('Remove'))))),
+    ));
+  }
+
   /** Everything that was shared in a conversation: photos, voice notes, files. */
   async _mediaDialog(conv) {
     const list = (await this.chat.attachments(conv.id).catch(() => [])).filter((m) => m.file && !m.undecryptable);
@@ -1436,6 +1465,7 @@ class PlugChatElement extends HTMLElement {
           this.viewOnce = !this.viewOnce;
           this._renderBanner();
         }),
+        item('timer', T('Send later'), () => this._scheduleDialog()),
         // Whatever else the host platform offers: send money, share a product, book a slot...
         (this.actions ?? []).map((a) => item(a.icon in ICON ? a.icon : 'plus', a.label, () =>
           this._guard(Promise.resolve().then(() => a.run({ conversation: this.convs.get(this.activeId), chat: this.chat, element: this }))))),

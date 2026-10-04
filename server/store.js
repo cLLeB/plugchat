@@ -135,6 +135,14 @@ CREATE TABLE IF NOT EXISTS presence (
   at INTEGER NOT NULL,
   PRIMARY KEY (user_id, instance)
 );
+CREATE TABLE IF NOT EXISTS scheduled (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  sender_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  payload TEXT NOT NULL,
+  send_at INTEGER NOT NULL,
+  error TEXT
+);
 CREATE TABLE IF NOT EXISTS audit (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   actor TEXT NOT NULL,
@@ -1053,6 +1061,49 @@ export class Store {
       files: this.all('SELECT id, name, mime, size, created_at FROM files WHERE owner_id = ?', id).map((r) => ({ fileId: r.id, name: r.name, mime: r.mime, size: r.size, createdAt: r.created_at })),
       blocked: this.blocks(id),
     };
+  }
+
+  // ---- scheduled messages: held until their time, then sent as their author ----
+
+  _scheduledOut(r) {
+    return { id: r.id, conversationId: r.conversation_id, sendAt: r.send_at, message: JSON.parse(r.payload), error: r.error };
+  }
+
+  addScheduled({ conversationId, senderId, payload, sendAt }) {
+    const id = randomUUID();
+    this.run('INSERT INTO scheduled (id, conversation_id, sender_id, payload, send_at) VALUES (?, ?, ?, ?, ?)', id, conversationId, senderId, JSON.stringify(payload), sendAt);
+    return this._scheduledOut(this.get('SELECT * FROM scheduled WHERE id = ?', id));
+  }
+
+  listScheduled(senderId) {
+    return this.all('SELECT * FROM scheduled WHERE sender_id = ? ORDER BY send_at', senderId).map((r) => this._scheduledOut(r));
+  }
+
+  countScheduled(senderId) {
+    return this.get('SELECT COUNT(*) AS n FROM scheduled WHERE sender_id = ? AND error IS NULL', senderId).n;
+  }
+
+  deleteScheduled(id, senderId) {
+    return this.run('DELETE FROM scheduled WHERE id = ? AND sender_id = ?', id, senderId).changes > 0;
+  }
+
+  /** Take the messages whose time has come. Each is claimed first, so two instances never both send it. */
+  claimDueScheduled(leaseMs = 60_000) {
+    const t = Date.now();
+    const out = [];
+    for (const r of this.all('SELECT * FROM scheduled WHERE send_at <= ? AND error IS NULL LIMIT 20', t)) {
+      const mine = this.run('UPDATE scheduled SET send_at = ? WHERE id = ? AND send_at = ?', t + leaseMs, r.id, r.send_at).changes > 0;
+      if (mine) out.push({ ...this._scheduledOut(r), senderId: r.sender_id });
+    }
+    return out;
+  }
+
+  failScheduled(id, error) {
+    this.run('UPDATE scheduled SET error = ? WHERE id = ?', error, id);
+  }
+
+  finishScheduled(id) {
+    this.run('DELETE FROM scheduled WHERE id = ?', id);
   }
 
   // ---- audit trail: what was done with admin rights, by which token subject ----

@@ -682,6 +682,33 @@ export class PlugChat {
     return this.send(toConversationId, { text: message.text, file, forwarded: true });
   }
 
+  /**
+   * Send a text message later. `sendAt` is a Date or a millisecond timestamp.
+   * It goes out as you, through the platform's usual checks at that moment.
+   */
+  async schedule(conversationId, { text, replyTo, mentions }, sendAt) {
+    const conv = await this._conv(conversationId);
+    const k = conv.encrypted ? await this._requireKey(conv) : null;
+    const body = k ? await e2ee.encryptText(k.key, JSON.stringify({ t: text }), conv.id, k.epoch) : text;
+    const out = await this._req('POST', `/conversations/${conversationId}/scheduled`, {
+      json: { sendAt: sendAt instanceof Date ? sendAt.getTime() : sendAt, message: { kind: 'text', body, replyTo, mentions } },
+    });
+    return { ...out, text };
+  }
+
+  /** Your messages waiting to be sent, soonest first; `error` is set on any that could not be sent. */
+  async scheduled() {
+    const { scheduled } = await this._req('GET', '/scheduled');
+    return Promise.all(scheduled.map(async (s) => {
+      const shown = await this._hydrate({ conversationId: s.conversationId, kind: s.message.kind ?? 'text', body: s.message.body, attachment: null }).catch(() => ({ text: '' }));
+      return { ...s, text: shown.text };
+    }));
+  }
+
+  cancelScheduled(id) {
+    return this._req('DELETE', `/scheduled/${id}`);
+  }
+
   /** The messages in a conversation that carry a photo or file, newest first. */
   async attachments(conversationId) {
     const conv = await this._conv(conversationId);

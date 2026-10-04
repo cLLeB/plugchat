@@ -852,7 +852,13 @@ class PlugChatElement extends HTMLElement {
     this._renderDeviceNotice();
 
     // Dropping a file anywhere on the conversation attaches it.
-    this.$main.ondragover = (e) => e.dataTransfer?.types.includes('Files') && (e.preventDefault(), this.$main.classList.add('drop'));
+    // Only file drags are taken over; text and link drags keep the browser's own behaviour.
+    // (A handler assigned this way must not return false, or it would accept every drag.)
+    this.$main.ondragover = (e) => {
+      if (!e.dataTransfer?.types.includes('Files')) return;
+      e.preventDefault();
+      this.$main.classList.add('drop');
+    };
     this.$main.ondragleave = () => this.$main.classList.remove('drop');
     this.$main.ondrop = (e) => {
       this.$main.classList.remove('drop');
@@ -1750,7 +1756,11 @@ class PlugChatElement extends HTMLElement {
       }
     };
     const toggle = (label, checked, onchange, hint) => {
-      const box = h('input', { type: 'checkbox', checked, onchange: () => run(onchange(box.checked)) });
+      // If the change is refused, the switch goes back to where it was instead of showing a setting that did not take.
+      const box = h('input', { type: 'checkbox', checked, onchange: () => run(Promise.resolve().then(() => onchange(box.checked)).catch((e) => {
+        box.checked = !box.checked;
+        throw e;
+      })) });
       return h('label', { class: 'check' }, box, h('span', {}, label, hint && h('small', {}, hint)));
     };
     const $timer = h('select', { disabled: !canManage, onchange: () => run(this.chat.update(conv.id, { ttlSeconds: Number($timer.value) || null })) },
@@ -1941,7 +1951,11 @@ class PlugChatElement extends HTMLElement {
       $err.hidden = false;
     });
     const toggle = (label, checked, onchange, hint) => {
-      const box = h('input', { type: 'checkbox', checked, onchange: () => run(onchange(box.checked)) });
+      // If the change is refused, the switch goes back to where it was instead of showing a setting that did not take.
+      const box = h('input', { type: 'checkbox', checked, onchange: () => run(Promise.resolve().then(() => onchange(box.checked)).catch((e) => {
+        box.checked = !box.checked;
+        throw e;
+      })) });
       return h('label', { class: 'check' }, box, h('span', {}, label, hint && h('small', {}, hint)));
     };
     const privacy = this.chat.me.privacy ?? { readReceipts: true, presence: true };

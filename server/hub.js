@@ -9,8 +9,11 @@ const HEARTBEAT_MS = 30_000;
  * The single exception is the typing indicator, which is too chatty for HTTP.
  */
 export class Hub {
-  constructor({ store, authenticate, allowOrigin, bus }) {
+  constructor({ store, authenticate, allowOrigin, bus, features = {}, onPresence = () => {} }) {
     this.store = store;
+    // Switched-off features (typing, presence, calls) are simply never relayed.
+    this.off = (name) => features[name] === false;
+    this.onPresence = onPresence;
     // With several PlugChat instances, the bus carries events to sockets held by the others.
     this.bus = bus;
     bus?.subscribe((msg) => {
@@ -91,8 +94,8 @@ export class Hub {
       }
       if (msg?.type === 'auth') return this._auth(ws, msg.token);
       if (!ws.userId) return ws.close(4401, 'not authenticated');
-      if (msg?.type === 'typing') return this._typing(ws, msg.conversationId);
-      if (msg?.type === 'signal') return this._signal(ws, msg);
+      if (msg?.type === 'typing') return this.off('typing') ? undefined : this._typing(ws, msg.conversationId);
+      if (msg?.type === 'signal') return this.off('calls') ? undefined : this._signal(ws, msg);
     });
   }
 
@@ -136,7 +139,8 @@ export class Hub {
       this.bus?.setPresence?.(ws.userId, true);
       const peers = this.store.peers(ws.userId);
       // People who chose not to show when they are online are never announced.
-      const visible = (id) => this.store.privacy(id).presence;
+      const visible = (id) => !this.off('presence') && this.store.privacy(id).presence;
+      if (!wasOnline) this.onPresence(ws.userId, true);
       if (!wasOnline && visible(ws.userId)) this.emit(peers, { type: 'presence', userId: ws.userId, online: true });
       ws.send(JSON.stringify({ type: 'ready', userId: ws.userId, online: peers.filter((p) => this.isOnline(p) && visible(p)) }));
     }
@@ -164,7 +168,8 @@ export class Hub {
         this.store.touchUser(ws.userId);
         // Still connected through another instance: not offline yet.
         if (this.isOnline(ws.userId)) return;
-        if (!this.store.privacy(ws.userId).presence) return;
+        this.onPresence(ws.userId, false);
+        if (this.off('presence') || !this.store.privacy(ws.userId).presence) return;
         this.emit(this.store.peers(ws.userId), { type: 'presence', userId: ws.userId, online: false, lastSeen: Date.now() });
       } catch {
         // store already closed during shutdown

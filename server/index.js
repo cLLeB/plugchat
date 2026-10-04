@@ -8,9 +8,51 @@ import { fileURLToPath } from 'node:url';
 import { Store } from './store.js';
 import { Hub } from './hub.js';
 import { signToken, verifyToken, signWebhook } from './auth.js';
-import { diskStorage, createHooks, databaseBus } from './connectors.js';
+import { diskStorage, s3Storage, storageFromConfig, createHooks, databaseBus } from './connectors.js';
 
-export { signToken, verifyToken, signWebhook, diskStorage, databaseBus };
+export { signToken, verifyToken, signWebhook, diskStorage, s3Storage, databaseBus };
+
+/**
+ * Everything a host can switch off. All are on unless the host says otherwise:
+ * `features: { stories: false, polls: false }`. A switched-off feature is
+ * refused by the server and disappears from the interface.
+ */
+export const FEATURES = [
+  'groups', 'directory', 'files', 'voiceNotes', 'reactions', 'replies', 'editing', 'deleting', 'forwarding', 'mentions',
+  'pins', 'stars', 'search', 'polls', 'location', 'viewOnce', 'disappearing', 'scheduled', 'stories', 'calls',
+  'encryption', 'invites', 'reports', 'profiles', 'typing', 'presence', 'readReceipts', 'blocking', 'export',
+];
+
+// Which feature each endpoint belongs to (longest matching prefix wins).
+const FEATURE_ROUTES = [
+  ['/v1/stories', 'stories'], ['POST /v1/files', 'stories'],
+  ['/v1/scheduled', 'scheduled'], ['POST /v1/conversations/:id/scheduled', 'scheduled'],
+  ['/v1/starred', 'stars'], ['PUT /v1/messages/:id/star', 'stars'], ['DELETE /v1/messages/:id/star', 'stars'],
+  ['PUT /v1/messages/:id/pin', 'pins'], ['DELETE /v1/messages/:id/pin', 'pins'], ['GET /v1/conversations/:id/pins', 'pins'],
+  ['PUT /v1/messages/:id/reactions', 'reactions'], ['DELETE /v1/messages/:id/reactions', 'reactions'],
+  ['GET /v1/search', 'search'],
+  ['/v1/invites', 'invites'], ['POST /v1/conversations/:id/invites', 'invites'], ['GET /v1/conversations/:id/invites', 'invites'], ['DELETE /v1/conversations/:id/invites', 'invites'],
+  ['POST /v1/messages/:id/report', 'reports'],
+  ['PUT /v1/messages/:id/vote', 'polls'],
+  ['POST /v1/conversations/:id/files', 'files'],
+  ['PUT /v1/me/avatar', 'profiles'], ['DELETE /v1/me/avatar', 'profiles'], ['PUT /v1/me/profile', 'profiles'],
+  ['PUT /v1/conversations/:id/avatar', 'profiles'], ['DELETE /v1/conversations/:id/avatar', 'profiles'],
+  ['PATCH /v1/messages/:id', 'editing'],
+  ['POST /v1/conversations/:id/calls', 'calls'], ['POST /v1/calls', 'calls'],
+  ['PUT /v1/blocks', 'blocking'],
+  ['GET /v1/me/export', 'export'],
+  ['POST /v1/messages/:id/open', 'viewOnce'],
+];
+const featureOfRoute = (method, pattern) => {
+  const key = `${method} ${pattern}`;
+  return FEATURE_ROUTES.filter(([p]) => key.startsWith(p) || pattern.startsWith(p)).sort((a, b) => b[0].length - a[0].length)[0]?.[1] ?? null;
+};
+
+// Events a host can receive, by webhook or in-process with chat.on().
+export const EVENTS = [
+  'message.new', 'message.edited', 'message.deleted', 'message.reported', 'call.started',
+  'conversation.created', 'member.added', 'member.removed', 'user.connected', 'user.disconnected',
+];
 
 const CLIENT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'client');
 const CLIENT_FILES = new Set(['plugchat.js', 'e2ee.js', 'calls.js', 'element.js', 'styles.js', 'i18n.js', 'launcher.js', 'embed.js', 'admin.js']);
@@ -175,15 +217,28 @@ export function createPlugChat(options = {}) {
     webhookRetryBaseMs = 5000,
     bus: customBus,
     userStorageBytes = 0,
+    features: featureChoices = {},
+    ui = {},
+    plugins = [],
+    webhookEvents = ['message.new', 'message.reported', 'call.started'],
+    studio = false,
     log = console,
   } = options;
+
+  for (const name of Object.keys(featureChoices)) if (!FEATURES.includes(name)) throw new Error(`PlugChat: unknown feature "${name}" (known: ${FEATURES.join(', ')})`);
+  for (const name of webhookEvents) if (!EVENTS.includes(name)) throw new Error(`PlugChat: unknown webhook event "${name}" (known: ${EVENTS.join(', ')})`);
+  const feat = { ...Object.fromEntries(FEATURES.map((f) => [f, true])), stories, directory, ...featureChoices };
+  const need = (feature, auth) => {
+    if (!feat[feature] && !auth?.admin) throw new HttpError(404, 'feature_disabled', `${feature} is switched off on this platform`);
+  };
 
   if (typeof secret !== 'string' || secret.length < 32) {
     throw new Error('PlugChat: `secret` must be a string of at least 32 characters');
   }
   const base = basePath.replace(/\/+$/, '');
   mkdirSync(dataDir, { recursive: true });
-  const storage = customStorage ?? diskStorage(join(dataDir, 'files'));
+  // `storage` is either an adapter object (Node hosts) or plain settings such as { type: 's3', bucket, ... }.
+  const storage = customStorage && typeof customStorage.put === 'function' ? customStorage : storageFromConfig(customStorage, dataDir);
   const hooks = createHooks({ hooks: hookFns, hookUrl, hookEvents, hookTimeoutMs, secret });
   // Calls go through the host's own vendor when it has registered one, peer-to-peer otherwise.
   const callMode = hooks.has('call.join') ? 'external' : 'p2p';
@@ -246,7 +301,29 @@ export function createPlugChat(options = {}) {
 
   const allowOrigin = (origin) => !origin || origins === '*' || origins.includes(origin);
   const bus = customBus ?? (cluster ? databaseBus(store) : undefined);
-  const hub = new Hub({ store, authenticate, allowOrigin, bus });
+  const hub = new Hub({ store, authenticate, allowOrigin, bus, features: feat, onPresence: (userId, online) => publish({ type: online ? 'user.connected' : 'user.disconnected', userId }) });
+
+  // What the server tells the interface about this platform's setup.
+  const featureView = () => ({ ...feat, calls: feat.calls ? callMode : false, requireEncryption, linkPreviews: hooks.has('link.preview') });
+
+  // ---- events: one stream, delivered to in-process listeners and (for chosen types) the webhook ----
+  const listeners = new Map();
+  function on(type, fn) {
+    if (type !== '*' && !EVENTS.includes(type)) throw new Error(`PlugChat: unknown event "${type}" (known: ${EVENTS.join(', ')})`);
+    if (!listeners.has(type)) listeners.set(type, new Set());
+    listeners.get(type).add(fn);
+    return () => listeners.get(type).delete(fn);
+  }
+  function publish(event) {
+    for (const fn of [...(listeners.get(event.type) ?? []), ...(listeners.get('*') ?? [])]) {
+      try {
+        Promise.resolve(fn(event)).catch((e) => log.error(`plugchat listener for ${event.type} failed:`, e.message));
+      } catch (e) {
+        log.error(`plugchat listener for ${event.type} failed:`, e.message);
+      }
+    }
+    if (webhookEvents.includes(event.type)) webhook(event);
+  }
 
   const sweeper = setInterval(() => {
     try {
@@ -448,7 +525,7 @@ export function createPlugChat(options = {}) {
   };
 
   const routes = [
-    ['GET', '/v1/me', (ctx) => ({ ...userView(store.getUser(ctx.auth.sub), ctx.auth), privacy: store.privacy(ctx.auth.sub), suspended: store.suspension(ctx.auth.sub), directory, features: { directory, stories, requireEncryption, calls: callMode, linkPreviews: hooks.has('link.preview') } })],
+    ['GET', '/v1/me', (ctx) => ({ ...userView(store.getUser(ctx.auth.sub), ctx.auth), privacy: store.privacy(ctx.auth.sub), suspended: store.suspension(ctx.auth.sub), directory: feat.directory, features: featureView(), ui })],
 
     // Link previews come from the host's own fetcher (its `link.preview` hook),
     // so this server never requests arbitrary URLs itself. Clients only ask for
@@ -496,7 +573,7 @@ export function createPlugChat(options = {}) {
       const b = await ctx.json();
       const fresh = store.registerDevice(ctx.auth.sub, str(b.deviceId, 'deviceId', 64), str(b.publicKey, 'publicKey', 256));
       if (fresh) for (const id of store.encryptedConversationIds(ctx.auth.sub)) pushConversation(id);
-      return { ...userView(store.getUser(ctx.auth.sub), ctx.auth), privacy: store.privacy(ctx.auth.sub), suspended: store.suspension(ctx.auth.sub), directory, features: { directory, stories, requireEncryption, calls: callMode, linkPreviews: hooks.has('link.preview') } };
+      return { ...userView(store.getUser(ctx.auth.sub), ctx.auth), privacy: store.privacy(ctx.auth.sub), suspended: store.suspension(ctx.auth.sub), directory: feat.directory, features: featureView(), ui };
     }],
 
     // Profile pictures. The client crops and shrinks the image first; here it is
@@ -570,7 +647,7 @@ export function createPlugChat(options = {}) {
       return { removed: true };
     }],
     ['GET', '/v1/users', (ctx) => {
-      if (!directory && !ctx.auth.admin) throw forbidden('user directory is disabled');
+      if (!feat.directory && !ctx.auth.admin) throw forbidden('user directory is disabled');
       const users = store.searchUsers(ctx.url.searchParams.get('q') ?? '', ctx.auth.sub);
       return { users: users.map((u) => userView(u, ctx.auth)) };
     }],
@@ -585,7 +662,7 @@ export function createPlugChat(options = {}) {
     ['GET', '/v1/users/:id', (ctx) => {
       const user = store.getUser(ctx.params.id);
       // With the directory off, ids can't be probed: you only see people you already share a chat with.
-      const visible = directory || ctx.auth.admin || user?.id === ctx.auth.sub || (user && store.peers(ctx.auth.sub).includes(user.id));
+      const visible = feat.directory || ctx.auth.admin || user?.id === ctx.auth.sub || (user && store.peers(ctx.auth.sub).includes(user.id));
       if (!user || !visible) throw notFound('user not found');
       return userView(user, ctx.auth);
     }],
@@ -653,7 +730,9 @@ export function createPlugChat(options = {}) {
         if (!auth.admin && store.isBlocked(auth.sub, memberIds.find((id) => id !== auth.sub))) throw forbidden('you cannot message this user');
       }
 
+      if (b.type === 'group') need('groups', auth);
       const encrypted = b.encrypted === true;
+      if (encrypted) need('encryption', auth);
       if (requireEncryption && !encrypted && !auth.admin) throw bad('this platform requires end-to-end encrypted conversations');
       const id = b.id === undefined ? undefined : str(b.id, 'id', 36);
       if (id !== undefined && (!UUID.test(id) || store.conversationExists(id))) throw bad('id must be an unused UUID');
@@ -671,6 +750,7 @@ export function createPlugChat(options = {}) {
         description: str(b.description, 'description', 500, { optional: true, allowEmpty: true }),
       });
       pushConversation(cid, 'conversation.new');
+      publish({ type: 'conversation.created', conversation: { id: cid, type: b.type, title: b.type === 'group' ? b.title : null, encrypted }, creatorId: creator, memberIds });
       ctx.status = 201;
       return store.conversationFor(cid, auth.sub);
     }],
@@ -692,6 +772,7 @@ export function createPlugChat(options = {}) {
       if (b.ttlSeconds !== undefined) {
         if (!ctx.auth.admin && conv.type === 'group' && member.role === 'member') throw forbidden('only group admins can change the timer');
         patch.ttlSeconds = ttl(b.ttlSeconds);
+        if (patch.ttlSeconds) need('disappearing', ctx.auth);
       }
       if (b.announce !== undefined || b.description !== undefined) {
         if (conv.type !== 'group') throw bad('only groups have these settings');
@@ -829,6 +910,7 @@ export function createPlugChat(options = {}) {
       requireUsers(userIds);
       store.addMembers(conv.id, userIds, conv.encrypted ? memberKeys([...current, ...userIds], b.keys, { maxEpoch: conv.key_epoch, mustCover: userIds, by: ctx.auth.admin ? undefined : ctx.auth.sub }) : null);
       pushConversation(conv.id);
+      if (userIds.length) publish({ type: 'member.added', conversationId: conv.id, userIds, by: ctx.auth.sub });
       return store.conversationFor(conv.id, ctx.auth.sub);
     }],
 
@@ -858,6 +940,7 @@ export function createPlugChat(options = {}) {
         if (target.role === 'owner') throw forbidden('the owner cannot be removed');
       }
       store.removeMember(conv.id, uid);
+      publish({ type: 'member.removed', conversationId: conv.id, userId: uid, by: ctx.auth.sub });
       hub.emit([uid], { type: 'conversation.removed', conversationId: conv.id });
       const left = store.all('SELECT user_id, role FROM members WHERE conversation_id = ? ORDER BY joined_at', conv.id);
       if (left.length === 0) {
@@ -935,7 +1018,7 @@ export function createPlugChat(options = {}) {
       const pick = (k) => (b[k] === undefined ? undefined : b[k] === true);
       const before = store.privacy(ctx.auth.sub);
       const privacy = store.setPrivacy(ctx.auth.sub, { readReceipts: pick('readReceipts'), presence: pick('presence') });
-      if (before.presence !== privacy.presence && hub.isOnline(ctx.auth.sub)) {
+      if (feat.presence && before.presence !== privacy.presence && hub.isOnline(ctx.auth.sub)) {
         hub.emit(store.peers(ctx.auth.sub), { type: 'presence', userId: ctx.auth.sub, online: privacy.presence });
       }
       return { privacy };
@@ -956,6 +1039,7 @@ export function createPlugChat(options = {}) {
       }
 
       let attachment = null;
+      if (b.attachment) need('files', auth);
       if (b.attachment) {
         const file = store.getFile(str(b.attachment.fileId, 'attachment.fileId', 36));
         if (!file || file.conversationId !== conv.id || file.messageId || (file.ownerId !== auth.sub && !auth.admin)) throw bad('unknown attachment');
@@ -967,6 +1051,11 @@ export function createPlugChat(options = {}) {
 
       const meta = {};
       const viewOnce = b.viewOnce === true;
+      if (viewOnce) need('viewOnce', auth);
+      if (kind === 'poll') need('polls', auth);
+      if (kind === 'location') need('location', auth);
+      if (b.replyTo) need('replies', auth);
+      if (b.forwarded === true) need('forwarding', auth);
       if (viewOnce && kind !== 'text') throw bad('only text and media messages can be view-once');
       if (b.forwarded === true) meta.forwarded = true;
       if (kind === 'poll') {
@@ -1021,7 +1110,7 @@ export function createPlugChat(options = {}) {
       hub.emit(memberIds, { type: 'message.new', message });
       // Everything the host needs to send its own push notification or email.
       const muted = new Set(store.mutedIds(conv.id));
-      webhook({
+      publish({
         type: 'message.new',
         message,
         conversation: { id: conv.id, type: conv.type, title: conv.title, encrypted: !!conv.encrypted },
@@ -1041,7 +1130,7 @@ export function createPlugChat(options = {}) {
       if (store.markRead(conv.id, ctx.auth.sub, seq)) {
         const at = store.member(conv.id, ctx.auth.sub).last_read_seq;
         // With read receipts off, only the reader's own devices hear about it.
-        const audience = store.privacy(ctx.auth.sub).readReceipts ? store.memberIds(conv.id) : [ctx.auth.sub];
+        const audience = feat.readReceipts && store.privacy(ctx.auth.sub).readReceipts ? store.memberIds(conv.id) : [ctx.auth.sub];
         hub.emit(audience, { type: 'read', conversationId: conv.id, userId: ctx.auth.sub, seq: at });
       }
       return { ok: true };
@@ -1090,16 +1179,19 @@ export function createPlugChat(options = {}) {
       if (conv.encrypted && (!epoch(body) || epoch(body) !== epoch(message.body))) throw bad('an edit must be encrypted with the original message key');
       const updated = store.editMessage(message.id, body);
       hub.emit(store.memberIds(conv.id), { type: 'message.updated', message: updated });
+      publish({ type: 'message.edited', message: updated });
       return updated;
     }],
 
     ['DELETE', '/v1/messages/:id', async (ctx) => {
       const { message, conv, member } = messageAccess(ctx, ctx.params.id);
+      if (message.senderId === ctx.auth.sub) need('deleting', ctx.auth);
       const moderator = ctx.auth.admin || (conv.type === 'group' && member.role !== 'member');
       if (message.senderId !== ctx.auth.sub && !moderator) throw forbidden('you can only delete your own messages');
       const fileId = store.deleteMessage(message.id);
       if (fileId) await removeFile(fileId);
       hub.emit(store.memberIds(conv.id), { type: 'message.deleted', conversationId: conv.id, messageId: message.id });
+      publish({ type: 'message.deleted', conversationId: conv.id, messageId: message.id, by: ctx.auth.sub });
       return { deleted: true };
     }],
 
@@ -1135,7 +1227,7 @@ export function createPlugChat(options = {}) {
       if (!member) throw forbidden();
       const reason = str((await ctx.json()).reason ?? 'unspecified', 'reason', 500);
       const id = store.addReport({ messageId: message.id, conversationId: conv.id, reporterId: ctx.auth.sub, reason, snapshot: message });
-      webhook({ type: 'message.reported', reportId: id, reporterId: ctx.auth.sub, reason, message, conversation: { id: conv.id, type: conv.type, encrypted: !!conv.encrypted } });
+      publish({ type: 'message.reported', reportId: id, reporterId: ctx.auth.sub, reason, message, conversation: { id: conv.id, type: conv.type, encrypted: !!conv.encrypted } });
       ctx.status = 201;
       return { reportId: id };
     }],
@@ -1154,7 +1246,7 @@ export function createPlugChat(options = {}) {
       const join = await joinCall(call, ctx.auth.sub, memberIds);
       const message = store.insertMessage({ conversationId: conv.id, senderId: ctx.auth.sub, kind: 'call', body: JSON.stringify({ callId: call.id, video }) });
       hub.emit(memberIds, { type: 'message.new', message });
-      webhook({
+      publish({
         type: 'call.started', call, message,
         conversation: { id: conv.id, type: conv.type, title: conv.title },
         recipients: memberIds.filter((id) => id !== ctx.auth.sub).map((id) => ({ userId: id, online: hub.isOnline(id) })),
@@ -1195,7 +1287,7 @@ export function createPlugChat(options = {}) {
       }
       const message = store.insertMessage({ conversationId: id, senderId: ctx.auth.sub, kind: 'system', body: text });
       hub.emit([userId], { type: 'message.new', message });
-      webhook({ type: 'message.new', message, conversation: { id, type: 'group', title: b.title ?? 'Notifications', encrypted: false }, recipients: [{ userId, online: hub.isOnline(userId), muted: false, mentioned: false }] });
+      publish({ type: 'message.new', message, conversation: { id, type: 'group', title: b.title ?? 'Notifications', encrypted: false }, recipients: [{ userId, online: hub.isOnline(userId), muted: false, mentioned: false }] });
       ctx.status = 201;
       return message;
     }],
@@ -1226,17 +1318,14 @@ export function createPlugChat(options = {}) {
     }],
 
     ['POST', '/v1/files', async (ctx) => {
-      if (!stories) throw notFound('stories are disabled');
       return upload(ctx, null);
     }],
 
     ['GET', '/v1/stories', (ctx) => {
-      if (!stories) throw notFound('stories are disabled');
       return { feed: store.storyFeed(ctx.auth.sub) };
     }],
 
     ['POST', '/v1/stories', async (ctx) => {
-      if (!stories) throw notFound('stories are disabled');
       const b = await ctx.json();
       let attachment = null;
       if (b.attachment) {
@@ -1254,7 +1343,7 @@ export function createPlugChat(options = {}) {
     }],
 
     ['POST', '/v1/stories/:id/view', (ctx) => {
-      const story = stories && store.getStory(ctx.params.id, ctx.auth.sub);
+      const story = store.getStory(ctx.params.id, ctx.auth.sub);
       if (!story || (story.userId !== ctx.auth.sub && !store.peers(ctx.auth.sub).includes(story.userId))) throw notFound('story not found');
       if (story.userId !== ctx.auth.sub && store.viewStory(story.id, ctx.auth.sub)) {
         hub.emit([story.userId], { type: 'story.viewed', storyId: story.id, userId: ctx.auth.sub });
@@ -1276,7 +1365,7 @@ export function createPlugChat(options = {}) {
   ].map(([method, pattern, handler]) => {
     const keys = [];
     const re = new RegExp('^' + pattern.replace(/:(\w+)/g, (_, k) => (keys.push(k), '([^/]+)')) + '$');
-    return { method, re, keys, handler };
+    return { method, re, keys, handler, feature: featureOfRoute(method, pattern) };
   });
 
   async function upload(ctx, conversationId) {
@@ -1322,7 +1411,7 @@ export function createPlugChat(options = {}) {
     const user = store.getUser(userId);
     seen.delete(userId);
     hub.emit([userId, ...store.peers(userId)], { type: 'user.updated', user: { id: user.id, name: user.name, avatar: user.avatar, about: user.about } });
-    return { ...userView(user, { sub: userId }), privacy: store.privacy(userId), suspended: store.suspension(userId), directory, features: { directory, stories, requireEncryption, calls: callMode, linkPreviews: hooks.has('link.preview') } };
+    return { ...userView(user, { sub: userId }), privacy: store.privacy(userId), suspended: store.suspension(userId), directory: feat.directory, features: featureView(), ui };
   }
 
   function pin(ctx, on) {
@@ -1487,6 +1576,7 @@ export function createPlugChat(options = {}) {
           }
         },
       };
+      if (route.feature) need(route.feature, auth);
       const out = await route.handler(ctx);
       // Deletions, suspensions and data exports done with admin rights leave a trace.
       if (auth.admin && AUDITED.test(`${req.method} ${path}`)) store.addAudit(auth.sub, `${req.method} ${path}`);
@@ -1585,7 +1675,7 @@ export function createPlugChat(options = {}) {
     stats: () => api('GET', '/v1/stats'),
   };
 
-  return {
+  const chat = {
     handle,
     attach,
     listen,
@@ -1593,8 +1683,17 @@ export function createPlugChat(options = {}) {
     store,
     api,
     admin,
+    /** Listen in-process: chat.on('message.new', fn), or '*' for everything. Returns a function that stops listening. */
+    on,
+    features: feat,
     basePath: base,
     /** Mint a user token: `signToken({ sub, name, avatar })`. Admin token: `{ sub, admin: true }`. */
     signToken: (claims, ttlSeconds) => signToken(claims, secret, ttlSeconds),
   };
+  // A plugin is a function that receives the running chat: it can listen to events, call the API, post messages.
+  for (const plugin of plugins) {
+    if (typeof plugin !== 'function') throw new Error('PlugChat: each plugin must be a function that receives the chat instance');
+    plugin(chat);
+  }
+  return chat;
 }

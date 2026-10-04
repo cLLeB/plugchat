@@ -105,20 +105,13 @@ const page = (title, id, current, body) => `<!doctype html><html lang="en"><head
 <body>${header(id, current)}<main>${body}</main></body></html>`;
 const html = (res, text, status = 200) => res.writeHead(status, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(text);
 
-const settingsPage = (id) => page('Settings and tools', id, 'settings', `
-  <div class="card"><h2>Settings and tools</h2><p>Messaging is on the <a href="/">front page</a>. Your own chat settings (appearance, privacy, notifications) are inside the chat: press your picture there. Everything else lives here.</p>
-    <ul class="links"><li><a href="/privacy"><strong>Privacy</strong><span>What the association keeps about your messages, and who can read them.</span></a></li></ul></div>
-  ${STAFF.has(id) ? `<div class="card"><span class="tag">For staff</span><h3>Moderation</h3><p>Only staff see this card.</p>
-    <ul class="links"><li><a href="/moderation"><strong>Open the moderation console</strong><span>Reported messages, suspensions, usage figures and the audit trail.</span></a></li></ul></div>` : ''}
-  <div class="card"><span class="tag">For the developers of this site</span><h3>How chat was added here</h3><p>These pages are not for members. They show the people who build a platform how PlugChat fits into it.</p>
+const settingsPage = (id) => page('Settings', id, 'settings', `
+  <div class="card"><h2>Settings</h2><p>Your chat settings (appearance, privacy, notifications) are inside the chat: press your picture there.</p>
     <ul class="links">
-      <li><a href="/plugchat/studio"><strong>Setup studio</strong><span>Shape the chat's colours, layout and features against a live preview, then copy the settings and code. Works on this computer only.</span></a></li>
-      <li><a href="/widget"><strong>As a floating button</strong><span>For sites with no page to spare: a button in the corner that opens the chat in a panel.</span></a></li>
-      <li><a href="/iframe"><strong>Inside a frame</strong><span>For site builders that only accept an address to embed.</span></a></li>
-      <li><a href="/strict"><strong>On a locked-down page</strong><span>The same chat under a strict security policy, with nothing relaxed for it.</span></a></li>
-      <li><a href="/frameworks/react"><strong>As a React component</strong><span>Needs a one-time build: node examples/frameworks/build.mjs</span></a></li>
-      <li><a href="/frameworks/vue"><strong>As a Vue component</strong><span>Same build step.</span></a></li>
-    </ul></div>`);
+      <li><a href="/privacy"><strong>Privacy</strong><span>What the association keeps about your messages, and who can read them.</span></a></li>
+      ${STAFF.has(id) ? '<li><a href="/moderation"><strong>Moderation</strong><span>For staff: reported messages, suspensions and usage figures.</span></a></li>' : ''}
+    </ul></div>
+  <p class="devnote">Building a platform and want chat like this in it? Open the <a href="/plugchat/studio">setup studio</a> on this computer: choose how the chat appears (a page, a floating button or a frame), shape its look, and copy the code.</p>`);
 
 const privacyPage = (id) => page('Privacy', id, 'privacy', `
   <div class="card"><h2>Privacy of your messages</h2>
@@ -139,9 +132,10 @@ const server = createServer(async (req, res) => {
     const form = await formBody(req);
     const member = form.get('member') ?? '';
     const ok = Object.hasOwn(MEMBERS, member) && same(form.get('password') ?? '', DEMO_PASSWORD);
-    res.writeHead(303, ok ? { 'set-cookie': sessionCookie(member), location: '/' } : { location: '/?error=1' }).end();
+    res.writeHead(303, ok ? { 'set-cookie': [sessionCookie(member), 'signedout=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0'], location: '/' } : { location: '/?error=1' }).end();
   } else if (url.pathname === '/logout' && req.method === 'POST') {
-    res.writeHead(303, { 'set-cookie': 'session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0', location: '/' }).end();
+    // Remember that this visitor signed out, so the demo does not sign them straight back in.
+    res.writeHead(303, { 'set-cookie': ['session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0', 'signedout=1; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400'], location: '/' }).end();
   } else if (url.pathname === '/api/chat-token') {
     // The whole integration: confirm who is signed in, sign a short-lived token.
     // 401 when nobody is: the chat then clears itself rather than keep showing the last person's messages.
@@ -185,6 +179,10 @@ const server = createServer(async (req, res) => {
     // Two other ways to embed the same chat; see iframe.html and widget.html.
     if (membersOnly()) return;
     html(res, await readFile(here(`.${url.pathname}.html`), 'utf8'));
+  } else if (url.pathname === '/' && !id && !/(?:^|;\s*)signedout=1/.test(req.headers.cookie ?? '')) {
+    // Demo convenience: a first-time visitor arrives as a member who is already signed in to the association,
+    // which is how chat is met on a real platform. Signing out leads to the sign-in form.
+    res.writeHead(303, { 'set-cookie': sessionCookie('ama'), location: '/' }).end();
   } else if (url.pathname === '/') {
     let text = (await readFile(here('./index.html'), 'utf8'))
       .replace('{{header}}', header(id, 'messages'))

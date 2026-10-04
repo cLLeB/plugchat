@@ -37,7 +37,8 @@ npm run demo
 ```
 
 Open http://localhost:3000 to see a pretend platform with chat in it, and
-http://localhost:3000/plugchat/studio for the **setup studio**: the real chat in
+http://localhost:3000/plugchat/studio for the **setup studio**: choose how the
+chat appears (a page, a floating button or a frame), with the real chat in
 the middle, controls for its look and features on the left, and the code that
 produces what you see on the right. The rest of this page is what the studio's
 three tabs (Server, Backend, Embed) give you.

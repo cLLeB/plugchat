@@ -33,6 +33,7 @@ main { max-width: 1040px; margin: 16px auto; padding: 0 16px; }
 .links strong { display: block; color: var(--accent); }
 .links span { color: var(--soft); font-size: 14px; }
 
+.devnote { color: var(--soft); font-size: 14px; padding: 0 6px; }
 .signin { max-width: 420px; margin: 40px auto; display: flex; flex-direction: column; gap: 12px; }
 .signin label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--soft); }
 .signin select, .signin input { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--page); color: var(--ink); }

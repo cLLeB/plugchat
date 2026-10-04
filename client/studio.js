@@ -5,6 +5,7 @@
 //
 // It is a development tool. The server only serves it when `studio` is on.
 import './element.js';
+import './launcher.js';
 
 const base = new URL('.', location.href).pathname.replace(/\/$/, '');
 const info = await fetch(`${base}/studio/state`).then((r) => r.json());
@@ -72,6 +73,7 @@ const state = {
   heading: info.ui.heading ?? '', strings: { ...info.ui.strings }, css: info.ui.css ?? '',
   features: Object.fromEntries(info.featureNames.map((name) => [name, info.features[name] !== false])),
   viewer: info.users[0].id, device: 'desktop', mode: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', embed: 'html', backend: info.starters[0]?.id, tab: 'embed',
+  show: 'page', // how the chat appears on the platform: a page, a floating button, or a frame
 };
 
 const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== '' && v != null));
@@ -92,18 +94,45 @@ const featuresOff = () => Object.fromEntries(Object.entries(state.features).filt
 
 const $stage = h('div', { class: 'stage' });
 let chatEl;
+let frameEl;
+const testToken = () => fetch(`${base}/studio/token`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ user: state.viewer }) }).then((r) => r.json()).then((j) => j.token);
+// A frame asks the page around it for a token, exactly as it will on the platform's own site.
+addEventListener('message', async (e) => {
+  if (!frameEl || e.source !== frameEl.contentWindow || e.data?.type !== 'plugchat:token-request') return;
+  frameEl.contentWindow.postMessage({ type: 'plugchat:token', token: await testToken() }, location.origin);
+});
+// The three ways the chat can appear, and the embed code that goes with each.
+const SHOWN_AS = { page: 'html', button: 'launcher', frame: 'iframe' };
+const mockSite = () => h('div', { class: 'mock' }, h('b', {}, 'Your site'), h('i'), h('i'), h('i', { class: 'short' }), h('span', {}, 'The chat opens from the button in the corner.'));
+
 function mount() {
-  chatEl = h('plug-chat', { server: base, theme: state.mode });
-  chatEl.getToken = () => fetch(`${base}/studio/token`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ user: state.viewer }) }).then((r) => r.json()).then((j) => j.token);
+  chatEl = frameEl = null;
+  $stage.dataset.device = state.device;
+  $stage.dataset.show = state.show;
+  if (state.show === 'frame') {
+    frameEl = h('iframe', { title: 'The chat in a frame', allow: 'camera; microphone', src: `${base}/embed?origin=${encodeURIComponent(location.origin)}&theme=${state.mode}&layout=${state.layout}&density=${state.density}` });
+    $stage.replaceChildren(h('p', { class: 'stagenote' }, 'A frame cannot be styled by the page around it. It shows the look saved in the server\'s settings (tab 1 · Server), plus the layout chosen here.'), frameEl);
+    return;
+  }
+  chatEl = h(state.show === 'button' ? 'plug-chat-launcher' : 'plug-chat', { server: base, theme: state.mode });
+  chatEl.getToken = testToken;
   chatEl.ui = { ...uiNow(), layout: state.layout, density: state.density };
   chatEl.features = featuresOff();
-  $stage.replaceChildren(chatEl);
-  $stage.dataset.device = state.device;
+  if (state.show === 'button') {
+    $stage.replaceChildren(mockSite(), chatEl);
+    chatEl.open?.();
+  } else $stage.replaceChildren(chatEl);
 }
+let shownAs = state.show;
 function refresh({ remount = false } = {}) {
-  if (remount) mount();
+  if (state.show !== shownAs) {
+    shownAs = state.show;
+    state.embed = SHOWN_AS[state.show]; // the Embed tab follows what is on screen
+    remount = true;
+  }
+  if (remount || state.show === 'frame') mount();
   else {
-    chatEl.setAttribute('theme', state.mode);
+    (chatEl.chatElement ?? chatEl).setAttribute('theme', state.mode);
     chatEl.ui = { ...uiNow(), layout: state.layout, density: state.density };
     chatEl.features = featuresOff();
     $stage.dataset.device = state.device;
@@ -302,6 +331,9 @@ const toolbarChoice = (key, options, remount) => h('div', { class: 'seg', role: 
 } }, text)));
 
 document.getElementById('preview').replaceChildren(
+  h('div', { class: 'toolbar' },
+    h('span', { class: 'label' }, 'Show it as'),
+    toolbarChoice('show', [['page', 'A page'], ['button', 'Floating button'], ['frame', 'A frame']], true)),
   h('div', { class: 'toolbar' },
     h('span', { class: 'label' }, 'Signed in as'),
     toolbarChoice('viewer', info.users.map((u) => [u.id, u.name.split(' ')[0]]), true),

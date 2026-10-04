@@ -107,7 +107,18 @@ input[type="color"] { width: 38px; height: 28px; padding: 0; border: 1px solid v
 .seg button[aria-checked="true"], .tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--card); }
 .stage { flex: 1; min-height: 0; display: flex; justify-content: center; }
 .stage plug-chat { height: 100%; width: 100%; box-shadow: 0 10px 40px rgba(16, 24, 40, .12); border-radius: 16px; }
-.stage[data-device="phone"] plug-chat { width: 390px; max-width: 100%; }
+.stage[data-device="phone"] plug-chat, .stage[data-device="phone"] iframe { width: 390px; max-width: 100%; }
+.stage iframe { width: 100%; height: 100%; border: 1px solid var(--line); border-radius: 16px; background: var(--card); }
+.stage[data-show="frame"] { flex-direction: column; align-items: center; gap: 8px; }
+.stagenote { margin: 0; font-size: 13px; color: var(--muted); align-self: stretch; }
+/* The floating button is fixed to the corner of the window; here the preview area stands in for the window. */
+.stage[data-show="button"] { transform: translateZ(0); background: var(--card); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.stage[data-show="button"] plug-chat-launcher { box-shadow: none; }
+.mock { flex: 1; padding: 28px; display: flex; flex-direction: column; gap: 12px; color: var(--muted); }
+.mock b { font-size: 20px; color: var(--fg); }
+.mock i { height: 12px; border-radius: 6px; background: var(--line); max-width: 520px; }
+.mock i.short { max-width: 300px; }
+.mock span { margin-top: 12px; font-size: 13px; }
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 12px; }
 .tabbody { display: flex; flex-direction: column; gap: 12px; }
 .code { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
@@ -1651,7 +1662,7 @@ export function createPlugChat(options = {}) {
             'cache-control': 'no-store',
             'x-content-type-options': 'nosniff',
             'referrer-policy': 'no-referrer',
-            'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self' ws: wss:; img-src blob: data: https:; media-src blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+            'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self' ws: wss:; img-src blob: data: https:; media-src blob:; frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
           });
           res.end(STUDIO_PAGE);
           return true;

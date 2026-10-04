@@ -4,6 +4,13 @@ Versions follow semantic versioning. What counts as a breaking change is set
 out in [docs/STABILITY.md](docs/STABILITY.md). Until 1.0, a minor version may
 contain breaking changes, and they are listed here.
 
+## 0.1.3
+
+- Setup studio: choose how the chat appears (a page, a floating button or a
+  frame) and see each one working, with the matching embed code.
+- Demo site: a visitor arrives already signed in as a member; the gear holds
+  only what members need, plus one line pointing developers to the studio.
+
 ## 0.1.2
 
 - Shared devices: if the host's token names a different person than before,

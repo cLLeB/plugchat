@@ -29,7 +29,44 @@ export interface Me extends User {
   privacy: Privacy;
   /** The reason this account is suspended, or null. */
   suspended: string | null;
-  features: { directory: boolean; stories: boolean; requireEncryption: boolean; calls: 'p2p' | 'external'; linkPreviews: boolean };
+  /** What this platform offers. A feature it switched off is `false` and is refused by the server. */
+  features: Record<FeatureName, boolean> & { requireEncryption: boolean; calls: 'p2p' | 'external' | false; linkPreviews: boolean };
+  /** Look and wording the platform set for every page. */
+  ui: UiConfig;
+}
+
+export type FeatureName =
+  | 'groups' | 'directory' | 'files' | 'voiceNotes' | 'reactions' | 'replies' | 'editing' | 'deleting' | 'forwarding' | 'mentions'
+  | 'pins' | 'stars' | 'search' | 'polls' | 'location' | 'viewOnce' | 'disappearing' | 'scheduled' | 'stories' | 'calls'
+  | 'encryption' | 'invites' | 'reports' | 'profiles' | 'typing' | 'presence' | 'readReceipts' | 'blocking' | 'export';
+
+/** Design tokens. Each becomes the CSS variable --pc-<name> (camelCase or kebab-case both work). */
+export interface ThemeTokens {
+  accent?: string; accentFg?: string; bg?: string; surface?: string; chat?: string; fg?: string; muted?: string; border?: string;
+  bubble?: string; bubbleFg?: string; bubbleOut?: string; bubbleOutFg?: string; danger?: string; online?: string;
+  radius?: string; bubbleRadius?: string; avatarRadius?: string; controlRadius?: string; borderWidth?: string;
+  font?: string; fontSize?: string; sidebarWidth?: string; height?: string; pattern?: string;
+  [token: string]: string | undefined;
+}
+
+export interface UiConfig {
+  /** Tokens for the light look; shape, type and accent tokens also carry over to the dark look. */
+  theme?: ThemeTokens;
+  /** Tokens that apply only to the dark look. */
+  dark?: ThemeTokens;
+  /** "bubbles" (default) or "flat": no bubbles, everyone on one side, names and pictures on every block. */
+  layout?: 'bubbles' | 'flat';
+  density?: 'comfortable' | 'compact';
+  /** Replace any interface text, keyed by the English original. */
+  strings?: Record<string, string>;
+  /** Replace icons by name with your own <svg> markup. */
+  icons?: Record<string, string>;
+  /** Extra CSS applied inside the chat. */
+  css?: string;
+  /** The quick reactions offered first. */
+  reactions?: string[];
+  /** Title above the chat list. */
+  heading?: string;
 }
 
 export interface Device {

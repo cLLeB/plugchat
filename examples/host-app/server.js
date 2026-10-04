@@ -61,6 +61,12 @@ const server = createServer(async (req, res) => {
     if (!MEMBERS[id]) return res.writeHead(401).end();
     const token = chat.signToken({ sub: id, ...MEMBERS[id] }, 600);
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ token }));
+  } else if (url.pathname === '/moderation') {
+    // The association's staff area. A real platform checks that the signed-in
+    // person is staff before handing out a short-lived admin token.
+    if (!MEMBERS[sessionUser(req)]) return res.writeHead(302, { location: '/' }).end();
+    const token = chat.signToken({ sub: 'staff', admin: true }, 900);
+    res.writeHead(302, { location: `/plugchat/admin#token=${token}`, 'cache-control': 'no-store' }).end();
   } else if (url.pathname === '/iframe' || url.pathname === '/widget') {
     // Two other ways to embed the same chat; see iframe.html and widget.html.
     if (!MEMBERS[sessionUser(req)]) return res.writeHead(302, { location: '/' }).end();

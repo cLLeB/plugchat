@@ -90,7 +90,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .icon.rec { color: #fff; background: var(--pc-danger); }
 input[type="text"], input[type="search"], select { font: inherit; color: inherit; background: var(--pc-surface); border: 1px solid var(--pc-border); border-radius: 10px; padding: 8px 12px; width: 100%; min-width: 0; }
 
-.side { width: 300px; flex: none; display: flex; flex-direction: column; border-right: 1px solid var(--pc-border); min-width: 0; }
+.side { width: 300px; flex: none; display: flex; flex-direction: column; border-inline-end: 1px solid var(--pc-border); min-width: 0; }
 .bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; min-height: 58px; border-bottom: 1px solid var(--pc-border); }
 .bar h2 { margin: 0; font-size: 17px; flex: 1; }
 .find { padding: 8px 10px 2px; }
@@ -101,9 +101,9 @@ input[type="text"], input[type="search"], select { font: inherit; color: inherit
 .ring.new { border-color: var(--pc-accent); }
 .list { overflow-y: auto; flex: 1; padding: 6px; }
 .section { font-size: 12px; font-weight: 600; color: var(--pc-muted); padding: 10px 8px 4px; text-transform: uppercase; letter-spacing: .04em; }
-.linkrow { width: 100%; text-align: left; padding: 8px; color: var(--pc-accent); font-size: 13px; border-radius: 10px; }
+.linkrow { width: 100%; text-align: start; padding: 8px; color: var(--pc-accent); font-size: 13px; border-radius: 10px; }
 .linkrow:hover { background: var(--pc-surface); }
-.conv { display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; padding: 9px 8px; border-radius: 10px; }
+.conv { display: flex; gap: 10px; align-items: center; width: 100%; text-align: start; padding: 9px 8px; border-radius: 10px; }
 .conv:hover { background: var(--pc-surface); }
 .conv[aria-current="true"] { background: color-mix(in srgb, var(--pc-accent) 14%, transparent); }
 .conv .body { flex: 1; min-width: 0; }
@@ -116,7 +116,7 @@ input[type="text"], input[type="search"], select { font: inherit; color: inherit
 .badge.quiet { background: var(--pc-muted); }
 .avatar { width: 40px; height: 40px; border-radius: 50%; flex: none; display: grid; place-items: center; font-weight: 600; color: #fff; position: relative; background-size: cover; background-position: center; font-size: 15px; }
 .avatar.sm { width: 28px; height: 28px; font-size: 11px; }
-.avatar .dot { position: absolute; right: -1px; bottom: -1px; width: 12px; height: 12px; border-radius: 50%; background: #2f9e44; border: 2px solid var(--pc-bg); }
+.avatar .dot { position: absolute; inset-inline-end: -1px; bottom: -1px; width: 12px; height: 12px; border-radius: 50%; background: #2f9e44; border: 2px solid var(--pc-bg); }
 .hint { color: var(--pc-muted); text-align: center; padding: 28px 16px; }
 
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
@@ -125,7 +125,7 @@ input[type="text"], input[type="search"], select { font: inherit; color: inherit
 .bar .sub { font-size: 12px; color: var(--pc-muted); display: flex; align-items: center; gap: 4px; }
 .bar .sub svg { width: 12px; height: 12px; }
 .backbtn { display: none; }
-.pinbar { display: flex; gap: 8px; align-items: center; padding: 6px 14px; border-bottom: 1px solid var(--pc-border); font-size: 13px; width: 100%; text-align: left; color: var(--pc-muted); }
+.pinbar { display: flex; gap: 8px; align-items: center; padding: 6px 14px; border-bottom: 1px solid var(--pc-border); font-size: 13px; width: 100%; text-align: start; color: var(--pc-muted); }
 .pinbar span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pinbar svg { width: 15px; height: 15px; color: var(--pc-accent); }
 .msgs { flex: 1; overflow-y: auto; padding: 14px 14px 6px; display: flex; flex-direction: column; gap: 2px; }
@@ -147,20 +147,20 @@ input[type="text"], input[type="search"], select { font: inherit; color: inherit
 .tag { font-size: 11px; opacity: .75; display: flex; align-items: center; gap: 4px; margin-bottom: 2px; font-style: italic; }
 .tag svg { width: 12px; height: 12px; }
 .linkbtn { color: var(--pc-accent); font-size: 12px; padding: 2px 4px; flex: none; }
-button.quote { display: block; text-align: left; color: inherit; }
-.quote { font-size: 12px; opacity: .8; border-left: 3px solid currentColor; padding: 1px 8px; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
-.meta { font-size: 11px; opacity: .7; margin-left: 8px; float: right; margin-top: 4px; display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
+button.quote { display: block; text-align: start; color: inherit; }
+.quote { font-size: 12px; opacity: .8; border-inline-start: 3px solid currentColor; padding: 1px 8px; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+.meta { font-size: 11px; opacity: .7; margin-inline-start: 8px; float: inline-end; margin-top: 4px; display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
 .meta svg { width: 11px; height: 11px; }
 .pic { display: block; max-width: 240px; max-height: 240px; border-radius: 10px; margin-bottom: 4px; }
 audio, video.media { display: block; max-width: 260px; margin-bottom: 4px; border-radius: 10px; }
-.file { display: flex; gap: 8px; align-items: center; text-decoration: underline; margin-bottom: 2px; text-align: left; }
+.file { display: flex; gap: 8px; align-items: center; text-decoration: underline; margin-bottom: 2px; text-align: start; }
 .once { display: flex; gap: 8px; align-items: center; font-weight: 600; }
 .poll { display: flex; flex-direction: column; gap: 6px; min-width: 200px; white-space: normal; }
 .poll .q { font-weight: 600; }
 .poll small { opacity: .75; }
-.opt { position: relative; display: flex; gap: 8px; text-align: left; padding: 6px 10px; border-radius: 10px; overflow: hidden; background: color-mix(in srgb, currentColor 10%, transparent); }
+.opt { position: relative; display: flex; gap: 8px; text-align: start; padding: 6px 10px; border-radius: 10px; overflow: hidden; background: color-mix(in srgb, currentColor 10%, transparent); }
 .opt.on { box-shadow: inset 0 0 0 2px currentColor; }
-.opt .fill { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, currentColor 18%, transparent); }
+.opt .fill { position: absolute; inset-block: 0; inset-inline-start: 0; background: color-mix(in srgb, currentColor 18%, transparent); }
 .opt .lbl { flex: 1; position: relative; }
 .opt .cnt { position: relative; font-weight: 600; }
 .reacts { display: flex; gap: 4px; flex-wrap: wrap; margin: 2px 0 4px; }
@@ -178,7 +178,7 @@ audio, video.media { display: block; max-width: 260px; margin-bottom: 4px; borde
 .newline::before, .newline::after { content: ""; flex: 1; height: 1px; background: var(--pc-accent); opacity: .5; }
 .bubble.pending { opacity: .65; }
 .failed { color: var(--pc-danger); font-size: 12px; margin: 2px 0 4px; }
-.tobottom { position: absolute; right: 16px; bottom: calc(100% + 30px); min-width: 38px; height: 38px; padding: 0 10px; border-radius: 19px; background: var(--pc-bg); border: 1px solid var(--pc-border); box-shadow: 0 4px 14px rgba(0, 0, 0, .18); font-weight: 600; z-index: 1; }
+.tobottom { position: absolute; inset-inline-end: 16px; bottom: calc(100% + 30px); min-width: 38px; height: 38px; padding: 0 10px; border-radius: 19px; background: var(--pc-bg); border: 1px solid var(--pc-border); box-shadow: 0 4px 14px rgba(0, 0, 0, .18); font-weight: 600; z-index: 1; }
 .menu .sel { background: var(--pc-surface); }
 .main.drop { outline: 2px dashed var(--pc-accent); outline-offset: -6px; }
 .pic { cursor: zoom-in; }
@@ -187,8 +187,8 @@ img.full { max-width: 100%; max-height: 70vh; border-radius: 8px; align-self: ce
 .banner span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .banner .icon { width: 26px; height: 26px; }
 .composer { display: flex; gap: 4px; align-items: flex-end; padding: 10px 12px; border-top: 1px solid var(--pc-border); position: relative; }
-.menu { position: absolute; left: 10px; bottom: calc(100% - 4px); background: var(--pc-bg); border: 1px solid var(--pc-border); border-radius: 12px; padding: 4px; display: flex; flex-direction: column; min-width: 190px; box-shadow: 0 6px 24px rgba(0, 0, 0, .18); z-index: 2; }
-.menu button { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 8px; text-align: left; }
+.menu { position: absolute; inset-inline-start: 10px; bottom: calc(100% - 4px); background: var(--pc-bg); border: 1px solid var(--pc-border); border-radius: 12px; padding: 4px; display: flex; flex-direction: column; min-width: 190px; box-shadow: 0 6px 24px rgba(0, 0, 0, .18); z-index: 2; }
+.menu button { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 8px; text-align: start; }
 .menu button:hover { background: var(--pc-surface); }
 .menu svg { width: 18px; height: 18px; color: var(--pc-muted); }
 textarea { flex: 1; resize: none; border: 1px solid var(--pc-border); border-radius: 18px; padding: 8px 14px; font: inherit; color: inherit; background: var(--pc-surface); max-height: 120px; min-height: 38px; min-width: 0; }
@@ -204,7 +204,7 @@ dialog h3 { margin: 0; font-size: 16px; display: flex; align-items: center; gap:
 dialog h3 span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 dialog textarea { border-radius: 10px; min-height: 80px; flex: none; }
 .people { max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; flex: none; }
-.person { display: flex; gap: 10px; align-items: center; padding: 6px 4px; border-radius: 8px; cursor: pointer; width: 100%; text-align: left; }
+.person { display: flex; gap: 10px; align-items: center; padding: 6px 4px; border-radius: 8px; cursor: pointer; width: 100%; text-align: start; }
 .person:hover { background: var(--pc-surface); }
 .person span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .person small { color: var(--pc-muted); }
@@ -226,7 +226,7 @@ label.field, .field { font-size: 13px; color: var(--pc-muted); display: flex; fl
 .call { position: absolute; inset: 0; background: #0d0f13; color: #fff; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
 .call iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
 .call video.remote { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.call video.local { position: absolute; right: 14px; top: 14px; width: 28%; max-width: 160px; border-radius: 10px; background: #000; }
+.call video.local { position: absolute; inset-inline-end: 14px; top: 14px; width: 28%; max-width: 160px; border-radius: 10px; background: #000; }
 .call .cinfo { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; text-shadow: 0 1px 3px #000; }
 .call .cinfo .avatar { width: 72px; height: 72px; font-size: 26px; }
 .call .cbtns { position: absolute; bottom: 22px; display: flex; gap: 14px; }
@@ -235,8 +235,9 @@ label.field, .field { font-size: 13px; color: var(--pc-muted); display: flex; fl
 .call .cbtns .hang { background: #e03131; }
 .call .cbtns .ok { background: #2f9e44; }
 
+.root[dir="rtl"] .backbtn svg, .root[dir="rtl"] .tag svg { transform: scaleX(-1); }
 @container (max-width: 640px) {
-  .side { width: 100%; border-right: 0; }
+  .side { width: 100%; border-inline-end: 0; }
   .main { display: none; }
   .root.open .side { display: none; }
   .root.open .main { display: flex; }
@@ -410,7 +411,10 @@ class PlugChatElement extends HTMLElement {
 
   _build() {
     // `strings` lets the host override or add translations: el.strings = { 'Send': '…' }.
-    setLanguage(this.getAttribute('lang') || document.documentElement.lang, this.strings);
+    const lang = this.getAttribute('lang') || document.documentElement.lang;
+    setLanguage(lang, this.strings);
+    // Right-to-left scripts mirror the layout. dir="rtl" or dir="ltr" on the element overrides the guess.
+    this._dir = this.getAttribute('dir') || (/^(ar|he|fa|ur|ps|sd|yi|dv)\b/i.test(lang ?? '') ? 'rtl' : 'ltr');
     const style = h('style');
     style.textContent = STYLE;
     this.$list = h('div', { class: 'list', role: 'list' }, h('div', { class: 'hint' }, T('Connecting…')));
@@ -435,7 +439,8 @@ class PlugChatElement extends HTMLElement {
       ),
       this.$main,
     );
-    this.$dialog = h('dialog');
+    this.$root.dir = this._dir;
+    this.$dialog = h('dialog', { dir: this._dir });
     this.$dialog.addEventListener('click', (e) => e.target === this.$dialog && this.$dialog.close());
     this.shadowRoot.append(style, this.$root, this.$dialog);
   }
@@ -792,9 +797,12 @@ class PlugChatElement extends HTMLElement {
   _renderComposerState() {
     const conv = this.convs.get(this.activeId);
     if (!conv || !this.$composer) return;
-    const readonly = conv.announce && this._role(conv) === 'member';
+    const suspended = this.chat.me.suspended;
+    const readonly = !!suspended || (conv.announce && this._role(conv) === 'member');
     this.$composer.hidden = readonly;
     this.$readonly.hidden = !readonly;
+    // A suspended person can read but not write; say why, in the host's words.
+    this.$readonly.textContent = suspended || T('Only admins can post in this channel.');
   }
 
   _renderHeader() {

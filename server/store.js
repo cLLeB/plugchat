@@ -1024,6 +1024,10 @@ export class Store {
     return id;
   }
 
+  deleteReport(id) {
+    return this.run('DELETE FROM reports WHERE id = ?', id).changes > 0;
+  }
+
   listReports(limit = 100) {
     return this.all('SELECT * FROM reports ORDER BY created_at DESC LIMIT ?', limit).map((r) => ({
       id: r.id, messageId: r.message_id, conversationId: r.conversation_id, reporterId: r.reporter_id,

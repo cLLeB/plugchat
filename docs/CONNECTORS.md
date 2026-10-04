@@ -156,6 +156,25 @@ chatEl.actions = [{
 }];
 ```
 
+## Moderation console for your staff
+
+`/plugchat/admin` is a ready-made page listing reported messages (with who
+reported and who sent them), usage figures, and a people search, with buttons
+to delete a message, suspend or reinstate someone, and dismiss a report.
+
+It has no login of its own. From your back office, for a signed-in staff
+member, redirect to it with a short-lived admin token in the URL fragment,
+which browsers never send to a server:
+
+```js
+const token = signToken({ sub: `staff:${staff.id}`, admin: true }, secret, 900);
+res.redirect(`/plugchat/admin#token=${token}`);
+```
+
+The page removes the token from the address bar on load and cannot be framed.
+Messages from end-to-end encrypted conversations appear as "cannot be read
+here": moderators can still act on the sender, but not see the content.
+
 ## Acting from your backend
 
 An admin token (`{"sub": "your-service", "admin": true}`) lets your servers do

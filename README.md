@@ -78,6 +78,14 @@ menu actions (payments, orders, bookings).
 **Identity** — people are found by whatever your platform uses: user id, email,
 phone number, username, or custom kinds such as a membership number.
 
+**Everyday comfort** — drafts kept per conversation, an @-mention picker,
+messages that appear instantly and offer a retry if they fail, drag-and-drop
+and paste for attachments, a "new messages" line where you left off, desktop
+notifications, last seen.
+
+**For your moderators** — a ready-made console page for reports, suspensions
+and usage figures.
+
 **Personal** — starred messages, read-receipt and online-status privacy
 switches, a list of your devices, download of your own data.
 
@@ -144,7 +152,8 @@ Stated plainly so you can plan around them:
   call the REST/WebSocket API.
 - **Push notifications are yours to send**, driven by the webhook.
 - **The interface ships in English, French and Spanish.** Other languages are
-  added by the host through `strings`. Right-to-left layouts are not handled.
+  added by the host through `strings`. The layout mirrors for right-to-left
+  languages, but no right-to-left translation ships yet.
 - **Not yet exercised here:** the Dockerfile, the token snippets for languages
   other than Node, the native WebView bridges, and calls between two real
   devices on different networks (the call flow is tested in one browser with

@@ -807,6 +807,34 @@ test('ownership transfer, suspension, storage quota and the in-process host API'
   }
 });
 
+test('moderation console: served locked down, reports carry names and can be dismissed', async () => {
+  const page = await fetch(`${url}/admin`);
+  assert.equal(page.status, 200);
+  assert.match(page.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+  assert.equal(page.headers.get('cache-control'), 'no-store');
+  assert.equal((await fetch(`${url}/client/admin.js`)).status, 200);
+
+  const alice = await client('alice', 'Alice');
+  const bob = await client('bob', 'Bob');
+  const dm = await alice.openDm('bob');
+  const msg = await alice.send(dm.id, { text: 'buy my coins' });
+  const { reportId } = await bob.report(msg.id, 'Scam or fraud');
+
+  const admin = signToken({ sub: 'staff', admin: true }, SECRET);
+  const { reports } = await (await api('/reports', { token: admin })).json();
+  const mine = reports.find((r) => r.id === reportId);
+  assert.equal(mine.reporterName, 'Bob');
+  assert.equal(mine.senderName, 'Alice');
+  assert.equal(mine.senderSuspended, false);
+
+  assert.equal((await api(`/reports/${reportId}`, { token: signToken({ sub: 'bob' }, SECRET), method: 'DELETE' })).status, 403);
+  assert.equal((await api(`/reports/${reportId}`, { token: admin, method: 'DELETE' })).status, 200);
+  assert.equal((await api(`/reports/${reportId}`, { token: admin, method: 'DELETE' })).status, 404);
+  const found = await (await api('/users?q=alice', { token: admin })).json();
+  assert.equal(found.users[0].suspended, null, 'admins see suspension state');
+  assert.equal((await bob.user('alice')).suspended, undefined, 'other users do not');
+});
+
 test('every interface string has a translation in every shipped language', async () => {
   const { readFileSync } = await import('node:fs');
   const { DICTIONARIES } = await import('../client/i18n.js');

@@ -13,7 +13,44 @@ import { diskStorage, createHooks, databaseBus } from './connectors.js';
 export { signToken, verifyToken, signWebhook, diskStorage, databaseBus };
 
 const CLIENT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'client');
-const CLIENT_FILES = new Set(['plugchat.js', 'e2ee.js', 'calls.js', 'element.js', 'i18n.js', 'launcher.js', 'embed.js']);
+const CLIENT_FILES = new Set(['plugchat.js', 'e2ee.js', 'calls.js', 'element.js', 'i18n.js', 'launcher.js', 'embed.js', 'admin.js']);
+// The moderation console for the host's staff. It holds no secrets: it asks for an admin token.
+const ADMIN_PAGE = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Chat moderation</title>
+<style>
+:root { color-scheme: light dark; --bg: #f4f5f7; --card: #fff; --fg: #16181d; --muted: #6b7280; --line: #e3e5ea; --accent: #3b5bdb; --danger: #c92a2a; }
+@media (prefers-color-scheme: dark) { :root { --bg: #111317; --card: #1b1e25; --fg: #e8eaee; --muted: #9199a6; --line: #2a2e37; --accent: #748ffc; --danger: #ff8787; } }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+#app { max-width: 880px; margin: 0 auto; padding: 20px 16px 60px; }
+h1 { font-size: 22px; } h2 { font-size: 17px; margin: 0 0 10px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-bottom: 16px; display: block; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.tile { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; }
+.tile strong { font-size: 22px; } .tile span, .muted { color: var(--muted); font-size: 13px; }
+.list { list-style: none; margin: 0; padding: 0; }
+.list li { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; padding: 12px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.list li > div:first-child { flex: 1; min-width: 240px; }
+blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.tag { display: inline-block; background: color-mix(in srgb, var(--accent) 16%, transparent); border-radius: 8px; padding: 1px 8px; font-size: 13px; margin-left: 4px; }
+button { font: inherit; padding: 7px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; }
+button.primary { background: var(--accent); color: #fff; border-color: transparent; margin-top: 10px; }
+button.danger { color: var(--danger); } button:disabled { opacity: .5; }
+input { font: inherit; width: 100%; box-sizing: border-box; padding: 9px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+.error { color: var(--danger); font-size: 13px; }
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script type="module" src="client/admin.js"></script>
+</body>
+</html>
+`;
 // The chat as a standalone page, for iframes and native WebViews.
 const EMBED_PAGE = `<!doctype html>
 <html lang="en">
@@ -937,7 +974,21 @@ export function createPlugChat(options = {}) {
     }],
 
     ['GET', '/v1/stats', (ctx) => (adminOnly(ctx), store.stats())],
-    ['GET', '/v1/reports', (ctx) => (adminOnly(ctx), { reports: store.listReports() })],
+    ['GET', '/v1/reports', (ctx) => {
+      adminOnly(ctx);
+      const name = (id) => store.getUser(id)?.name ?? id;
+      return {
+        reports: store.listReports().map((r) => ({
+          ...r, reporterName: name(r.reporterId), senderName: name(r.message.senderId), senderSuspended: !!store.suspension(r.message.senderId),
+        })),
+      };
+    }],
+
+    ['DELETE', '/v1/reports/:id', (ctx) => {
+      adminOnly(ctx);
+      if (!store.deleteReport(ctx.params.id)) throw notFound('report not found');
+      return { dismissed: true };
+    }],
 
     ['POST', '/v1/files', async (ctx) => {
       if (!stories) throw notFound('stories are disabled');
@@ -1086,6 +1137,19 @@ export function createPlugChat(options = {}) {
 
     try {
       if (path === '/health') return send(res, 200, { ok: true }), true;
+
+      if (req.method === 'GET' && path === '/admin') {
+        res.writeHead(200, {
+          'content-type': 'text/html; charset=utf-8',
+          'cache-control': 'no-store',
+          'x-content-type-options': 'nosniff',
+          'referrer-policy': 'no-referrer',
+          // Never framed, and it can talk to nothing but this server.
+          'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+        });
+        res.end(ADMIN_PAGE);
+        return true;
+      }
 
       if (req.method === 'GET' && path === '/embed') {
         // Only the host's own sites may frame the chat, and the page may only talk to this server.

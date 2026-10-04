@@ -1210,12 +1210,50 @@ class PlugChatElement extends HTMLElement {
     const wanted = this._notifyOn() && globalThis.Notification?.permission === 'granted';
     const looking = document.visibilityState === 'visible' && m.conversationId === this.activeId && this.getClientRects().length;
     if (!wanted || looking || !conv || (conv.muted && !m.mentions?.includes(this.chat.me.id))) return;
-    const note = new Notification(this._title(conv), { body: this._preview(conv, m), tag: conv.id });
+    // Laid out like a messenger: who it is from on top, what they said underneath,
+    // their picture beside it. In a group the group's name follows the sender's.
+    const sender = conv.members.find((x) => x.userId === m.senderId);
+    const from = m.kind === 'system' ? this._title(conv) : sender?.name ?? this._title(conv);
+    const title = conv.type === 'group' && m.kind !== 'system' ? `${from} · ${conv.title}` : from;
+    const body = this._previewsOn() ? this._snippet(m) : T('New message');
+    const note = new Notification(title, {
+      body,
+      tag: conv.id, // one notification per conversation: a newer message replaces the older one
+      renotify: true,
+      icon: this.getAttribute('notification-icon') || this._notifyIcon(from, sender?.avatar),
+    });
     note.onclick = () => {
       window.focus();
       this._select(conv.id);
       note.close();
     };
+  }
+
+  /** The sender's picture, or their initials on their colour, as a notification icon. */
+  _notifyIcon(name, avatar) {
+    if (avatar && /^https:\/\//.test(avatar)) return avatar;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = `hsl(${hue(name)} 45% 45%)`;
+    ctx.beginPath();
+    ctx.arc(64, 64, 64, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = '600 52px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(initials(name), 64, 68);
+    return canvas.toDataURL('image/png');
+  }
+
+  /** Whether notifications may show what the message says (on unless the person turned it off). */
+  _previewsOn() {
+    try {
+      return localStorage.getItem('plugchat:notify-preview') !== 'off';
+    } catch {
+      return true;
+    }
   }
 
   _notifyOn() {
@@ -1977,6 +2015,9 @@ class PlugChatElement extends HTMLElement {
         if (v && (await Notification.requestPermission()) !== 'granted') throw new Error(T('Notifications are blocked in this browser.'));
         localStorage.setItem('plugchat:notify', v ? 'on' : 'off');
       }, T('Show a notification when a message arrives and you are not looking at the chat.')),
+      globalThis.Notification && toggle(T('Show message text in notifications'), this._previewsOn(), async (v) => {
+        localStorage.setItem('plugchat:notify-preview', v ? 'on' : 'off');
+      }),
       h('button', { class: 'btn plain', onclick: () => this._starredDialog() }, T('Starred messages')),
       devices.length > 0 && h('div', { class: 'field' }, T('Devices that can read your encrypted chats.'),
         h('div', { class: 'people' }, devices.map((d) => h('div', { class: 'person' },

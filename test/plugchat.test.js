@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createPlugChat, signToken, signWebhook } from '../server/index.js';
 import { PlugChat } from '../client/plugchat.js';
 
@@ -913,6 +914,42 @@ test('a conversation lists what was shared in it, without view-once or deleted f
   assert.deepEqual(shared.map((m) => m.file.name), ['minutes.pdf', 'photo.png']);
   assert.deepEqual(shared.map((m) => m.id), [doc.id, photo.id]);
   await assert.rejects(outsider.attachments(dm.id), { status: 404 });
+});
+
+test('admin actions are audited; backup and doctor commands work', async () => {
+  const { execFileSync, spawnSync } = await import('node:child_process');
+  const { existsSync, readFileSync } = await import('node:fs');
+  const d = mkdtempSync(join(tmpdir(), 'plugchat-ops-'));
+  const inst = createPlugChat({ secret: SECRET, dataDir: join(d, 'data'), log: { error() {} } });
+  await inst.admin.upsertUser('op1', { name: 'Op One' });
+  await inst.admin.upsertUser('op2', { name: 'Op Two' });
+  const dm = await inst.admin.openDm('op1', 'op2');
+  const msg = await inst.admin.post(dm.id, { kind: 'text', senderId: 'op1', body: 'keep me in the backup' });
+  await inst.admin.suspend('op2', 'testing');
+  await inst.admin.exportUser('op1');
+  await inst.admin.deleteMessage(msg.id);
+  const { entries } = await inst.api('GET', '/v1/audit');
+  assert.deepEqual(entries.map((e) => e.action).reverse(), [
+    'PUT /v1/users/op2/suspension', 'GET /v1/users/op1/export', `DELETE /v1/messages/${msg.id}`,
+  ], 'sensitive actions are recorded; routine ones are not');
+  assert.equal(entries[0].actor, 'host');
+
+  const cli = fileURLToPath(new URL('../bin/plugchat.js', import.meta.url));
+  const envFor = (extra) => ({ ...process.env, PLUGCHAT_DATA: join(d, 'data'), ...extra });
+  execFileSync(process.execPath, [cli, 'backup', join(d, 'copy')], { env: envFor({}) });
+  assert.ok(existsSync(join(d, 'copy', 'plugchat.db')));
+  assert.ok(readFileSync(join(d, 'copy', 'plugchat.db')).length > 4096);
+  assert.equal(spawnSync(process.execPath, [cli, 'backup', join(d, 'copy')], { env: envFor({}) }).status, 1, 'never overwrites an existing backup');
+
+  const good = spawnSync(process.execPath, [cli, 'doctor'], { env: envFor({ PLUGCHAT_SECRET: SECRET, PLUGCHAT_ORIGINS: 'https://example.com' }), encoding: 'utf8' });
+  assert.equal(good.status, 0, good.stdout);
+  const bad = spawnSync(process.execPath, [cli, 'doctor'], { env: envFor({ PLUGCHAT_SECRET: 'short', PLUGCHAT_ORIGINS: 'example.com/path' }), encoding: 'utf8' });
+  assert.equal(bad.status, 1);
+  assert.match(bad.stdout, /at least 32/);
+  assert.match(bad.stdout, /must look like https/);
+
+  inst.close();
+  rmSync(d, { recursive: true, force: true });
 });
 
 test('platform notices arrive in a read-only inbox', async () => {

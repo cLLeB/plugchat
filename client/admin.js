@@ -76,9 +76,9 @@ function userRow(user) {
 
 async function load() {
   if (!token) return signIn();
-  let stats, reports;
+  let stats, reports, entries;
   try {
-    [stats, { reports }] = await Promise.all([api('GET', '/stats'), api('GET', '/reports')]);
+    [stats, { reports }, { entries }] = await Promise.all([api('GET', '/stats'), api('GET', '/reports'), api('GET', '/audit?limit=30')]);
   } catch (e) {
     return signIn(`That token was not accepted (${e.message}). Ask your platform for a fresh admin token.`);
   }
@@ -124,6 +124,13 @@ async function load() {
       h('input', { type: 'search', placeholder: 'Search by name, or exact email / phone / username', 'aria-label': 'Search people',
         oninput: (e) => search(e.target.value).catch(() => {}) }),
       $results),
+
+    h('section', { class: 'card' },
+      h('h2', {}, 'Recent staff actions'),
+      entries.length === 0 && h('p', { class: 'muted' }, 'No deletions, suspensions or data exports yet.'),
+      h('ul', { class: 'list' }, entries.map((e) => h('li', {},
+        h('div', {}, h('code', {}, e.action), h('div', { class: 'muted' }, `${e.actor} · ${when(e.at)}`))))),
+    ),
   );
   search('').catch(() => {});
 }

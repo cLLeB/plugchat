@@ -26,6 +26,7 @@ call signalling). That keeps a native or server-side integration to plain HTTP.
 | `POST /v1/users/:id/notify` `{text, title?}` | **Admin.** Post a notice into that person's read-only "Notifications" conversation |
 | `GET /v1/reports`, `DELETE /v1/reports/:id` | **Admin.** Reported messages; dismiss one |
 | `GET /v1/users/:id/unread` | **Admin.** `{total, conversations}` for your own email or push digests |
+| `GET /v1/audit?limit=` | **Admin.** Recent deletions, suspensions and exports done with admin tokens: `{entries: [{actor, action, at}]}` |
 | `GET /v1/stats` | **Admin.** Counts of users, conversations, messages, files and bytes stored |
 | `PUT /v1/users/:id` `{name, avatar, handles}` | **Admin.** Create or update a user ahead of their first visit |
 | `DELETE /v1/users/:id` | **Admin.** Erase the user and everything they sent |

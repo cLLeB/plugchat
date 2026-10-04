@@ -74,6 +74,7 @@ const HANDLE_KIND = /^[a-z][a-z0-9_]{0,23}$/;
 const USER_KINDS = new Set(['text', 'poll', 'location', 'custom']);
 const VIEW_ONCE_GRACE_MS = 60_000;
 const WEBHOOK_MAX_ATTEMPTS = 8;
+const AUDITED = /^DELETE |\/suspension$|\/export$/;
 
 class HttpError extends Error {
   constructor(status, code, message) {
@@ -1077,6 +1078,8 @@ export function createPlugChat(options = {}) {
     }],
 
     ['GET', '/v1/stats', (ctx) => (adminOnly(ctx), store.stats())],
+
+    ['GET', '/v1/audit', (ctx) => (adminOnly(ctx), { entries: store.listAudit(Math.min(Number(ctx.url.searchParams.get('limit')) || 100, 1000)) })],
     ['GET', '/v1/reports', (ctx) => {
       adminOnly(ctx);
       const name = (id) => store.getUser(id)?.name ?? id;
@@ -1331,6 +1334,8 @@ export function createPlugChat(options = {}) {
         },
       };
       const out = await route.handler(ctx);
+      // Deletions, suspensions and data exports done with admin rights leave a trace.
+      if (auth.admin && AUDITED.test(`${req.method} ${path}`)) store.addAudit(auth.sub, `${req.method} ${path}`);
       if (out !== undefined) send(res, ctx.status, out);
     } catch (e) {
       if (e instanceof HttpError) {

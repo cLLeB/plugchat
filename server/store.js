@@ -135,6 +135,12 @@ CREATE TABLE IF NOT EXISTS presence (
   at INTEGER NOT NULL,
   PRIMARY KEY (user_id, instance)
 );
+CREATE TABLE IF NOT EXISTS audit (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  actor TEXT NOT NULL,
+  action TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS key_backups (
   user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   salt TEXT NOT NULL,
@@ -1047,6 +1053,23 @@ export class Store {
       files: this.all('SELECT id, name, mime, size, created_at FROM files WHERE owner_id = ?', id).map((r) => ({ fileId: r.id, name: r.name, mime: r.mime, size: r.size, createdAt: r.created_at })),
       blocked: this.blocks(id),
     };
+  }
+
+  // ---- audit trail: what was done with admin rights, by which token subject ----
+
+  addAudit(actor, action) {
+    this.run('INSERT INTO audit (actor, action, at) VALUES (?, ?, ?)', actor, action, Date.now());
+    // Keep the trail bounded: the most recent 20,000 entries.
+    this.run('DELETE FROM audit WHERE id <= (SELECT MAX(id) FROM audit) - 20000');
+  }
+
+  listAudit(limit = 100) {
+    return this.all('SELECT actor, action, at FROM audit ORDER BY id DESC LIMIT ?', limit);
+  }
+
+  /** A consistent copy of the database in one file, safe to take while running. */
+  backupTo(file) {
+    this.db.prepare('VACUUM INTO ?').run(file);
   }
 
   // ---- key backups: opaque to the server, opened only by the owner's passphrase ----

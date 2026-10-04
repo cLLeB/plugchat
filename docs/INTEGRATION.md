@@ -74,6 +74,27 @@ to another, and presence is shared. Events travel through the shared database,
 polled a few times a second, so no extra infrastructure is needed; pass your
 own `bus` to use Redis or similar instead. Rate limits are counted per instance.
 
+### Going live
+
+```bash
+node bin/plugchat.js doctor
+```
+
+checks the configuration (secret, data folder, allowed origins, hook and
+webhook URLs) and says what must be fixed before starting.
+
+```bash
+node bin/plugchat.js backup /path/to/empty/folder
+```
+
+writes a consistent copy of the database and uploads, and is safe to run while
+the server is up. To restore, stop PlugChat and point `PLUGCHAT_DATA` at a copy
+of that folder.
+
+Deletions, suspensions and data exports made with an admin token are recorded
+with the token's `sub` and are visible in the moderation console and at
+`GET /v1/audit`, so give each staff member's token its own `sub`.
+
 ### Settings
 
 | Option (Node) | Environment variable | Default | Meaning |

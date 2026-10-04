@@ -57,7 +57,77 @@ if (cmd === 'secret') {
   };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
+} else if (cmd === 'backup') {
+  // plugchat backup <destination folder>   (safe to run while the server is up)
+  const { Store } = await import('../server/store.js');
+  const { cpSync, existsSync, mkdirSync } = await import('node:fs');
+  const { join, resolve } = await import('node:path');
+  const dataDir = env.PLUGCHAT_DATA ?? './plugchat-data';
+  const dest = args[0] && resolve(args[0]);
+  if (!dest || !existsSync(join(dataDir, 'plugchat.db'))) {
+    console.error(dest ? `No database found in ${resolve(dataDir)} (set PLUGCHAT_DATA).` : 'usage: plugchat backup <destination folder>');
+    process.exit(1);
+  }
+  if (existsSync(join(dest, 'plugchat.db'))) {
+    console.error(`${dest} already holds a backup. Choose an empty folder so nothing is overwritten.`);
+    process.exit(1);
+  }
+  mkdirSync(dest, { recursive: true });
+  const store = new Store(join(dataDir, 'plugchat.db'));
+  store.backupTo(join(dest, 'plugchat.db'));
+  store.close();
+  if (existsSync(join(dataDir, 'files'))) cpSync(join(dataDir, 'files'), join(dest, 'files'), { recursive: true });
+  console.log(`Backup written to ${dest}. To restore, stop PlugChat and point PLUGCHAT_DATA at a copy of that folder.`);
+} else if (cmd === 'doctor') {
+  // plugchat doctor   — checks the configuration before going live
+  const { accessSync, constants, mkdirSync } = await import('node:fs');
+  let failed = false;
+  const say = (level, text) => {
+    if (level === 'FAIL') failed = true;
+    console.log(`${level.padEnd(4)} ${text}`);
+  };
+  const [major, minor] = process.versions.node.split('.').map(Number);
+  say(major > 22 || (major === 22 && minor >= 13) ? 'ok' : 'FAIL', `Node.js ${process.versions.node} (22.13 or newer is required)`);
+
+  const secret = env.PLUGCHAT_SECRET ?? '';
+  if (!secret) say('FAIL', 'PLUGCHAT_SECRET is not set. Generate one with: plugchat secret');
+  else if (secret.length < 32) say('FAIL', `PLUGCHAT_SECRET is ${secret.length} characters; it must be at least 32`);
+  else say('ok', 'PLUGCHAT_SECRET is set');
+
+  const dataDir = env.PLUGCHAT_DATA ?? './plugchat-data';
+  try {
+    mkdirSync(dataDir, { recursive: true });
+    accessSync(dataDir, constants.W_OK);
+    say('ok', `Data folder ${dataDir} is writable`);
+  } catch {
+    say('FAIL', `Data folder ${dataDir} cannot be written to`);
+  }
+
+  if (!env.PLUGCHAT_ORIGINS) say('warn', 'PLUGCHAT_ORIGINS is not set: any website may call the API with a valid token, and any site may frame the embed page');
+  else {
+    const bad = env.PLUGCHAT_ORIGINS.split(',').map((s) => s.trim()).filter((o) => !/^https?:\/\/[^/]+$/.test(o));
+    say(bad.length ? 'FAIL' : 'ok', bad.length ? `PLUGCHAT_ORIGINS entries must look like https://example.com (no path): ${bad.join(', ')}` : 'PLUGCHAT_ORIGINS is set');
+  }
+
+  for (const name of ['PLUGCHAT_WEBHOOK_URL', 'PLUGCHAT_HOOK_URL']) {
+    if (!env[name]) continue;
+    let target;
+    try {
+      target = new URL(env[name]);
+    } catch {
+      say('FAIL', `${name} is not a valid URL`);
+      continue;
+    }
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(target.hostname);
+    say(target.protocol === 'https:' || local ? 'ok' : 'warn', `${name} → ${target.origin}${target.protocol === 'https:' || local ? '' : ' (not HTTPS: message content would cross the network unencrypted)'}`);
+  }
+  if (env.PLUGCHAT_HOOK_URL && !env.PLUGCHAT_HOOK_EVENTS) say('warn', 'PLUGCHAT_HOOK_URL is set but PLUGCHAT_HOOK_EVENTS is empty, so no hooks will be called');
+  if (env.PLUGCHAT_HOOK_FAIL_OPEN === 'on') say('warn', 'PLUGCHAT_HOOK_FAIL_OPEN is on: if your hook endpoint is down, messages go through unchecked');
+  if (!env.PLUGCHAT_WEBHOOK_URL) say('warn', 'PLUGCHAT_WEBHOOK_URL is not set: people who are offline will not be notified of new messages');
+
+  console.log(failed ? '\nNot ready: fix the FAIL lines above.' : '\nReady to start.');
+  process.exit(failed ? 1 : 0);
 } else {
-  console.error('usage: plugchat <start|secret|token>');
+  console.error('usage: plugchat <start|secret|token|backup|doctor>');
   process.exit(1);
 }

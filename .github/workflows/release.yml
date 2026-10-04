@@ -3,11 +3,13 @@
 #   npm version patch        (or minor / major; updates package.json and creates the tag)
 #   git push --follow-tags
 #
-# It then: runs the tests, publishes the package to npm (only if the NPM_TOKEN
-# secret is set), builds the container image and pushes it to GitHub's registry
-# as ghcr.io/<owner>/plugchat, and creates a GitHub release.
+# It then: runs the tests, builds the container image and pushes it to GitHub's
+# registry as ghcr.io/<owner>/plugchat, creates a GitHub release, and publishes
+# the package to npm.
 #
-# Not yet executed: expect to adjust it on its first run.
+# npm publishing uses "trusted publishing": no token is stored anywhere. On
+# npmjs.com, the package's settings name this repository and this workflow file
+# (release.yml) as a trusted publisher, and npm accepts what this job publishes.
 name: release
 on:
   push:
@@ -16,12 +18,11 @@ on:
 permissions:
   contents: write
   packages: write
+  id-token: write # lets npm verify that this workflow is the one publishing
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    env:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -45,10 +46,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Last, so that a problem with the npm token never holds back the image or the release.
+      # Last, so that a problem with npm never holds back the image or the release.
       - name: Publish to npm
-        if: env.NPM_TOKEN != ''
         # The tests and type check already ran above, so the package's own pre-publish checks are skipped here.
-        run: npm publish --access public --ignore-scripts
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm install -g npm@latest
+          npm publish --access public --ignore-scripts

@@ -708,6 +708,22 @@ test('two instances sharing a database behave as one', async () => {
   }
 });
 
+test('every interface string has a translation in every shipped language', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { DICTIONARIES } = await import('../client/i18n.js');
+  const source = readFileSync(new URL('../client/element.js', import.meta.url), 'utf8');
+  const used = new Set([...source.matchAll(/\bT\('((?:[^'\\]|\\.)*)'/g)].map((m) => m[1]));
+  assert.ok(used.size > 100, 'the scan found the interface strings');
+  for (const [lang, dict] of Object.entries(DICTIONARIES)) {
+    const untranslated = [...used].filter((key) => !(key in dict));
+    assert.deepEqual(untranslated, [], `missing in "${lang}"`);
+    for (const [key, value] of Object.entries(dict)) {
+      const holes = (s) => (s.match(/\{\w+\}/g) ?? []).sort().join();
+      assert.equal(holes(value), holes(key), `placeholders differ in "${lang}" for: ${key}`);
+    }
+  }
+});
+
 test('writes are rate limited per user', async () => {
   const d = mkdtempSync(join(tmpdir(), 'plugchat-rl-'));
   const limited = createPlugChat({ secret: SECRET, dataDir: d, log: { error() {} }, rateLimit: { perSecond: 1, burst: 3 } });

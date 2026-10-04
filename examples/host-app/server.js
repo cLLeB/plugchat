@@ -30,6 +30,16 @@ const chat = createPlugChat({
     // platform would check credits, call a moderation service, and so on.
     'message.before': ({ message }) =>
       message.kind === 'text' && /\bfree money\b/i.test(message.body) ? { allow: false, reason: 'That looks like spam, so it was not sent.' } : undefined,
+    // Link previews are the host's to produce. This demo only knows its own
+    // pages; a real platform would fetch the page from a locked-down service.
+    'link.preview': ({ url }) => {
+      const pages = {
+        '/events/reunion': { title: 'Class Reunion 2026', description: 'Saturday 12 December, Great Hall. Tickets on sale now.' },
+        '/news/agm': { title: 'Annual General Meeting', description: 'Agenda, reports and how to vote.' },
+      };
+      const { hostname, pathname } = new URL(url);
+      return hostname === 'alumni.example' && pages[pathname] ? { ...pages[pathname], siteName: 'Alumni Association' } : undefined;
+    },
     // Run with --vendor-calls to route calls through a third-party video
     // service instead of the built-in peer-to-peer calls. A paid vendor would
     // mint a per-user join token here with its API key.

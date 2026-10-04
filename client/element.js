@@ -134,6 +134,37 @@ const PLAYABLE = /^(audio\/(webm|ogg|mpeg|mp4|wav|x-wav|aac)|video\/(mp4|webm))$
 const TIMERS = [[0, 'Off'], [60, '1 minute'], [3600, '1 hour'], [86400, '1 day'], [604800, '1 week']];
 const REPORT_REASONS = ['Spam', 'Harassment or bullying', 'Scam or fraud', 'Inappropriate content', 'Something else'];
 
+// Sites with a strict Content-Security-Policy forbid inline <style> elements,
+// style="" attributes and raw HTML strings. Styles therefore go in through
+// constructed stylesheets and the style object, and icon markup through a
+// Trusted Types policy named "plugchat" where the browser asks for one.
+const canAdopt = typeof CSSStyleSheet === 'function' && typeof document !== 'undefined' && 'adoptedStyleSheets' in Document.prototype && 'replaceSync' in CSSStyleSheet.prototype;
+let baseSheet = null;
+let markupPolicy;
+function markup(html) {
+  if (markupPolicy === undefined) {
+    try {
+      markupPolicy = globalThis.trustedTypes?.createPolicy('plugchat', { createHTML: (s) => s }) ?? null;
+    } catch {
+      markupPolicy = null;
+    }
+  }
+  return markupPolicy ? markupPolicy.createHTML(html) : html;
+}
+
+/** Attach CSS to a shadow root in a way a strict Content-Security-Policy allows. */
+function adoptCss(root, css) {
+  if (canAdopt) {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(css);
+    root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
+  } else {
+    const style = document.createElement('style');
+    style.textContent = css;
+    root.append(style);
+  }
+}
+
 function h(tag, props = {}, ...kids) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
@@ -142,7 +173,8 @@ function h(tag, props = {}, ...kids) {
       el.className = v;
       const parts = String(v).split(/\s+/).map((c) => PARTS[c]).filter(Boolean);
       if (parts.length && !props.part) el.setAttribute('part', parts.join(' '));
-    } else if (k === 'icon') el.innerHTML = ICON[v]; // static markup only
+    } else if (k === 'icon') el.innerHTML = markup(ICON[v]); // static markup only
+    else if (k === 'style') el.style.cssText = v;
     else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
     else el.setAttribute(k, v === true ? '' : v);
   }
@@ -212,7 +244,11 @@ function linkify(text) {
   return out;
 }
 
-class PlugChatElement extends HTMLElement {
+// Importing this file on a server (Next.js, Nuxt, SvelteKit, Remix, Astro render there first) must not fail:
+// without a browser there is simply nothing to define.
+const ElementBase = globalThis.HTMLElement ?? class {};
+
+class PlugChatElement extends ElementBase {
   static observedAttributes = ['server', 'token', 'token-url', 'peer', 'peer-handle', 'heading', 'invite', 'layout', 'density', 'stylesheet'];
 
   constructor() {
@@ -390,14 +426,20 @@ class PlugChatElement extends HTMLElement {
     this.$root.classList.toggle('compact', (mine.density || this.getAttribute('density') || ui.density) === 'compact');
     const shared = declarations(ui.theme, (name) => !SURFACE_TOKENS.has(name));
     const dark = shared + declarations(ui.dark);
-    this.$look.textContent = `:host{${declarations(ui.theme)}}`
+    this._lookCss = `:host{${declarations(ui.theme)}}`
       + (dark ? `:host([theme="dark"]){${dark}}@media (prefers-color-scheme: dark){:host(:not([theme="light"])){${dark}}}` : '')
-      + (typeof ui.css === 'string' ? ui.css : '') + (this._cssProp ?? '') + this._personalCss(mine);
+      + (typeof ui.css === 'string' ? ui.css : '') + (this._cssProp ?? '');
     const sheet = this.getAttribute('stylesheet');
-    if (sheet !== this.$sheet.getAttribute('href')) {
-      if (sheet) this.$sheet.setAttribute('href', sheet);
-      else this.$sheet.removeAttribute('href');
+    if (sheet !== this._sheetHref) {
+      this._sheetHref = sheet;
+      this._sheetCss = '';
+      // The host's stylesheet is read as text so it can be applied after ours, in order.
+      if (sheet) fetch(sheet).then((r) => (r.ok ? r.text() : ''), () => '').then((css) => this._sheetHref === sheet && ((this._sheetCss = css), this._applyLook()));
     }
+    // Order decides who wins: the host's settings, then its stylesheet, then the person's own choices.
+    const css = this._lookCss + (this._sheetCss ?? '') + this._personalCss(mine);
+    if (this._lookSheet) this._lookSheet.replaceSync(css);
+    else this.$look.textContent = css;
     if (Array.isArray(ui.reactions) && ui.reactions.length) QUICK_REACTIONS = ui.reactions.filter((e) => typeof e === 'string').slice(0, 8);
     if (this.activeId && this.msgs.has(this.activeId)) this._renderMessages();
   }
@@ -509,10 +551,21 @@ class PlugChatElement extends HTMLElement {
     for (const [name, markup] of Object.entries(ui.icons)) if (typeof markup === 'string' && /^\s*<svg[\s>]/i.test(markup)) ICON[name] = markup;
     // Right-to-left scripts mirror the layout. dir="rtl" or dir="ltr" on the element overrides the guess.
     this._dir = this.getAttribute('dir') || (/^(ar|he|fa|ur|ps|sd|yi|dv)\b/i.test(lang ?? '') ? 'rtl' : 'ltr');
-    const style = h('style');
-    style.textContent = STYLE;
-    this.$look = h('style'); // the host's tokens and CSS, after ours so they win
-    this.$sheet = h('link', { rel: 'stylesheet' });
+    let style = null;
+    this.$look = null;
+    if (canAdopt) {
+      baseSheet ??= (() => {
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync(STYLE);
+        return sheet;
+      })();
+      this._lookSheet = new CSSStyleSheet(); // the host's tokens and CSS, after ours so they win
+      this.shadowRoot.adoptedStyleSheets = [baseSheet, this._lookSheet];
+    } else {
+      style = h('style');
+      style.textContent = STYLE;
+      this.$look = h('style');
+    }
     this.$list = h('div', { class: 'list', role: 'list' }, h('div', { class: 'hint' }, T('Connecting…')));
     this.$stories = h('div', { class: 'stories', hidden: true });
     this.$main = h('section', { class: 'main' }, this._emptyState());
@@ -582,7 +635,7 @@ class PlugChatElement extends HTMLElement {
       for (const menu of this.shadowRoot.querySelectorAll('.composer > .menu, .composer > .sheet')) menu.hidden = true;
       this._mention = null;
     });
-    this.shadowRoot.append(style, this.$look, this.$sheet, this.$root);
+    this.shadowRoot.append(...[style, this.$look, this.$root].filter(Boolean));
     this._applyLook();
   }
 
@@ -947,7 +1000,7 @@ class PlugChatElement extends HTMLElement {
       $wave.setAttribute('aria-valuenow', String(Math.round(at * 100)));
     };
     const icon = () => {
-      $play.innerHTML = ICON[audio.paused ? 'play' : 'pause'];
+      $play.innerHTML = markup(ICON[audio.paused ? 'play' : 'pause']);
       $play.setAttribute('aria-label', audio.paused ? T('Play') : T('Pause'));
     };
     const ready = this.chat.download(m).then(async (blob) => {
@@ -1050,7 +1103,7 @@ class PlugChatElement extends HTMLElement {
     if (theme) this.setAttribute('theme', theme);
     else this.removeAttribute('theme');
     const dark = this._dark();
-    this.$theme.innerHTML = ICON[dark ? 'sun' : 'moon'];
+    this.$theme.innerHTML = markup(ICON[dark ? 'sun' : 'moon']);
     const label = dark ? T('Switch to light') : T('Switch to dark');
     this.$theme.title = label;
     this.$theme.setAttribute('aria-label', label);
@@ -2058,7 +2111,7 @@ class PlugChatElement extends HTMLElement {
     // The main button is a microphone until there is something to send.
     const canRecord = this._canRecord();
     const sending = !!this._rec || !!el.value.trim() || !!this.pendingFile || !canRecord;
-    this.$action.innerHTML = ICON[sending ? 'send' : 'mic'];
+    this.$action.innerHTML = markup(ICON[sending ? 'send' : 'mic']);
     this.$action.classList.toggle('mic', !sending);
     this.$action.disabled = sending && !this._rec && !el.value.trim() && !this.pendingFile;
     this.$composer.classList.toggle('typing', !!el.value.trim());
@@ -2960,5 +3013,5 @@ class PlugChatElement extends HTMLElement {
   }
 }
 
-if (!customElements.get('plug-chat')) customElements.define('plug-chat', PlugChatElement);
-export { PlugChatElement };
+if (globalThis.customElements && !customElements.get('plug-chat')) customElements.define('plug-chat', PlugChatElement);
+export { PlugChatElement, adoptCss, markup };

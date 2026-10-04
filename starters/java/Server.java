@@ -87,6 +87,29 @@ public class Server {
             }
         });
 
+        // Optional: PlugChat asks before it stores a message, so you can check credits, moderate or veto.
+        // Switch it on with hookUrl and hookEvents: ["message.before"].
+        server.createContext("/hooks/plugchat", exchange -> {
+            try {
+                byte[] raw = exchange.getRequestBody().readAllBytes();
+                if (!exchange.getRequestMethod().equals("POST") || !signedByPlugChat(raw, exchange.getRequestHeaders().getFirst("X-PlugChat-Signature"))) {
+                    exchange.sendResponseHeaders(401, -1);
+                    return;
+                }
+                // Parse `raw` with your JSON library; this demo rule only looks for a marker in the text.
+                String ask = new String(raw, StandardCharsets.UTF_8);
+                boolean refuse = ask.contains("\"event\":\"message.before\"") && ask.contains("[blocked]"); // your own rule goes here
+                byte[] answer = (refuse ? "{\"allow\":false,\"reason\":\"That message is not allowed here.\"}" : "{}").getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, answer.length);
+                exchange.getResponseBody().write(answer);
+            } catch (Exception e) {
+                exchange.sendResponseHeaders(500, -1);
+            } finally {
+                exchange.close();
+            }
+        });
+
         server.start();
         System.out.println("listening on http://localhost:" + port);
     }

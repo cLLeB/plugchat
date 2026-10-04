@@ -52,5 +52,19 @@ app.MapPost("/webhooks/plugchat", async (HttpContext context) =>
     return Results.StatusCode(204);
 });
 
+// Optional: PlugChat asks before it stores a message, so you can check credits, moderate or veto.
+// Switch it on with hookUrl and hookEvents: ["message.before"].
+app.MapPost("/hooks/plugchat", async (HttpContext context) =>
+{
+    using var buffer = new MemoryStream();
+    await context.Request.Body.CopyToAsync(buffer);
+    var raw = buffer.ToArray();
+    if (!SignedByPlugChat(raw, context.Request.Headers["X-PlugChat-Signature"])) return Results.StatusCode(401);
+    var ask = JsonDocument.Parse(raw).RootElement;
+    var refuse = ask.GetProperty("event").GetString() == "message.before"
+        && ask.GetProperty("message").GetProperty("body").GetString()!.Contains("[blocked]"); // your own rule goes here
+    return refuse ? Results.Json(new { allow = false, reason = "That message is not allowed here." }) : Results.Json(new { });
+});
+
 Console.WriteLine($"listening on http://localhost:{port}");
 app.Run($"http://127.0.0.1:{port}");

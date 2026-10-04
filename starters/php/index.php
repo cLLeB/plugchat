@@ -61,4 +61,19 @@ if ($method === 'POST' && $path === '/webhooks/plugchat') {
     exit;
 }
 
+// Optional: PlugChat asks before it stores a message, so you can check credits, moderate or veto.
+// Switch it on with hookUrl and hookEvents: ["message.before"].
+if ($method === 'POST' && $path === '/hooks/plugchat') {
+    $raw = file_get_contents('php://input');
+    if (!signed_by_plugchat($raw, $_SERVER['HTTP_X_PLUGCHAT_SIGNATURE'] ?? null, $secret)) {
+        http_response_code(401);
+        exit;
+    }
+    $ask = json_decode($raw, true);
+    $refuse = $ask['event'] === 'message.before' && str_contains($ask['message']['body'], '[blocked]'); // your own rule goes here
+    header('Content-Type: application/json');
+    echo $refuse ? json_encode(['allow' => false, 'reason' => 'That message is not allowed here.']) : '{}';
+    exit;
+}
+
 http_response_code(404);

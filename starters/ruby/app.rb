@@ -57,6 +57,20 @@ server.mount_proc '/webhooks/plugchat' do |request, response|
   response.status = 204
 end
 
+# Optional: PlugChat asks before it stores a message, so you can check credits, moderate or veto.
+# Switch it on with hookUrl and hookEvents: ["message.before"].
+server.mount_proc '/hooks/plugchat' do |request, response|
+  raw = request.body.to_s
+  unless request.request_method == 'POST' && signed_by_plugchat?(raw, request['X-PlugChat-Signature'])
+    response.status = 401
+    next
+  end
+  ask = JSON.parse(raw)
+  refuse = ask['event'] == 'message.before' && ask['message']['body'].include?('[blocked]') # your own rule goes here
+  response['Content-Type'] = 'application/json'
+  response.body = refuse ? { allow: false, reason: 'That message is not allowed here.' }.to_json : '{}'
+end
+
 trap('INT') { server.shutdown }
 puts "listening on http://localhost:#{PORT}"
 $stdout.flush

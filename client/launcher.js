@@ -7,7 +7,7 @@
 // It accepts every attribute and property <plug-chat> does, plus:
 //   position="left"   put the button bottom-left instead of bottom-right
 //   label="Messages"  accessible name of the button
-import './element.js';
+import { adoptCss, markup } from './element.js';
 
 const STYLE = `
 :host { --pc-accent: #4e5058; --pc-accent-fg: #fff; position: fixed; bottom: 20px; right: 20px; z-index: 2147483000; font: 14px system-ui, sans-serif; }
@@ -37,7 +37,7 @@ const FORWARDED = ['plugchat:ready', 'plugchat:unread', 'plugchat:message', 'plu
 // Everything else a host can set on <plug-chat> is handed straight to the chat inside.
 const PASSED_ON = ['ui', 'features', 'css', 'strings', 'messageActions', 'headerActions'];
 
-class PlugChatLauncher extends HTMLElement {
+class PlugChatLauncher extends (globalThis.HTMLElement ?? class {}) {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
@@ -64,15 +64,14 @@ class PlugChatLauncher extends HTMLElement {
   connectedCallback() {
     if (this.shadowRoot.firstChild) return;
     for (const { name, value } of this.attributes) if (!OWN.has(name)) this._chat.setAttribute(name, value);
-    const style = document.createElement('style');
-    style.textContent = STYLE;
+    adoptCss(this.shadowRoot, STYLE);
 
     this._panel = document.createElement('div');
     this._panel.className = 'panel';
     this._panel.hidden = true;
     const shut = document.createElement('button');
     shut.className = 'shut';
-    shut.innerHTML = CLOSE;
+    shut.innerHTML = markup(CLOSE);
     shut.setAttribute('aria-label', 'Close chat');
     shut.addEventListener('click', () => this.close());
     this._panel.append(this._chat, shut);
@@ -93,14 +92,14 @@ class PlugChatLauncher extends HTMLElement {
       });
     }
     this.addEventListener('keydown', (e) => e.key === 'Escape' && !this._panel.hidden && !this._chat.shadowRoot.querySelector('dialog[open]') && this.close());
-    this.shadowRoot.append(style, this._panel, this._button);
+    this.shadowRoot.append(this._panel, this._button);
   }
 
   _render(count) {
     this._count = count;
     const open = this._panel && !this._panel.hidden;
     const label = this.getAttribute('label') ?? 'Messages';
-    this._button.innerHTML = open ? CLOSE : CHAT;
+    this._button.innerHTML = markup(open ? CLOSE : CHAT);
     this._button.setAttribute('aria-expanded', String(!!open));
     this._button.setAttribute('aria-label', open ? `Close ${label}` : count ? `${label}, ${count} unread` : label);
     this._badge.textContent = count > 99 ? '99+' : String(count);
@@ -131,5 +130,5 @@ for (const prop of PASSED_ON) {
   });
 }
 
-if (!customElements.get('plug-chat-launcher')) customElements.define('plug-chat-launcher', PlugChatLauncher);
+if (globalThis.customElements && !customElements.get('plug-chat-launcher')) customElements.define('plug-chat-launcher', PlugChatLauncher);
 export { PlugChatLauncher };

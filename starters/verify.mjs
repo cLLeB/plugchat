@@ -2,6 +2,7 @@
 // real PlugChat and checks the two things an integration depends on:
 //   1. the token it issues is accepted by PlugChat as the right person
 //   2. it accepts a genuine PlugChat webhook and refuses a forged one
+//   3. its hook lets an ordinary message through and vetoes one its rule refuses
 //
 //   node starters/verify.mjs            every starter that can run here
 //   node starters/verify.mjs python go  only these (and fail if they cannot run)
@@ -32,7 +33,7 @@ function stop(child) {
 async function check(starter, port) {
   const base = `http://127.0.0.1:${port}`;
   const dir = mkdtempSync(join(tmpdir(), 'plugchat-starter-'));
-  const chat = createPlugChat({ secret: SECRET, dataDir: dir, log: { error() {} }, webhookUrl: `${base}/webhooks/plugchat`, webhookRetryBaseMs: 200 });
+  const chat = createPlugChat({ secret: SECRET, dataDir: dir, log: { error() {} }, webhookUrl: `${base}/webhooks/plugchat`, webhookRetryBaseMs: 200, hookUrl: `${base}/hooks/plugchat`, hookEvents: ['message.before'] });
   const server = await chat.listen(0);
   const api = `http://127.0.0.1:${server.address().port}/plugchat/v1`;
   const command = starter.run.join(' ').replace('{port}', String(port));
@@ -67,6 +68,16 @@ async function check(starter, port) {
     if (forged.status !== 401) throw new Error(`accepted a forged webhook (${forged.status})`);
     const unsigned = await fetch(`${base}/webhooks/plugchat`, { method: 'POST', body: '{"type":"message.new"}' });
     if (unsigned.status !== 401) throw new Error(`accepted an unsigned webhook (${unsigned.status})`);
+
+    // The hook: PlugChat asks the starter before storing what a person sends.
+    const say = (body) => fetch(`${api}/conversations/${dm.id}/messages`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ body }) });
+    const fine = await say('an ordinary message');
+    if (fine.status !== 201) throw new Error(`the hook stopped an ordinary message (${fine.status}): ${await fine.text()}`);
+    const refused = await say('this one is [blocked]');
+    const why = await refused.json();
+    if (refused.status === 201 || !/not allowed here/.test(why.message ?? '')) throw new Error(`the hook did not veto a message its rule refuses (${refused.status})`);
+    const forgedHook = await fetch(`${base}/hooks/plugchat`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-plugchat-signature': `sha256=${'0'.repeat(64)}` }, body: '{"event":"message.before","message":{"body":"x"}}' });
+    if (forgedHook.status !== 401) throw new Error(`answered a forged hook request (${forgedHook.status})`);
   } finally {
     stop(child);
     server.close();
@@ -87,7 +98,7 @@ for (const starter of starters) {
   }
   try {
     await check(starter, port++);
-    console.log(`ok    ${starter.name.padEnd(12)} token accepted, genuine webhook accepted, forged and unsigned refused`);
+    console.log(`ok    ${starter.name.padEnd(12)} token accepted; webhook accepted, forged and unsigned refused; hook passes and vetoes`);
   } catch (e) {
     failed = true;
     console.log(`FAIL  ${starter.name.padEnd(12)} ${e.message}`);

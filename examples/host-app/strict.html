@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Alumni Association — strict security policy</title>
+  <link rel="stylesheet" href="/strict.css">
+</head>
+<body>
+  <!-- This page is served with a strict Content-Security-Policy: no inline scripts or styles,
+       no HTML strings without a named Trusted Types policy. The chat needs nothing relaxed. -->
+  <script type="module" src="/plugchat/client/element.js"></script>
+  <plug-chat server="/plugchat" token-url="/api/chat-token" heading="Member messages"></plug-chat>
+</body>
+</html>

@@ -81,6 +81,15 @@ const server = createServer(async (req, res) => {
     if (!MEMBERS[sessionUser(req)]) return res.writeHead(302, { location: '/' }).end();
     const token = chat.signToken({ sub: 'staff', admin: true }, 900);
     res.writeHead(302, { location: `/plugchat/admin#token=${token}`, 'cache-control': 'no-store' }).end();
+  } else if (url.pathname === '/strict') {
+    // The same chat on a page locked down the way security-conscious platforms lock theirs.
+    if (!MEMBERS[sessionUser(req)]) return res.writeHead(302, { location: '/' }).end();
+    res.writeHead(200, {
+      'content-type': 'text/html; charset=utf-8',
+      'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' ws: wss:; img-src 'self' blob: data:; media-src blob:; require-trusted-types-for 'script'; trusted-types plugchat",
+    }).end(await readFile(here('./strict.html'), 'utf8'));
+  } else if (url.pathname === '/strict.css') {
+    res.writeHead(200, { 'content-type': 'text/css' }).end('html, body { margin: 0; height: 100%; } plug-chat { height: 100dvh; --pc-radius: 0; }');
   } else if (url.pathname === '/iframe' || url.pathname === '/widget') {
     // Two other ways to embed the same chat; see iframe.html and widget.html.
     if (!MEMBERS[sessionUser(req)]) return res.writeHead(302, { location: '/' }).end();

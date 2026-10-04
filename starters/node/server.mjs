@@ -51,5 +51,18 @@ createServer(async (req, res) => {
     return res.writeHead(204).end();
   }
 
+  // Optional: PlugChat asks before it stores a message, so you can check credits, moderate or veto.
+  // Switch it on with hookUrl and hookEvents: ["message.before"].
+  if (req.method === 'POST' && path === '/hooks/plugchat') {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const raw = Buffer.concat(chunks);
+    if (!signedByPlugChat(raw, req.headers['x-plugchat-signature'])) return res.writeHead(401).end();
+    const ask = JSON.parse(raw);
+    const refuse = ask.event === 'message.before' && ask.message.body.includes('[blocked]'); // your own rule goes here
+    res.writeHead(200, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify(refuse ? { allow: false, reason: 'That message is not allowed here.' } : {}));
+  }
+
   res.writeHead(404).end();
 }).listen(PORT, () => console.log(`listening on http://localhost:${PORT}`));

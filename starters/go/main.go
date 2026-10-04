@@ -14,6 +14,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -80,6 +81,29 @@ func main() {
 		// e.g. event.Type == "message.new": send your own push notification or email to the recipients
 		log.Println("plugchat event:", event.Type)
 		w.WriteHeader(http.StatusNoContent)
+	})
+
+	// Optional: PlugChat asks before it stores a message, so you can check credits, moderate or veto.
+	// Switch it on with hookUrl and hookEvents: ["message.before"].
+	http.HandleFunc("/hooks/plugchat", func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		if r.Method != http.MethodPost || !signedByPlugChat(raw, r.Header.Get("X-PlugChat-Signature")) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		var ask struct {
+			Event   string `json:"event"`
+			Message struct {
+				Body string `json:"body"`
+			} `json:"message"`
+		}
+		json.Unmarshal(raw, &ask)
+		w.Header().Set("Content-Type", "application/json")
+		if ask.Event == "message.before" && strings.Contains(ask.Message.Body, "[blocked]") { // your own rule goes here
+			json.NewEncoder(w).Encode(map[string]any{"allow": false, "reason": "That message is not allowed here."})
+			return
+		}
+		w.Write([]byte("{}"))
 	})
 
 	log.Printf("listening on http://localhost:%s", port)

@@ -55,7 +55,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def do_POST(self):
-        if urlparse(self.path).path != "/webhooks/plugchat":
+        path = urlparse(self.path).path
+        if path not in ("/webhooks/plugchat", "/hooks/plugchat"):
             return self.send_error(404)
         raw = self.rfile.read(int(self.headers.get("Content-Length", "0")))
         if not signed_by_plugchat(raw, self.headers.get("X-PlugChat-Signature")):
@@ -64,6 +65,17 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         event = json.loads(raw)
+        if path == "/hooks/plugchat":
+            # Optional: PlugChat asks before it stores a message, so you can check credits, moderate or veto.
+            # Switch it on with hookUrl and hookEvents: ["message.before"].
+            refuse = event["event"] == "message.before" and "[blocked]" in event["message"]["body"]  # your own rule goes here
+            answer = json.dumps({"allow": False, "reason": "That message is not allowed here."} if refuse else {}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(answer)))
+            self.end_headers()
+            self.wfile.write(answer)
+            return
         # e.g. event["type"] == "message.new": send your own push notification or email to event["recipients"]
         print("plugchat event:", event["type"], flush=True)
         self.send_response(204)

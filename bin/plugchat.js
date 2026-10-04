@@ -35,6 +35,7 @@ if (cmd === 'secret') {
     directory: env.PLUGCHAT_DIRECTORY !== 'off',
     stories: env.PLUGCHAT_STORIES !== 'off',
     cluster: env.PLUGCHAT_CLUSTER === 'on',
+    retentionDays: env.PLUGCHAT_RETENTION_DAYS ? Number(env.PLUGCHAT_RETENTION_DAYS) : 0,
     userStorageBytes: env.PLUGCHAT_USER_STORAGE_MB ? Number(env.PLUGCHAT_USER_STORAGE_MB) * 1024 * 1024 : 0,
     previousSecrets: env.PLUGCHAT_PREVIOUS_SECRETS ? env.PLUGCHAT_PREVIOUS_SECRETS.split(',') : [],
     maxTokenLifetimeSeconds: env.PLUGCHAT_MAX_TOKEN_SECONDS ? Number(env.PLUGCHAT_MAX_TOKEN_SECONDS) : undefined,

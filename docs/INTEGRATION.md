@@ -58,6 +58,7 @@ When PlugChat runs inside your server you can skip HTTP for back-office work:
 await chat.admin.upsertUser(user.id, { name: user.name, handles: { email: user.email } });
 const group = await chat.admin.createGroup({ title: `Order #${order.id}`, memberIds: [buyer.id, seller.id] });
 await chat.admin.post(group.id, 'Your order has shipped');
+await chat.admin.notify(user.id, 'Your payment was received'); // their read-only Notifications inbox
 const { total } = await chat.admin.unread(user.id); // for an email digest
 await chat.admin.suspend(user.id, 'Suspended for spam');
 ```
@@ -92,6 +93,7 @@ own `bus` to use Redis or similar instead. Rate limits are counted per instance.
 | `maxTokenLifetimeSeconds` | `PLUGCHAT_MAX_TOKEN_SECONDS` | 86400 | Tokens valid for longer than this are refused |
 | `previousSecrets` | `PLUGCHAT_PREVIOUS_SECRETS` | none | Outgoing secrets still accepted while you rotate |
 | `userStorageBytes` | `PLUGCHAT_USER_STORAGE_MB` | unlimited | Upload allowance per person |
+| `retentionDays` | `PLUGCHAT_RETENTION_DAYS` | keep forever | Delete every message and file older than this |
 | `cluster` | `PLUGCHAT_CLUSTER=on` | off | Let several instances that share one data directory act as one |
 | `bus` | — | — | Your own pub/sub (Redis, NATS…) in place of the built-in one for `cluster` |
 | `storage` | — | local disk | Where uploads are kept (see [CONNECTORS.md](CONNECTORS.md)) |

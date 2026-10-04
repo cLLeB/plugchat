@@ -76,6 +76,10 @@ export interface PlugChatServerOptions {
   requireEncryption?: boolean;
   iceServers?: { urls: string | string[]; username?: string; credential?: string }[];
   maxFileBytes?: number;
+  /** Delete every message and file older than this many days. 0 keeps everything. */
+  retentionDays?: number;
+  /** First retry delay for webhooks; doubles each attempt. Default 5000. */
+  webhookRetryBaseMs?: number;
   /** Per-person upload allowance in bytes. 0 means unlimited. */
   userStorageBytes?: number;
   rateLimit?: { perSecond: number; burst: number };
@@ -98,6 +102,8 @@ export interface AdminApi {
   suspend(id: string, reason?: string): Promise<{ userId: string; suspended: string }>;
   unsuspend(id: string): Promise<{ userId: string; suspended: null }>;
   unread(id: string): Promise<{ total: number; conversations: { id: string; type: string; title: string | null; unread: number; muted: boolean }[] }>;
+  /** Drop a notice into a person's read-only "Notifications" conversation. */
+  notify(id: string, text: string, options?: { title?: string }): Promise<any>;
   openDm(userA: string, userB: string): Promise<any>;
   createGroup(group: { title: string; memberIds: string[]; createdBy?: string; announce?: boolean; description?: string; ttlSeconds?: number }): Promise<any>;
   addMembers(conversationId: string, userIds: string[]): Promise<any>;

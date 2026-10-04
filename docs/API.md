@@ -22,6 +22,8 @@ call signalling). That keeps a native or server-side integration to plain HTTP.
 | `GET /v1/users/:id` | Profile and online state |
 | `GET /v1/users/:id/devices` | That person's device keys, to set up encryption with them |
 | `PUT /v1/users/:id/suspension` `{suspended, reason?}` | **Admin.** Suspend or reinstate. Suspended people can read but not write |
+| `POST /v1/users/:id/notify` `{text, title?}` | **Admin.** Post a notice into that person's read-only "Notifications" conversation |
+| `GET /v1/reports`, `DELETE /v1/reports/:id` | **Admin.** Reported messages; dismiss one |
 | `GET /v1/users/:id/unread` | **Admin.** `{total, conversations}` for your own email or push digests |
 | `GET /v1/stats` | **Admin.** Counts of users, conversations, messages, files and bytes stored |
 | `PUT /v1/users/:id` `{name, avatar, handles}` | **Admin.** Create or update a user ahead of their first visit |
@@ -200,4 +202,8 @@ POSTed to `webhookUrl` with header `x-plugchat-signature: sha256=<hex HMAC-SHA25
 
 `call.started`: `call`, `message`, `conversation`, `recipients` (so you can ring phones that are not in the app).
 
-Delivery is fire-and-forget with a 5 second timeout; there are no retries.
+Events are queued in the database and retried until your endpoint answers with
+a 2xx status: after 5 seconds, then doubling, up to 8 attempts, after which
+the event is dropped and logged. Each delivery carries `x-plugchat-delivery`
+(the same id on every retry of one event, so you can ignore repeats) and
+`x-plugchat-attempt`. Answer within 5 seconds.

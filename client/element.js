@@ -38,6 +38,7 @@ const ICON = {
   edit: svg('<path d="M4 20h4L19 9l-4-4L4 16v4z"/>'),
   trash: svg('<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>'),
   smile: svg('<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 007 0M9 9.5v.5M15 9.5v.5"/>'),
+  copy: svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/>'),
   star: svg('<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z"/>'),
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>'),
   timer: svg('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/>'),
@@ -55,6 +56,7 @@ const ICON = {
   file: svg('<path d="M7 3h7l4 4v14H7zM14 3v4h4"/>'),
 };
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+const EMOJI = [...'😀😃😄😁😆😅🤣😂🙂😉😊😇🥰😍😘😋😜🤪🤗🤔🤨😐😏😒🙄😬😌😴🤒🤯🥳😎😢😭😤😡🤬😱😳🥺🤝👍👎👏🙌🙏💪👌✌🤞👋👀💯🔥✨🎉🎂🎁🏆⚽🎵📌📎📷📞💬💡✅❌❓❗⏰📅💰🛒🚀🚗🏠🌍☀🌧⭐🌹🍀🍕🍔☕🍺❤🧡💛💚💙💜🖤💔'];
 const INLINE_IMAGES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 const PLAYABLE = /^(audio\/(webm|ogg|mpeg|mp4|wav|x-wav|aac)|video\/(mp4|webm))$/;
 const TIMERS = [[0, 'Off'], [60, '1 minute'], [3600, '1 hour'], [86400, '1 day'], [604800, '1 week']];
@@ -174,6 +176,9 @@ audio, video.media { display: block; max-width: 260px; margin-bottom: 4px; borde
 .acts .emoji:hover { background: var(--pc-surface); }
 .acts .danger:hover { color: var(--pc-danger); }
 .typing { min-height: 20px; padding: 0 16px; font-size: 12px; color: var(--pc-muted); }
+.emojis { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; max-height: 210px; overflow-y: auto; width: min(300px, 80vw); }
+.emojis .emoji { font-size: 20px; width: 34px; height: 34px; border-radius: 8px; }
+.emojis .emoji:hover { background: var(--pc-surface); }
 .newline { display: flex; align-items: center; gap: 10px; color: var(--pc-accent); font-size: 12px; font-weight: 600; margin: 8px 0; }
 .newline::before, .newline::after { content: ""; flex: 1; height: 1px; background: var(--pc-accent); opacity: .5; }
 .bubble.pending { opacity: .65; }
@@ -728,6 +733,12 @@ class PlugChatElement extends HTMLElement {
       oninput: () => (this._onInput(), this._mentionLookup()),
       onkeydown: (e) => {
         if (this._mention && this._mentionKey(e)) return;
+        // Arrow-up in an empty box edits your last message, as people expect.
+        if (e.key === 'ArrowUp' && !this.$input.value && !this.editing) {
+          const last = this.msgs.get(this.activeId)?.list.findLast((m) => m.senderId === this.chat.me.id && m.kind === 'text' && !m.viewOnce && !m.pending && !m.deleted && !m.undecryptable);
+          if (last) (e.preventDefault(), this._setDraftMode({ editing: last }));
+          return;
+        }
         if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) (e.preventDefault(), this._submit());
         if (e.key === 'Escape') this._setDraftMode(null);
       },
@@ -737,6 +748,14 @@ class PlugChatElement extends HTMLElement {
       },
     });
     this.$mentions = h('div', { class: 'menu', hidden: true, role: 'listbox', 'aria-label': T('Mention someone') });
+    this.$emoji = h('div', { class: 'menu', hidden: true }, this._emojiGrid((emoji) => {
+      const el = this.$input;
+      const at = el.selectionStart;
+      el.value = el.value.slice(0, at) + emoji + el.value.slice(el.selectionEnd);
+      el.selectionStart = el.selectionEnd = at + emoji.length;
+      this._onInput();
+      el.focus();
+    }));
     this.$toBottom = h('button', { class: 'tobottom', hidden: true, type: 'button', title: T('Jump to latest'), 'aria-label': T('Jump to latest'), onclick: () => this._toLatest() });
     this.$file = h('input', { type: 'file', hidden: true, onchange: () => {
       this._attach(this.$file.files[0] ?? null);
@@ -747,8 +766,9 @@ class PlugChatElement extends HTMLElement {
       hidden: !(navigator.mediaDevices && globalThis.MediaRecorder), onclick: () => this._toggleRecording() });
     this.$send = h('button', { class: 'icon sendbtn', icon: 'send', type: 'submit', title: T('Send'), 'aria-label': T('Send'), disabled: true });
     this.$composer = h('form', { class: 'composer', onsubmit: (e) => (e.preventDefault(), this._submit()) },
-      this.$file, this.$menu, this.$mentions, this.$toBottom,
+      this.$file, this.$menu, this.$mentions, this.$toBottom, this.$emoji,
       h('button', { class: 'icon', icon: 'plus', type: 'button', title: T('Attach'), 'aria-label': T('Attach'), 'aria-haspopup': 'menu', onclick: () => this._toggleMenu() }),
+      h('button', { class: 'icon', icon: 'smile', type: 'button', title: T('Emoji'), 'aria-label': T('Emoji'), onclick: () => (this.$emoji.hidden = !this.$emoji.hidden) }),
       this.$input, this.$mic, this.$send,
     );
     this.$readonly = h('div', { class: 'hint', hidden: true }, T('Only admins can post in this channel.'));
@@ -982,6 +1002,49 @@ class PlugChatElement extends HTMLElement {
     this._onScroll();
   }
 
+  _emojiGrid(onPick) {
+    return h('div', { class: 'emojis', role: 'listbox', 'aria-label': T('Emoji') },
+      EMOJI.map((emoji) => h('button', { type: 'button', class: 'emoji', role: 'option', 'aria-label': emoji, onclick: () => onPick(emoji) }, emoji)));
+  }
+
+  /** Who in a group has read one of your messages. */
+  _infoDialog(m, conv) {
+    const others = conv.members.filter((x) => x.userId !== this.chat.me.id);
+    const group = (label, list) => list.length > 0 && h('div', { class: 'field' }, label,
+      h('div', { class: 'people' }, list.map((x) => h('div', { class: 'person' }, this._avatar(x.name, x.avatar, { small: true }), h('span', {}, x.name)))));
+    this._openDialog(h('div', { class: 'panel' },
+      this._dialogTitle(T('Message info')),
+      h('div', { class: 'storyview' }, this._snippet(m)),
+      group(T('Read by'), others.filter((x) => x.lastReadSeq >= m.seq)),
+      group(T('Not read yet'), others.filter((x) => x.lastReadSeq < m.seq)),
+    ));
+  }
+
+  /** Save the whole conversation as a text file, decrypted on this device. */
+  async _exportChat(conv, button) {
+    const label = button.textContent;
+    button.disabled = true;
+    button.textContent = T('Exporting…');
+    try {
+      let all = [];
+      let before;
+      for (let page = 0; page < 50; page++) {
+        const batch = await this.chat.messages(conv.id, { before, limit: 200 });
+        all = [...batch, ...all];
+        if (batch.length < 200) break;
+        before = batch[0].seq;
+      }
+      const stamp = (t) => new Date(t).toLocaleString(LOCALE, { dateStyle: 'short', timeStyle: 'short' });
+      const lines = all.map((m) => `[${stamp(m.createdAt)}] ${m.kind === 'system' ? '*' : this._memberName(conv, m.senderId)}: ${this._snippet(m)}`);
+      const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/plain' }));
+      h('a', { href: url, download: `${this._title(conv).replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'chat'}.txt` }).click();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } finally {
+      button.disabled = false;
+      button.textContent = label;
+    }
+  }
+
   /** A photo, full size. */
   _lightbox(url, name) {
     this._openDialog(h('div', { class: 'panel' }, this._dialogTitle(name), h('img', { class: 'full', src: url, alt: name })));
@@ -1079,12 +1142,16 @@ class PlugChatElement extends HTMLElement {
     const plain = m.kind === 'text' && !m.viewOnce;
     const forwardable = !m.viewOnce || this.opened.has(m.id);
     const picker = h('span', { hidden: true }, QUICK_REACTIONS.map((emoji) =>
-      h('button', { class: 'emoji', 'aria-label': T('React {emoji}', { emoji }), onclick: () => this._toggleReaction(m, emoji) }, emoji)));
+      h('button', { class: 'emoji', 'aria-label': T('React {emoji}', { emoji }), onclick: () => this._toggleReaction(m, emoji) }, emoji)),
+      h('button', { class: 'emoji', title: T('More reactions'), 'aria-label': T('More reactions'), onclick: () => this._openDialog(h('div', { class: 'panel' },
+        this._dialogTitle(T('React')), this._emojiGrid((emoji) => (this.$dialog.close(), this._toggleReaction(m, emoji))))) }, '+'));
     const act = (icon, label, onclick, cls = '') => h('button', { class: `icon ${cls}`, icon, title: label, 'aria-label': label, onclick });
     return h('div', { class: 'acts' },
       picker,
       act('smile', T('React'), () => (picker.hidden = !picker.hidden)),
       act('reply', T('Reply'), () => this._setDraftMode({ replyTo: m })),
+      m.text && !m.viewOnce && act('copy', T('Copy text'), () => this._guard(navigator.clipboard.writeText(m.text))),
+      mine && conv.type === 'group' && act('info', T('Message info'), () => this._infoDialog(m, conv)),
       forwardable && !m.viewOnce && m.kind !== 'call' && act('forward', T('Forward'), () => this._forwardDialog(m)),
       canPin && act('pin', m.pinned ? T('Unpin') : T('Pin'), () => this._guard(m.pinned ? this.chat.unpin(m.id) : this.chat.pin(m.id)), m.pinned ? 'on' : ''),
       mine && plain && act('edit', T('Edit'), () => this._setDraftMode({ editing: m })),
@@ -1562,6 +1629,7 @@ class PlugChatElement extends HTMLElement {
       h('label', { class: 'field' }, T('Disappearing messages'), $timer),
       conv.encrypted && h('label', { class: 'field' }, T('Safety code — compare with the other members in person. If it matches, nobody has tampered with your keys.'), $code),
       $err,
+      h('button', { class: 'btn plain', onclick: (e) => run(this._exportChat(conv, e.target)) }, T('Export chat')),
       isGroup && h('button', { class: 'btn warn', onclick: () => run(this.chat.leave(conv.id), true) }, T('Leave group')),
       other && h('button', { class: 'btn warn', onclick: () => run(blocked ? this.chat.unblock(other.userId) : this.chat.block(other.userId), true) }, blocked ? T('Unblock {name}', { name: other.name }) : T('Block {name}', { name: other.name })),
     ));

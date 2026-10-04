@@ -73,6 +73,7 @@ const MAX_MEMBERS = 1000;
 const HANDLE_KIND = /^[a-z][a-z0-9_]{0,23}$/;
 const USER_KINDS = new Set(['text', 'poll', 'location', 'custom']);
 const VIEW_ONCE_GRACE_MS = 60_000;
+const WEBHOOK_MAX_ATTEMPTS = 8;
 
 class HttpError extends Error {
   constructor(status, code, message) {
@@ -167,6 +168,8 @@ export function createPlugChat(options = {}) {
     previousSecrets = [],
     maxTokenLifetimeSeconds = 86_400,
     cluster = false,
+    retentionDays = 0,
+    webhookRetryBaseMs = 5000,
     bus: customBus,
     userStorageBytes = 0,
     log = console,
@@ -292,16 +295,64 @@ export function createPlugChat(options = {}) {
     return { url, data: answer.data };
   }
 
+  // Webhooks are queued in the database and retried with growing gaps, so a
+  // host that is briefly down still gets every event (push notifications depend on it).
   function webhook(event) {
     if (!webhookUrl) return;
-    const body = JSON.stringify(event);
-    fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-plugchat-signature': signWebhook(body, secret) },
-      body,
-      signal: AbortSignal.timeout(5000),
-    }).catch((e) => log.error('plugchat webhook failed:', e.message));
+    const id = store.enqueueWebhook(JSON.stringify(event));
+    deliverWebhook(id).catch(() => {});
   }
+
+  async function deliverWebhook(id) {
+    // Claiming the row first keeps several instances from sending the same event.
+    const job = store.claimWebhook(id, 60_000);
+    if (!job) return;
+    try {
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-plugchat-signature': signWebhook(job.body, secret),
+          'x-plugchat-delivery': String(id),
+          'x-plugchat-attempt': String(job.attempts + 1),
+        },
+        body: job.body,
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) throw new Error(`answered ${res.status}`);
+      store.finishWebhook(id);
+    } catch (e) {
+      const attempts = job.attempts + 1;
+      if (attempts >= WEBHOOK_MAX_ATTEMPTS) {
+        store.finishWebhook(id);
+        log.error(`plugchat webhook ${id} dropped after ${attempts} attempts:`, e.message);
+      } else {
+        store.retryWebhook(id, attempts, Math.min(webhookRetryBaseMs * 2 ** (attempts - 1), 3600_000));
+      }
+    }
+  }
+
+  const webhookPump = setInterval(() => {
+    try {
+      for (const id of store.dueWebhooks()) deliverWebhook(id).catch(() => {});
+    } catch {
+      // database closed during shutdown
+    }
+  }, Math.min(webhookRetryBaseMs, 2000));
+  webhookPump.unref();
+
+  // Optional retention: nothing older than this is kept, whatever the conversation's own timer says.
+  const retain = () => {
+    if (!retentionDays) return;
+    try {
+      for (const fileId of store.purgeOlderThan(Date.now() - retentionDays * 86_400_000)) removeFile(fileId);
+    } catch (e) {
+      log.error('plugchat retention sweep failed', e);
+    }
+  };
+  retain();
+  const retention = setInterval(retain, 3600_000);
+  retention.unref();
 
   /** Push each member their own view of a conversation (unread counts and keys differ per user). */
   function pushConversation(id, type = 'conversation.updated') {
@@ -967,6 +1018,28 @@ export function createPlugChat(options = {}) {
       return { userId: ctx.params.id, suspended: reason };
     }],
 
+    // A one-way inbox from the platform to one person: receipts, reminders,
+    // account notices. It appears in their chat list as a read-only conversation.
+    ['POST', '/v1/users/:id/notify', async (ctx) => {
+      adminOnly(ctx);
+      const userId = ctx.params.id;
+      if (!store.getUser(userId)) throw notFound('user not found');
+      const b = await ctx.json();
+      const text = str(b.text, 'text', MAX_BODY_CHARS);
+      const key = `notify\n${userId}`;
+      let id = store.get('SELECT id FROM conversations WHERE dm_key = ?', key)?.id;
+      if (!id) {
+        id = store.createConversation({ type: 'group', title: str(b.title ?? 'Notifications', 'title', 120), creator: ctx.auth.sub, memberIds: [userId], announce: true });
+        store.run('UPDATE conversations SET dm_key = ? WHERE id = ?', key, id);
+        pushConversation(id, 'conversation.new');
+      }
+      const message = store.insertMessage({ conversationId: id, senderId: ctx.auth.sub, kind: 'system', body: text });
+      hub.emit([userId], { type: 'message.new', message });
+      webhook({ type: 'message.new', message, conversation: { id, type: 'group', title: b.title ?? 'Notifications', encrypted: false }, recipients: [{ userId, online: hub.isOnline(userId), muted: false, mentioned: false }] });
+      ctx.status = 201;
+      return message;
+    }],
+
     ['GET', '/v1/users/:id/unread', (ctx) => {
       adminOnly(ctx);
       if (!store.getUser(ctx.params.id)) throw notFound('user not found');
@@ -1260,6 +1333,8 @@ export function createPlugChat(options = {}) {
 
   function close() {
     clearInterval(sweeper);
+    clearInterval(webhookPump);
+    clearInterval(retention);
     hub.close();
     bus?.close?.();
     store.close();
@@ -1304,6 +1379,8 @@ export function createPlugChat(options = {}) {
     suspend: (id, reason) => api('PUT', `/v1/users/${u(id)}/suspension`, { suspended: true, reason }),
     unsuspend: (id) => api('PUT', `/v1/users/${u(id)}/suspension`, { suspended: false }),
     unread: (id) => api('GET', `/v1/users/${u(id)}/unread`),
+    /** Drop a notice into a person's read-only "Notifications" conversation. */
+    notify: (id, text, options = {}) => api('POST', `/v1/users/${u(id)}/notify`, { text, ...options }),
     openDm: (a, b) => api('POST', '/v1/conversations', { type: 'dm', memberIds: [a, b] }),
     createGroup: (group) => api('POST', '/v1/conversations', { type: 'group', ...group }),
     addMembers: (conversationId, userIds) => api('POST', `/v1/conversations/${conversationId}/members`, { userIds }),

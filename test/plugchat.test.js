@@ -835,6 +835,58 @@ test('moderation console: served locked down, reports carry names and can be dis
   assert.equal((await bob.user('mod-alice')).suspended, undefined, 'other users do not');
 });
 
+test('platform notices arrive in a read-only inbox', async () => {
+  const user = await client('notify-1', 'Nana');
+  const arrived = next(user, 'message');
+  await chat.admin.notify('notify-1', 'Your dues payment was received');
+  assert.equal((await arrived).text, 'Your dues payment was received');
+  await chat.admin.notify('notify-1', 'Reminder: AGM on Friday');
+
+  const inbox = (await user.conversations()).filter((c) => c.title === 'Notifications');
+  assert.equal(inbox.length, 1, 'notices share one conversation');
+  assert.equal(inbox[0].unread, 2);
+  assert.deepEqual((await user.messages(inbox[0].id)).map((m) => m.kind), ['system', 'system']);
+  await assert.rejects(user.send(inbox[0].id, { text: 'can I reply?' }), { status: 403 });
+  assert.equal((await api('/users/notify-1/notify', { token: signToken({ sub: 'notify-1' }, SECRET), method: 'POST', json: { text: 'x' } })).status, 403);
+});
+
+test('webhooks are retried until the host accepts them; retention purges old messages', async () => {
+  const { createServer } = await import('node:http');
+  const seen = [];
+  let failuresLeft = 2;
+  const host = createServer(async (req, res) => {
+    let raw = '';
+    for await (const chunk of req) raw += chunk;
+    seen.push({ attempt: Number(req.headers['x-plugchat-attempt']), delivery: req.headers['x-plugchat-delivery'], valid: req.headers['x-plugchat-signature'] === signWebhook(raw, SECRET), type: JSON.parse(raw).type });
+    res.writeHead(failuresLeft-- > 0 ? 503 : 200).end();
+  });
+  await new Promise((r) => host.listen(0, r));
+  const d = mkdtempSync(join(tmpdir(), 'plugchat-hook-'));
+  const inst = createPlugChat({ secret: SECRET, dataDir: d, log: { error() {} }, webhookUrl: `http://localhost:${host.address().port}/`, webhookRetryBaseMs: 100, retentionDays: 30 });
+  try {
+    await inst.admin.upsertUser('w1', { name: 'W1' });
+    await inst.admin.upsertUser('w2', { name: 'W2' });
+    const dm = await inst.admin.openDm('w1', 'w2');
+    await inst.admin.post(dm.id, { kind: 'text', senderId: 'w1', body: 'are you there?' });
+
+    for (let i = 0; i < 40 && seen.length < 3; i++) await new Promise((r) => setTimeout(r, 100));
+    assert.deepEqual(seen.map((s) => s.attempt), [1, 2, 3], 'two failures, then accepted');
+    assert.ok(seen.every((s) => s.valid && s.type === 'message.new' && s.delivery === seen[0].delivery));
+    assert.equal(inst.store.dueWebhooks().length, 0);
+    assert.equal(inst.store.get('SELECT COUNT(*) AS n FROM webhook_queue').n, 0, 'the queue is empty once delivered');
+
+    inst.store.run('UPDATE messages SET created_at = ? WHERE conversation_id = ?', Date.now() - 40 * 86_400_000, dm.id);
+    await inst.admin.post(dm.id, { kind: 'text', senderId: 'w2', body: 'recent' });
+    inst.store.purgeOlderThan(Date.now() - 30 * 86_400_000);
+    assert.deepEqual(inst.store.all('SELECT body FROM messages WHERE conversation_id = ?', dm.id).map((r) => r.body), ['recent']);
+  } finally {
+    inst.close();
+    host.close();
+    host.closeAllConnections();
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
 test('every interface string has a translation in every shipped language', async () => {
   const { readFileSync } = await import('node:fs');
   const { DICTIONARIES } = await import('../client/i18n.js');

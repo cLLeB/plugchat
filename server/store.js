@@ -135,6 +135,12 @@ CREATE TABLE IF NOT EXISTS presence (
   at INTEGER NOT NULL,
   PRIMARY KEY (user_id, instance)
 );
+CREATE TABLE IF NOT EXISTS webhook_queue (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  body TEXT NOT NULL,
+  attempts INTEGER NOT NULL,
+  next_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS invites (
   code TEXT PRIMARY KEY,
   conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
@@ -1013,6 +1019,43 @@ export class Store {
       files: this.all('SELECT id, name, mime, size, created_at FROM files WHERE owner_id = ?', id).map((r) => ({ fileId: r.id, name: r.name, mime: r.mime, size: r.size, createdAt: r.created_at })),
       blocked: this.blocks(id),
     };
+  }
+
+  // ---- webhook queue: events wait here until the host has accepted them ----
+
+  enqueueWebhook(body) {
+    return Number(this.run('INSERT INTO webhook_queue (body, attempts, next_at) VALUES (?, 0, 0)', body).lastInsertRowid);
+  }
+
+  /** Take a due job for `leaseMs`; returns null if another instance has it. */
+  claimWebhook(id, leaseMs) {
+    const t = Date.now();
+    const claimed = this.run('UPDATE webhook_queue SET next_at = ? WHERE id = ? AND next_at <= ?', t + leaseMs, id, t).changes > 0;
+    return claimed ? this.get('SELECT body, attempts FROM webhook_queue WHERE id = ?', id) : null;
+  }
+
+  finishWebhook(id) {
+    this.run('DELETE FROM webhook_queue WHERE id = ?', id);
+  }
+
+  retryWebhook(id, attempts, delayMs) {
+    this.run('UPDATE webhook_queue SET attempts = ?, next_at = ? WHERE id = ?', attempts, Date.now() + delayMs, id);
+  }
+
+  dueWebhooks(limit = 20) {
+    return this.all('SELECT id FROM webhook_queue WHERE next_at <= ? ORDER BY id LIMIT ?', Date.now(), limit).map((r) => r.id);
+  }
+
+  /** Retention: hard-delete everything sent before `cutoff`. Returns file ids to unlink. */
+  purgeOlderThan(cutoff) {
+    const files = this.all(
+      'SELECT f.id FROM files f JOIN messages m ON m.id = f.message_id WHERE m.created_at < ?', cutoff,
+    ).map((r) => r.id);
+    this.tx(() => {
+      for (const id of files) this.run('DELETE FROM files WHERE id = ?', id);
+      this.run('DELETE FROM messages WHERE created_at < ?', cutoff);
+    });
+    return files;
   }
 
   // ---- reports ----

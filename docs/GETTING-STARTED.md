@@ -113,6 +113,37 @@ That is the whole identity integration. People are known to PlugChat by the id
 you put in the token; add `email`, `phone` or `username` to the token and they
 can be found by those too.
 
+### How your users appear in chat
+
+There is nothing to import and nothing to keep in sync.
+
+- **A person appears the moment they open the chat.** The token your endpoint
+  signs carries their id, name and picture; PlugChat creates or updates them
+  from it on every visit. Change someone's name on your platform and it
+  changes in chat the next time they open it.
+- **To make people findable before their first visit** (so a member can start
+  a chat with someone who has never opened it), tell PlugChat about them once.
+  From Node:
+
+  ```js
+  for (const user of await yourDatabase.allUsers()) {
+    await chat.admin.upsertUser(user.id, { name: user.name, avatar: user.photoUrl, handles: { email: user.email } });
+  }
+  ```
+
+  From any other language, the same thing over HTTP with an admin token:
+  `PUT /plugchat/v1/users/<id>` with `{"name": "...", "avatar": "...", "handles": {"email": "..."}}`.
+  Run it once for your existing users, and again whenever someone registers or
+  changes their profile. It is safe to repeat.
+- **When someone leaves your platform**, `chat.admin.deleteUser(id)`
+  (`DELETE /plugchat/v1/users/<id>`) erases them and what they sent.
+
+People find each other by name, or by the exact email, phone number or
+username you registered. If your members should not be able to browse the
+whole list, switch `directory` off: they can then only reach someone whose
+exact email, phone or username they already know, or whom your own pages link
+to (`<plug-chat peer="their-id">`, for a "Message this seller" button).
+
 To check a starter (or your own endpoint) against a real PlugChat:
 
 ```bash

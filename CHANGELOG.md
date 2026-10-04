@@ -4,6 +4,12 @@ Versions follow semantic versioning. What counts as a breaking change is set
 out in [docs/STABILITY.md](docs/STABILITY.md). Until 1.0, a minor version may
 contain breaking changes, and they are listed here.
 
+## 0.1.4
+
+- The moderation console, the setup studio and the demo site's pages follow
+  the light or dark look chosen in the chat on that device.
+- The getting-started guide explains how a platform's users appear in chat.
+
 ## 0.1.3
 
 - Setup studio: choose how the chat appears (a page, a floating button or a

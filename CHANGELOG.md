@@ -4,6 +4,11 @@ Versions follow semantic versioning. What counts as a breaking change is set
 out in [docs/STABILITY.md](docs/STABILITY.md). Until 1.0, a minor version may
 contain breaking changes, and they are listed here.
 
+## 0.1.6
+
+- No code changes. Releases now publish to npm through trusted publishing, with
+  no stored token. Supersedes 0.1.5, which was tagged but never published.
+
 ## 0.1.5
 
 - No code changes. The first version published to npm by the release workflow;

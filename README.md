@@ -1,6 +1,7 @@
 # PlugChat
 
 [![ci](https://github.com/cLLeB/plugchat/actions/workflows/ci.yml/badge.svg)](https://github.com/cLLeB/plugchat/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/plugchat)](https://www.npmjs.com/package/plugchat)
 
 In-app messaging you add to a platform that already exists. Your users, your
 login, your servers, your database file. PlugChat supplies the chat.
@@ -23,17 +24,17 @@ behind it, no account to create, and nothing is metered.
 **Your backend is Node** — add it to your project:
 
 ```bash
-npm install github:cLLeB/plugchat
+npm install plugchat
 ```
 
 **Your backend is anything else** — run it beside your app. With Node installed:
 
 ```bash
-npx github:cLLeB/plugchat init
+npx plugchat init
 ```
 
 ```bash
-npx github:cLLeB/plugchat start
+npx plugchat start
 ```
 
 or, with no Node at all, as a container:
@@ -52,10 +53,6 @@ Then follow [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md): one endpoint on
 your backend (ready-made in seven languages under [starters/](starters)) and
 one tag on your page. Needs Node 22.13 or newer; no other software, no
 account, nothing hosted by anyone else.
-
-Once the package is published to npm, `github:cLLeB/plugchat` in the commands
-above shortens to `plugchat`. The container image exists from the first
-tagged release onwards.
 
 ## Why this exists
 
@@ -254,9 +251,6 @@ Stated plainly so you can plan around them:
   different networks (the call flow is tested in one browser with synthetic
   media). Treat those as written to spec, not proven. The backend starters for
   all seven languages are run against a real PlugChat by `starters/verify.mjs`.
-- **Not on npm yet.** It installs straight from GitHub (see "Get it"). The
-  release workflow publishes to npm once an `NPM_TOKEN` secret is added to the
-  repository.
 
 ## License
 

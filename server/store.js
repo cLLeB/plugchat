@@ -293,7 +293,7 @@ export class Store {
   upsertUser(id, name, avatar) {
     this.run(
       `INSERT INTO users (id, name, avatar, created_at) VALUES (?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET name = COALESCE(?, name), avatar = COALESCE(?, avatar)`,
+       ON CONFLICT(id) DO UPDATE SET name = COALESCE(?, users.name), avatar = COALESCE(?, users.avatar)`,
       id, name ?? id, avatar ?? null, Date.now(), name ?? null, avatar ?? null,
     );
     return this.getUser(id);

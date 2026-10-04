@@ -88,9 +88,20 @@ is not restricted by these switches.
 | `readReceipts` | Read ticks, "seen by" pictures and message info |
 | `blocking` | Blocking another person |
 | `export` | Chat export and "download my data" |
+| `personalization` | Each person's own appearance choices (see below); everyone then sees exactly the look you configured |
 
 Server: `features: { polls: false }`, or `PLUGCHAT_FEATURES_OFF=polls,stories`.
 Page: `chat.features = { polls: false }`.
+
+## What each person can change for themselves
+
+In Settings → Appearance, every person can pick their own look, kept on their
+device and applied on top of yours: light or dark, a colour (nine presets or
+any colour they choose), a gradient or a solid colour on their own messages,
+bubbles or the flat style, comfortable or compact spacing, a plain, dotted or
+grid backdrop, the text size, and how round the corners are. "Reset
+appearance" returns them to your look. Switch all of it off with
+`features: { personalization: false }` if your brand must look the same for everyone.
 
 ## Design tokens
 

@@ -21,7 +21,7 @@ export { signToken, verifyToken, signWebhook, diskStorage, s3Storage, databaseBu
 export const FEATURES = [
   'groups', 'directory', 'files', 'voiceNotes', 'reactions', 'replies', 'editing', 'deleting', 'forwarding', 'mentions',
   'pins', 'stars', 'search', 'polls', 'location', 'viewOnce', 'disappearing', 'scheduled', 'stories', 'calls',
-  'encryption', 'invites', 'reports', 'profiles', 'typing', 'presence', 'readReceipts', 'blocking', 'export',
+  'encryption', 'invites', 'reports', 'profiles', 'typing', 'presence', 'readReceipts', 'blocking', 'export', 'personalization',
 ];
 
 // Which feature each endpoint belongs to (longest matching prefix wins).

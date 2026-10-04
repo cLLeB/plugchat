@@ -126,11 +126,13 @@ badge, an iframe for site builders, and a WebView page for native mobile apps.
 email through your own providers; DOM events (`plugchat:unread`,
 `plugchat:message`) for badges.
 
-**Made to be changed** — 29 feature switches; two dozen design tokens for
+**Made to be changed** — by you and by each person using it. 30 feature switches; two dozen design tokens for
 colours, fonts, corner radii, border widths and sizes; a styling hook on every
 element; a bubble layout and a flat one; replaceable wording and icons; your
 own CSS; slots for your own content; and your own entries in the attach menu,
-the message menu and the conversation header.
+the message menu and the conversation header. Each person can also choose
+their own colour, message style, spacing, backdrop, text size and corner
+roundness in Settings, unless you switch that off.
 
 **Made to be wired in** — ten events (new message, member added, user
 connected, ...) by signed webhook or in-process listener; plugins; hooks that

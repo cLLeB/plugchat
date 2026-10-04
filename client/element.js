@@ -102,6 +102,14 @@ const PARTS = {
   filecard: 'file', voice: 'voice-note', poll: 'poll', card: 'link-preview', typing: 'typing',
 };
 
+// What a person can choose for themselves in Settings → Appearance (kept on their device).
+const SWATCHES = ['#e8452c', '#c8553d', '#d97706', '#0b8a5f', '#0e7c86', '#1d6fe0', '#1e3a8a', '#d6336c', '#334155'];
+const BACKDROPS = {
+  plain: 'none',
+  dots: 'radial-gradient(color-mix(in srgb, var(--pc-fg) 9%, transparent) 1px, transparent 1.4px)',
+  grid: 'linear-gradient(color-mix(in srgb, var(--pc-fg) 5%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--pc-fg) 5%, transparent) 1px, transparent 1px)',
+};
+
 // Colours that differ between the light and the dark look. Other tokens (accent, fonts, radii, sizes) apply to both.
 const SURFACE_TOKENS = new Set(['bg', 'surface', 'chat', 'fg', 'muted', 'border', 'bubble', 'bubble-fg', 'danger', 'pattern']);
 const kebab = (name) => name.replace(/^--pc-/, '').replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
@@ -294,6 +302,80 @@ class PlugChatElement extends HTMLElement {
     return { ...server, ...page, theme: both('theme'), dark: both('dark'), strings: both('strings'), icons: both('icons') };
   }
 
+  /** The look this person chose for themselves on this device. Empty when the platform switched personalising off. */
+  _personal() {
+    if (!this._can('personalization')) return {};
+    try {
+      const saved = JSON.parse(localStorage.getItem('plugchat:look') ?? '{}');
+      return saved && typeof saved === 'object' ? saved : {};
+    } catch {
+      return {};
+    }
+  }
+
+  /** Change (or with null, clear) personal choices, and show the result at once. */
+  _setPersonal(patch) {
+    const next = patch ? { ...this._personal(), ...patch } : {};
+    for (const key of Object.keys(next)) if (next[key] == null) delete next[key];
+    try {
+      if (Object.keys(next).length) localStorage.setItem('plugchat:look', JSON.stringify(next));
+      else localStorage.removeItem('plugchat:look');
+    } catch {
+      // no storage: nothing to remember
+    }
+    this._applyLook();
+  }
+
+  /** A person's own choices win over the platform's, so they are marked important. */
+  _personalCss(mine) {
+    const out = [];
+    if (/^#[0-9a-f]{6}$/i.test(mine.accent ?? '')) out.push(`--pc-accent:${mine.accent}`);
+    if (mine.solid) out.push('--pc-bubble-out:var(--pc-accent)');
+    if (Number.isFinite(mine.fontSize)) out.push(`--pc-font-size:${Math.min(20, Math.max(12, mine.fontSize))}px`);
+    if (Number.isFinite(mine.corners)) out.push(`--pc-bubble-radius:${Math.min(24, Math.max(0, mine.corners))}px`);
+    if (BACKDROPS[mine.backdrop]) out.push(`--pc-pattern:${BACKDROPS[mine.backdrop]}`);
+    return out.length ? `:host{${out.map((d) => `${d} !important`).join(';')}}` : '';
+  }
+
+  /** Settings → Appearance: colour, message style, spacing, backdrop, text size and corners, for this person only. */
+  _personalControls() {
+    const mine = this._personal();
+    const choose = (key, options, current) => h('div', { class: 'seg', role: 'radiogroup' }, options.map(([value, label]) =>
+      h('button', { role: 'radio', 'aria-checked': String(current === value), onclick: (e) => {
+        this._setPersonal({ [key]: value });
+        for (const b of e.currentTarget.parentElement.children) b.setAttribute('aria-checked', String(b === e.currentTarget));
+      } }, label)));
+    const slider = (label, key, min, max, fallback) => {
+      const input = h('input', { type: 'range', min: String(min), max: String(max), value: String(mine[key] ?? fallback), 'aria-label': label,
+        oninput: () => this._setPersonal({ [key]: Number(input.value) }) });
+      return h('label', { class: 'setrow' }, h('span', {}, label), input);
+    };
+    const mark = (picked) => {
+      for (const b of $swatches.querySelectorAll('.swatch')) b.setAttribute('aria-checked', String(b === picked));
+    };
+    const $custom = h('input', { type: 'color', class: 'swatch custom', value: mine.accent ?? '#e8452c', title: T('Colour'), 'aria-label': T('Colour'),
+      oninput: () => (this._setPersonal({ accent: $custom.value }), mark($custom)) });
+    const $swatches = h('div', { class: 'swatches', role: 'radiogroup', 'aria-label': T('Colour') },
+      h('button', { class: 'swatch auto', role: 'radio', 'aria-checked': String(!mine.accent), title: T('Default'), 'aria-label': T('Default'), onclick: (e) => (this._setPersonal({ accent: null }), mark(e.currentTarget)) }),
+      SWATCHES.map((colour) => h('button', { class: 'swatch', role: 'radio', 'aria-checked': String(mine.accent === colour), 'aria-label': colour, style: `background:${colour}`,
+        onclick: (e) => (this._setPersonal({ accent: colour }), mark(e.currentTarget)) })),
+      $custom);
+    const $gradient = h('input', { type: 'checkbox', role: 'switch', checked: !mine.solid, onchange: () => this._setPersonal({ solid: $gradient.checked ? null : true }) });
+    return [
+      h('p', { class: 'note' }, T('Colour')), $swatches,
+      h('label', { class: 'setrow' }, h('span', {}, T('Gradient on my messages')), $gradient),
+      h('p', { class: 'note' }, T('Message style')),
+      choose('layout', [['bubbles', T('Bubbles')], ['flat', T('Flat')]], this.$root.classList.contains('flat') ? 'flat' : 'bubbles'),
+      h('p', { class: 'note' }, T('Spacing')),
+      choose('density', [['comfortable', T('Comfortable')], ['compact', T('Compact')]], this.$root.classList.contains('compact') ? 'compact' : 'comfortable'),
+      h('p', { class: 'note' }, T('Backdrop')),
+      choose('backdrop', [['plain', T('Plain')], ['dots', T('Dots')], ['grid', T('Grid')]], mine.backdrop ?? 'plain'),
+      slider(T('Text size'), 'fontSize', 12, 20, 15),
+      slider(T('Corners'), 'corners', 0, 24, 20),
+      h('button', { class: 'linkbtn', onclick: () => (this._setPersonal(null), this._settingsDialog()) }, T('Reset appearance')),
+    ];
+  }
+
   /** Is a feature offered? The platform's server decides; the page can only narrow it further. */
   _can(feature) {
     return this._featureProp?.[feature] !== false && this.chat?.me?.features?.[feature] !== false;
@@ -303,13 +385,14 @@ class PlugChatElement extends HTMLElement {
   _applyLook() {
     if (!this.$root) return;
     const ui = this._ui();
-    this.$root.classList.toggle('flat', (this.getAttribute('layout') || ui.layout) === 'flat');
-    this.$root.classList.toggle('compact', (this.getAttribute('density') || ui.density) === 'compact');
+    const mine = this._personal();
+    this.$root.classList.toggle('flat', (mine.layout || this.getAttribute('layout') || ui.layout) === 'flat');
+    this.$root.classList.toggle('compact', (mine.density || this.getAttribute('density') || ui.density) === 'compact');
     const shared = declarations(ui.theme, (name) => !SURFACE_TOKENS.has(name));
     const dark = shared + declarations(ui.dark);
     this.$look.textContent = `:host{${declarations(ui.theme)}}`
       + (dark ? `:host([theme="dark"]){${dark}}@media (prefers-color-scheme: dark){:host(:not([theme="light"])){${dark}}}` : '')
-      + (typeof ui.css === 'string' ? ui.css : '') + (this._cssProp ?? '');
+      + (typeof ui.css === 'string' ? ui.css : '') + (this._cssProp ?? '') + this._personalCss(mine);
     const sheet = this.getAttribute('stylesheet');
     if (sheet !== this.$sheet.getAttribute('href')) {
       if (sheet) this.$sheet.setAttribute('href', sheet);
@@ -2715,7 +2798,8 @@ class PlugChatElement extends HTMLElement {
           h('button', { role: 'radio', 'aria-checked': String(this._themeChoice() === key), onclick: (e) => {
             this._setTheme(key);
             for (const b of e.currentTarget.parentElement.children) b.setAttribute('aria-checked', String(b === e.currentTarget));
-          } }, label)))),
+          } }, label))),
+        this._can('personalization') && this._personalControls()),
 
       (this._can('readReceipts') || this._can('presence')) && h('div', { class: 'group' }, h('h4', {}, T('Privacy')),
         this._can('readReceipts') && row(T('Send read receipts'), privacy.readReceipts, (v) => this.chat.setPrivacy({ readReceipts: v }), T('Others see when you have read their messages.')),

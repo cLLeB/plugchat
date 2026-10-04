@@ -61,7 +61,7 @@ const FEATURE_LABELS = {
   editing: 'Edit messages', deleting: 'Delete own messages', forwarding: 'Forward', mentions: '@mentions', pins: 'Pin messages', stars: 'Starred messages',
   search: 'Message search', polls: 'Polls', location: 'Share location', viewOnce: 'View once', disappearing: 'Disappearing messages', scheduled: 'Send later',
   stories: 'Stories', calls: 'Voice and video calls', encryption: 'End-to-end encryption', invites: 'Invite codes', reports: 'Report a message',
-  profiles: 'Change own picture and about', typing: 'Typing indicator', presence: 'Online status', readReceipts: 'Read receipts', blocking: 'Block people', export: 'Export data',
+  profiles: 'Change own picture and about', typing: 'Typing indicator', presence: 'Online status', readReceipts: 'Read receipts', blocking: 'Block people', export: 'Export data', personalization: 'Personal colours and style',
 };
 const WORDING = ['Chats', 'Message', 'New chat', 'Search chats and messages', 'Select a conversation to start chatting.', 'No conversations yet. Press + to start one.'];
 

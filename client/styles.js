@@ -511,6 +511,19 @@ dialog.drawer { position: absolute; inset-block: 0; inset-inline: auto 0; margin
 slot[name="empty"] { display: contents; }
 ::slotted([slot="sidebar-top"]), ::slotted([slot="sidebar-bottom"]), ::slotted([slot="thread-top"]) { flex: none; }
 
+/* ---- a person's own look: Settings, Appearance ---- */
+.swatches { display: flex; flex-wrap: wrap; gap: 10px; padding: 2px 0 10px; }
+.swatch { width: 30px; height: 30px; border-radius: 50%; border: 3px solid var(--pc-surface); box-shadow: 0 0 0 1px var(--pc-border); padding: 0; cursor: pointer; }
+.swatch[aria-checked="true"] { box-shadow: 0 0 0 2px var(--pc-fg); }
+.swatch.auto { background: conic-gradient(var(--pc-surface) 0 50%, var(--pc-muted) 0); }
+.swatch.custom { appearance: none; -webkit-appearance: none; background: conic-gradient(#e8452c, #d97706, #0b8a5f, #0e7c86, #1d6fe0, #d6336c, #e8452c); overflow: hidden; }
+.swatch.custom::-webkit-color-swatch-wrapper { padding: 0; }
+.swatch.custom::-webkit-color-swatch, .swatch.custom::-moz-color-swatch { border: 0; opacity: 0; }
+.setrow input[type="range"] { flex: 1; max-width: 55%; accent-color: var(--pc-accent); }
+.group .seg { margin: 2px 0 10px; }
+.group .linkbtn { align-self: flex-start; padding: 8px 0 12px; }
+.msgs { background-size: 22px 22px; }
+
 /* ---- identity ---- */
 /* getting around: a rail beside the chat list */
 .rail { width: 64px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0; background: var(--pc-surface); border-inline-end: var(--pc-border-width) solid var(--pc-border); }

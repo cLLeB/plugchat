@@ -1,5 +1,7 @@
 # PlugChat
 
+[![ci](https://github.com/cLLeB/plugchat/actions/workflows/ci.yml/badge.svg)](https://github.com/cLLeB/plugchat/actions/workflows/ci.yml)
+
 In-app messaging you add to a platform that already exists. Your users, your
 login, your servers, your database file. PlugChat supplies the chat.
 
@@ -242,12 +244,11 @@ Stated plainly so you can plan around them:
   (with a mirrored right-to-left layout). The translations have not been
   reviewed by native speakers. Other languages are added by the host
   through `strings`.
-- **Never run on Linux.** Everything was developed and tested on Windows.
-  `.github/workflows/ci.yml` runs the tests (both databases), all starters,
-  the nginx deployment and the Docker build on Linux, but has not itself been
-  executed yet: it runs the first time the repository is pushed to GitHub.
-- **Not yet exercised here:** the Dockerfile (there is no Docker on the
-  development machine); Angular and Svelte (React and Vue are); S3 storage against a live bucket (request signing is
+- **Developed on Windows, checked on Linux.** Every push runs, on Linux, the
+  tests on both databases, all seven backend starters, the deployment behind
+  nginx, the framework builds, and a build and start of the container image
+  ([the ci workflow](.github/workflows/ci.yml)).
+- **Not yet exercised:** Angular and Svelte (React and Vue are); S3 storage against a live bucket (request signing is
   checked against Amazon's published example and a stand-in bucket); the mobile
   WebView wrappers and native bridges; and calls between two real devices on
   different networks (the call flow is tested in one browser with synthetic

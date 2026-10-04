@@ -2,9 +2,6 @@
 # development machine: the test suite on SQLite and on PostgreSQL, the backend
 # starters in all seven languages, the deployment behind nginx, the framework
 # examples, and a build and smoke test of the Docker image.
-#
-# Written on a Windows machine with no Linux or Docker available: this file has
-# not been executed yet. Expect to adjust it on its first run.
 name: ci
 on: [push, pull_request]
 

@@ -1,4 +1,5 @@
 # For platforms whose backend is not Node: run PlugChat as a side service.
+# Built and started on every push by the ci workflow.
 #
 #   docker run ... ghcr.io/clleb/plugchat      (published with each release), or build it yourself:
 #   docker build -t plugchat .

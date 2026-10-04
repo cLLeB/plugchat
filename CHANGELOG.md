@@ -4,6 +4,11 @@ Versions follow semantic versioning. What counts as a breaking change is set
 out in [docs/STABILITY.md](docs/STABILITY.md). Until 1.0, a minor version may
 contain breaking changes, and they are listed here.
 
+## 0.1.5
+
+- No code changes. The first version published to npm by the release workflow;
+  it carries everything since 0.1.1.
+
 ## 0.1.4
 
 - The moderation console, the setup studio and the demo site's pages follow

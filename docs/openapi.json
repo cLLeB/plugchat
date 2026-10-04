@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "PlugChat API",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "The REST API of a PlugChat server. Every request carries a token signed by the host platform. Changes are made over REST; the WebSocket at /v1/ws only delivers events. Request and response fields are described in docs/API.md; this document lists every endpoint, its parameters and its purpose.",
     "license": {
       "name": "Apache-2.0",

@@ -4,6 +4,21 @@ Versions follow semantic versioning. What counts as a breaking change is set
 out in [docs/STABILITY.md](docs/STABILITY.md). Until 1.0, a minor version may
 contain breaking changes, and they are listed here.
 
+## 0.1.1
+
+- Machine-readable API description: `docs/openapi.json`, also served at
+  `/plugchat/openapi.json`. Five endpoints the reference described wrongly or
+  not at all are corrected.
+- The member routes name their path parameter `userId` (was `uid`); the URLs
+  themselves are unchanged.
+- Bucket storage is now checked end to end against a real S3-compatible
+  server; `scripts/check-s3.mjs` runs the same check against your bucket.
+- The embed page's bridge to React Native, Android, Flutter and iOS is tested.
+- Built-in peer-to-peer calls and the mobile WebView components are labelled
+  experimental.
+- Linux, both databases, all starters, the nginx deployment and the container
+  image are checked on every push.
+
 ## 0.1.0
 
 First release.

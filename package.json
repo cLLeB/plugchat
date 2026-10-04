@@ -1,6 +1,6 @@
 {
   "name": "plugchat",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Self-hosted in-app messaging you add to a platform that already exists: one endpoint, one tag, your own servers.",
   "keywords": [
     "chat",
@@ -79,7 +79,8 @@
     "bench": "node bench/load.mjs",
     "prepublishOnly": "npm test && npm run check:types",
     "verify:proxy": "node examples/behind-proxy/run.mjs --check",
-    "openapi": "node scripts/openapi.mjs"
+    "openapi": "node scripts/openapi.mjs",
+    "check:s3": "node scripts/check-s3.mjs"
   },
   "dependencies": {
     "ws": "^8.18.0"

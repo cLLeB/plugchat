@@ -497,8 +497,11 @@ hands `plugchat:call-join` to your app instead of opening calls itself, so you
 can run them in your call vendor's native SDK. Grant the WebView camera and
 microphone permission if you use built-in calls or voice notes.
 
-The native bridges follow each platform's documented WebView API but have only
-been exercised here through the browser `postMessage` path.
+The page's side of each bridge is tested (the token request, the token coming
+back, unread counts and call hand-off, for React Native, Android, Flutter and
+iOS). The native components in `starters/mobile` follow each platform's
+documented WebView API but have not been run on a device: treat them as
+experimental until you have.
 
 For a fully native UI, call the REST and WebSocket API in [API.md](API.md)
 directly (an OpenAPI file for generating a client in your language is at

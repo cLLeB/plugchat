@@ -70,6 +70,6 @@ nothing to work out:
 | [`mobile/ios/PlugChatView.swift`](mobile/ios/PlugChatView.swift) | iOS (Swift, `WKWebView`) |
 
 Each takes the address of your PlugChat, a function that fetches a token from
-your backend, and a callback for the unread count. They are written to each
-platform's documented WebView API and have **not been run on a device here**:
-there is no mobile toolchain on the development machine.
+your backend, and a callback for the unread count. They are **experimental**: written to each platform's documented WebView API
+but not yet run on a device. The page they talk to is tested for each
+platform's bridge (`test/embed.test.js`).

@@ -78,7 +78,7 @@ is not restricted by these switches.
 | `disappearing` | Disappearing-message timers |
 | `scheduled` | Send later |
 | `stories` | Stories |
-| `calls` | Voice and video calls |
+| `calls` | Voice and video calls (the built-in peer-to-peer ones are experimental; calls through your own vendor are not) |
 | `encryption` | Creating end-to-end encrypted conversations |
 | `invites` | Invite codes |
 | `reports` | Reporting a message to your moderators |

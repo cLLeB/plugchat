@@ -119,8 +119,9 @@ everything that was shared.
 **Ephemeral** — disappearing-message timers per conversation, view-once
 messages that are wiped after each recipient opens them, 24-hour stories.
 
-**Calls** — one-to-one voice and video over WebRTC, peer to peer; or one-to-one
-and group calls through the call vendor you already use.
+**Calls** — one-to-one and group calls through the call vendor you already
+use; or built-in one-to-one voice and video over WebRTC, peer to peer
+(**experimental**: see Current limits).
 
 **Connectors** — plug in what your platform already has: a call vendor
 (Twilio, Agora, Daily, LiveKit, Zoom, Jitsi), billing or credit checks, a
@@ -232,8 +233,11 @@ Stated plainly so you can plan around them:
   trip (see [docs/SIZING.md](docs/SIZING.md)). There is no MySQL backend.
 - **Encryption trusts the server's device list** unless members compare safety
   codes, and has no forward secrecy within a key epoch. See the security doc.
-- **Built-in calls are one-to-one**, and need a TURN server of yours to connect
-  across strict networks. Group calls need your own call vendor (see connectors).
+- **Built-in calls are experimental.** They are one-to-one, need a TURN server
+  of yours to connect across strict networks, and have only been exercised in
+  one browser with synthetic media, never between two real devices on
+  different networks. For calls you depend on, connect your own call vendor
+  (see connectors); `features: { calls: false }` hides calling altogether.
 - **No native mobile SDKs.** Mobile apps open the embed page in a WebView or
   call the REST/WebSocket API.
 - **Push notifications are yours to send**, driven by the webhook.
@@ -245,12 +249,14 @@ Stated plainly so you can plan around them:
   tests on both databases, all seven backend starters, the deployment behind
   nginx, the framework builds, and a build and start of the container image
   ([the ci workflow](.github/workflows/ci.yml)).
-- **Not yet exercised:** Angular and Svelte (React and Vue are); S3 storage against a live bucket (request signing is
-  checked against Amazon's published example and a stand-in bucket); the mobile
-  WebView wrappers and native bridges; and calls between two real devices on
-  different networks (the call flow is tested in one browser with synthetic
-  media). Treat those as written to spec, not proven. The backend starters for
-  all seven languages are run against a real PlugChat by `starters/verify.mjs`.
+- **Mobile wrappers are experimental.** The WebView components for React
+  Native, Flutter, Android and iOS have not been run on a device. What is
+  tested is the page they talk to: the token request, the token coming back,
+  unread counts and call hand-off, for each platform's bridge.
+- **Not yet exercised:** Angular and Svelte (React and Vue are). Bucket
+  storage is checked against a real S3-compatible server (SeaweedFS), not
+  against Amazon S3 itself; `node scripts/check-s3.mjs` runs the same check
+  against your own bucket.
 
 ## License
 

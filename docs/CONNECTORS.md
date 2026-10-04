@@ -68,6 +68,10 @@ Notes:
 
 ## Calls through your own vendor
 
+This is the dependable way to offer calls. The built-in peer-to-peer calls are
+experimental: one-to-one only, and not yet tested between real devices on
+different networks.
+
 Registering a `call.join` hook switches calling from the built-in peer-to-peer
 mode to yours, and enables calls in groups.
 
@@ -125,8 +129,13 @@ address) for anything that is not Amazon, and `"prefix": "chat/"` to keep the
 objects under a folder. As environment variables: `PLUGCHAT_STORAGE=s3` with
 `PLUGCHAT_S3_BUCKET`, `PLUGCHAT_S3_REGION`, `PLUGCHAT_S3_ENDPOINT`,
 `PLUGCHAT_S3_ACCESS_KEY_ID`, `PLUGCHAT_S3_SECRET_ACCESS_KEY`, `PLUGCHAT_S3_PREFIX`.
-Request signing is checked against Amazon's published example and against a
-stand-in bucket in the test suite; it has not been run against a live bucket here.
+Request signing is checked against Amazon's published example, and the whole
+path (upload, download through PlugChat, deletion) against a real
+S3-compatible server. To run the same check against your own bucket:
+
+```bash
+S3_ENDPOINT=https://… S3_ACCESS_KEY_ID=… S3_SECRET_ACCESS_KEY=… S3_BUCKET=… node scripts/check-s3.mjs
+```
 
 **Anything else** (Azure Blob, Google Cloud Storage, a network share): pass an
 object with three methods (Node only):

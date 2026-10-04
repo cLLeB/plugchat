@@ -1,21 +1,33 @@
 {
   "name": "plugchat",
   "version": "0.1.0",
-  "description": "Drop-in, self-hosted, security-focused in-app messaging for any existing platform.",
+  "description": "Self-hosted in-app messaging you add to a platform that already exists: one endpoint, one tag, your own servers.",
+  "keywords": ["chat", "messaging", "self-hosted", "web-component", "websocket", "end-to-end-encryption", "embeddable", "in-app-chat"],
   "type": "module",
-  "license": "UNLICENSED",
-  "private": true,
+  "license": "MIT",
   "engines": {
     "node": ">=22.13"
   },
   "bin": {
     "plugchat": "bin/plugchat.js"
   },
+  "files": [
+    "bin",
+    "server",
+    "client",
+    "starters",
+    "docs",
+    "bench",
+    "Dockerfile",
+    "LICENSE",
+    "README.md"
+  ],
   "exports": {
     ".": {
       "types": "./server/index.d.ts",
       "default": "./server/index.js"
     },
+    "./config": "./server/config.js",
     "./client": {
       "types": "./client/plugchat.d.ts",
       "default": "./client/plugchat.js"
@@ -27,13 +39,17 @@
     "./launcher": {
       "types": "./client/element.d.ts",
       "default": "./client/launcher.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "scripts": {
     "start": "node bin/plugchat.js start",
     "demo": "node examples/host-app/server.js",
     "test": "node --test --test-timeout=20000 --test-force-exit",
-    "check:types": "tsc -p ."
+    "check:types": "tsc -p .",
+    "verify:starters": "node starters/verify.mjs",
+    "bench": "node bench/load.mjs",
+    "prepublishOnly": "npm test && npm run check:types"
   },
   "dependencies": {
     "ws": "^8.18.0"

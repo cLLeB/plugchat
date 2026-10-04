@@ -109,8 +109,26 @@ short-lived token your hook chose to give that one user.
 
 ## Storage
 
-By default uploads are files in the data directory. To keep them elsewhere,
-pass an object with three methods (Node only):
+By default uploads are files in the data directory.
+
+**Your own S3-compatible bucket** (Amazon S3, Cloudflare R2, MinIO,
+DigitalOcean Spaces, Backblaze B2) needs only settings, so it works the same
+whether PlugChat runs inside Node or as a side service. No SDK is involved:
+
+```json
+{ "storage": { "type": "s3", "bucket": "alumni-chat", "region": "eu-west-1", "accessKeyId": "…", "secretAccessKey": "…" } }
+```
+
+Add `"endpoint": "https://<account>.r2.cloudflarestorage.com"` (or your MinIO
+address) for anything that is not Amazon, and `"prefix": "chat/"` to keep the
+objects under a folder. As environment variables: `PLUGCHAT_STORAGE=s3` with
+`PLUGCHAT_S3_BUCKET`, `PLUGCHAT_S3_REGION`, `PLUGCHAT_S3_ENDPOINT`,
+`PLUGCHAT_S3_ACCESS_KEY_ID`, `PLUGCHAT_S3_SECRET_ACCESS_KEY`, `PLUGCHAT_S3_PREFIX`.
+Request signing is checked against Amazon's published example and against a
+stand-in bucket in the test suite; it has not been run against a live bucket here.
+
+**Anything else** (Azure Blob, Google Cloud Storage, a network share): pass an
+object with three methods (Node only):
 
 ```js
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
@@ -163,6 +181,55 @@ chatEl.actions = [{
   },
 }];
 ```
+
+## Events: knowing what happens in the chat
+
+PlugChat reports what happens so your platform can react: send a push
+notification, update a CRM, award a badge, post a welcome.
+
+| Event | When | Carries |
+|---|---|---|
+| `message.new` | A message is sent | `message`, `conversation`, `recipients` (who is offline, muted, mentioned) |
+| `message.edited` | A message is edited | `message` |
+| `message.deleted` | A message is deleted | `conversationId`, `messageId`, `by` |
+| `message.reported` | Someone reports a message | `reportId`, `reporterId`, `reason`, `message`, `conversation` |
+| `call.started` | A call is placed | `call`, `message`, `conversation`, `recipients` |
+| `conversation.created` | A chat or group is created | `conversation`, `creatorId`, `memberIds` |
+| `member.added` | People join a group | `conversationId`, `userIds`, `by` |
+| `member.removed` | Someone leaves or is removed | `conversationId`, `userId`, `by` |
+| `user.connected`, `user.disconnected` | A person's first device connects, or their last one drops | `userId` |
+
+**Over HTTP, for any backend.** Set `webhookUrl`. By default it receives
+`message.new`, `message.reported` and `call.started`; choose others with
+`webhookEvents` (`PLUGCHAT_WEBHOOK_EVENTS=message.new,member.added`). Every
+delivery is signed, queued and retried ([API.md](API.md#webhooks)).
+
+**In the same process (Node).** Listen directly, with no network hop:
+
+```js
+const stop = chat.on('message.new', ({ message, recipients }) => { /* … */ });
+chat.on('*', (event) => analytics.track(event.type));
+```
+
+A listener that throws is logged and never affects the request that caused the event.
+
+## Plugins
+
+A plugin is a function that receives the running chat. It can listen to
+events, call the admin API and post messages: enough to package a behaviour
+once and reuse it across your products.
+
+```js
+const welcome = (text) => (chat) =>
+  chat.on('member.added', (e) => chat.admin.post(e.conversationId, text));
+
+const auditTrail = (write) => (chat) => chat.on('*', (event) => write(event));
+
+createPlugChat({ secret, plugins: [welcome('Welcome! Please read the pinned messages.'), auditTrail(saveToMyLog)] });
+```
+
+Hooks decide (allow, refuse, rewrite) before something happens; events and
+plugins react after it has.
 
 ## Moderation console for your staff
 

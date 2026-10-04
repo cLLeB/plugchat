@@ -2,7 +2,8 @@
 
 Everything is under the base path (default `/plugchat`). Send
 `Authorization: Bearer <token>` on every REST request. Bodies and responses are
-JSON. Errors look like `{"error": "code", "message": "..."}`.
+JSON. Errors look like `{"error": "code", "message": "..."}`. A feature the
+platform switched off answers `404` with the code `feature_disabled`.
 
 Changes are made over REST; the WebSocket only delivers events (plus typing and
 call signalling). That keeps a native or server-side integration to plain HTTP.
@@ -13,7 +14,7 @@ call signalling). That keeps a native or server-side integration to plain HTTP.
 
 | | |
 |---|---|
-| `GET /v1/me` | The caller, with their handles and the server's enabled features |
+| `GET /v1/me` | The caller, with their handles, `features` (every switch, plus `calls`: `"p2p"`, `"external"` or `false`) and `ui` (the look and wording the platform configured) |
 | `PUT /v1/me/key` `{deviceId, publicKey}` | Register this device's encryption key |
 | `GET /v1/me/devices`, `DELETE /v1/me/devices/:deviceId` | The caller's devices; remove a lost one |
 | `PUT /v1/me/settings` `{readReceipts?, presence?}` | Privacy switches |
@@ -190,6 +191,8 @@ Server to client:
 |---|---|
 | `GET /embed` | The chat as a standalone page for iframes and WebViews (see [INTEGRATION.md](INTEGRATION.md)) |
 | `GET /client/element.js`, `launcher.js`, `plugchat.js`, `calls.js`, `e2ee.js` | The web component, floating launcher and headless client |
+| `GET /admin` | The moderation console for your staff (see [CONNECTORS.md](CONNECTORS.md)) |
+| `GET /studio` | The setup studio. Only when `studio` is on; by default only for requests made on the same machine and not through a proxy |
 | `GET /health` | `{ok: true}` |
 
 ## Webhooks
@@ -210,6 +213,11 @@ POSTed to `webhookUrl` with header `x-plugchat-signature: sha256=<hex HMAC-SHA25
 `message.reported`: `reportId`, `reporterId`, `reason`, `message`, `conversation`.
 
 `call.started`: `call`, `message`, `conversation`, `recipients` (so you can ring phones that are not in the app).
+
+Those three are sent by default. `webhookEvents` adds or removes types; the
+others are `message.edited`, `message.deleted`, `conversation.created`,
+`member.added`, `member.removed`, `user.connected` and `user.disconnected`
+(fields in [CONNECTORS.md](CONNECTORS.md#events-knowing-what-happens-in-the-chat)).
 
 Events are queued in the database and retried until your endpoint answers with
 a 2xx status: after 5 seconds, then doubling, up to 8 attempts, after which

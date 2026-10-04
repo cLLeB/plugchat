@@ -1,0 +1,62 @@
+{
+  "when": "2026-10-04T09:53:41.532Z",
+  "machine": {
+    "cpu": "Intel(R) Core(TM) 5 120U",
+    "cores": 12,
+    "memoryGB": 16,
+    "os": "win32 10.0.26200",
+    "node": "v24.19.0"
+  },
+  "settings": {
+    "connections": 2000,
+    "senders": 64,
+    "seconds": 12,
+    "group": 500
+  },
+  "connections": {
+    "count": 2000,
+    "secondsToOpen": 1.03,
+    "memoryAtRestMB": 55,
+    "memoryConnectedMB": 84,
+    "kbPerConnection": 15
+  },
+  "messaging": {
+    "perSecond": 1355,
+    "stored": 16256,
+    "failed": 0,
+    "acknowledgedMs": {
+      "p50": 44.08020000000033,
+      "p95": 64.86390000000029,
+      "p99": 105.125
+    },
+    "deliveredMs": {
+      "p50": 43.95400000000063,
+      "p95": 64.65760000000046,
+      "p99": 104.73189999999977
+    },
+    "serverLagP99Ms": 76.1,
+    "memoryMB": 112
+  },
+  "group": {
+    "members": 500,
+    "reachEveryoneMs": {
+      "p50": 15.834500000000844,
+      "p95": 25.572199999998702,
+      "p99": 25.572199999998702
+    },
+    "slowestMs": 25.6
+  },
+  "history": {
+    "last50Ms": {
+      "p50": 10.1420999999973,
+      "p95": 12.694700000000012,
+      "p99": 15.95720000000074
+    },
+    "chatListMs": {
+      "p50": 23.123100000000704,
+      "p95": 25.921199999997043,
+      "p99": 34.29820000000109
+    }
+  },
+  "memoryAtEndMB": 131
+}

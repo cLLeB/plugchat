@@ -9,6 +9,12 @@ login, your servers, your database file. PlugChat supplies the chat.
 ```
 
 That tag plus one small endpoint on your backend is the whole integration.
+Then make it yours: every colour, size, word and icon can be changed, any
+feature can be switched off, and your own buttons, message types and services
+plug in.
+
+PlugChat is software you run on your own server. There is no hosted service
+behind it, no account to create, and nothing is metered.
 
 ## Why this exists
 
@@ -48,6 +54,12 @@ Open http://localhost:3000, sign in as one member, then open a private window
 and sign in as another. The demo is a pretend alumni-association site; the only
 chat-specific code in it is one endpoint and one tag
 ([examples/host-app](examples/host-app/server.js)).
+
+Then open http://localhost:3000/plugchat/studio, the **setup studio**: the real
+chat in the middle, controls for its look and features beside it, and the
+settings, backend endpoint and embed code that produce what you see, ready to
+copy. [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) walks through adding
+it to your own platform.
 
 ```bash
 npm test
@@ -112,7 +124,19 @@ badge, an iframe for site builders, and a WebView page for native mobile apps.
 
 **For the host platform** — signed webhooks so you send push notifications or
 email through your own providers; DOM events (`plugchat:unread`,
-`plugchat:message`) for badges; theming through CSS variables.
+`plugchat:message`) for badges.
+
+**Made to be changed** — 29 feature switches; two dozen design tokens for
+colours, fonts, corner radii, border widths and sizes; a styling hook on every
+element; a bubble layout and a flat one; replaceable wording and icons; your
+own CSS; slots for your own content; and your own entries in the attach menu,
+the message menu and the conversation header.
+
+**Made to be wired in** — ten events (new message, member added, user
+connected, ...) by signed webhook or in-process listener; plugins; hooks that
+decide before something happens; uploads in your own S3-compatible bucket;
+settings by Node options, a JSON file or environment variables; ready-to-run
+backend starters in seven languages.
 
 ## Security
 
@@ -137,10 +161,19 @@ what the encryption does **not** yet protect against.
 
 ## Documentation
 
-- [docs/INTEGRATION.md](docs/INTEGRATION.md) — running it, signing tokens in
-  Node, Python, PHP, Go, Ruby, Java and C#, embedding in web and mobile apps.
+- [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) — start here: the path from
+  "no messaging" to "members are chatting", step by step.
+- [docs/CUSTOMIZING.md](docs/CUSTOMIZING.md) — feature switches, design tokens,
+  styling hooks, layouts, wording, icons, slots and your own actions.
+- [docs/INTEGRATION.md](docs/INTEGRATION.md) — the reference: running it, every
+  setting, signing tokens in Node, Python, PHP, Go, Ruby, Java and C#, embedding
+  in web and mobile apps.
 - [docs/CONNECTORS.md](docs/CONNECTORS.md) — call vendors, billing and moderation
-  hooks, external storage, custom message types.
+  hooks, events and plugins, storage, custom message types.
+- [docs/SIZING.md](docs/SIZING.md) — measured capacity of one server, and how to
+  measure yours.
+- [starters/](starters) — the backend half of the integration, runnable, in
+  seven languages.
 - [docs/API.md](docs/API.md) — REST endpoints, realtime events, webhooks.
 - [docs/SECURITY.md](docs/SECURITY.md) — threat model and limits.
 
@@ -165,8 +198,17 @@ Stated plainly so you can plan around them:
   (with a mirrored right-to-left layout). The translations are mine and have
   not been reviewed by native speakers. Other languages are added by the host
   through `strings`.
-- **Not yet exercised here:** the Dockerfile, the token snippets for languages
-  other than Node, the native WebView bridges, and calls between two real
-  devices on different networks (the call flow is tested in one browser with
-  synthetic media). Treat those as written to spec, not proven.
-- **No license has been chosen**, so nobody else may legally use the code yet.
+- **Not yet exercised here:** the Dockerfile; the starters for Python, PHP, Go,
+  Ruby, Java and C# (the Node starter is verified end to end by
+  `starters/verify.mjs`, which runs the others too wherever their language is
+  installed); S3 storage against a live bucket (request signing is checked
+  against Amazon's published example and a stand-in bucket); the native WebView
+  bridges; and calls between two real devices on different networks (the call
+  flow is tested in one browser with synthetic media). Treat those as written
+  to spec, not proven.
+- **Not published to npm.** The package installs and runs from a tarball
+  (`npm pack`); publishing it is the owner's step.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

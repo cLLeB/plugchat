@@ -1,6 +1,8 @@
 # Integrating PlugChat
 
-Three steps: run it, sign tokens, show the UI.
+Three steps: run it, sign tokens, show the UI. New here? Start with
+[GETTING-STARTED.md](GETTING-STARTED.md), which walks through them in order;
+this page is the reference.
 
 ## 1. Run it
 
@@ -38,6 +40,33 @@ PlugChat and your backend, set `PLUGCHAT_ORIGINS` to your site's origin, then:
 ```bash
 node bin/plugchat.js start
 ```
+
+Or let it write a starting configuration for you:
+
+```bash
+node bin/plugchat.js init
+```
+
+creates `plugchat.config.json` and a `.env` holding a fresh secret. Settings
+are read from three places, each overriding the one before: the config file
+(`./plugchat.config.json`, or the path in `PLUGCHAT_CONFIG`), a `.env` file
+beside it, and real environment variables. The file takes every option in the
+table below that is plain data, under the option's own name:
+
+```json
+{
+  "port": 4400,
+  "origins": ["https://alumni.example"],
+  "webhookUrl": "https://alumni.example/webhooks/plugchat",
+  "webhookEvents": ["message.new", "member.added"],
+  "features": { "stories": false },
+  "ui": { "theme": { "accent": "#0b6b4f" }, "layout": "bubbles" },
+  "storage": { "type": "s3", "bucket": "alumni-chat", "accessKeyId": "…", "secretAccessKey": "…" }
+}
+```
+
+An unknown key stops the start with a message naming it, so a typo is never
+silently ignored.
 
 Or build the included `Dockerfile`. Nginx needs WebSocket upgrade headers on the proxied path:
 
@@ -117,7 +146,13 @@ with the token's `sub` and are visible in the moderation console and at
 | `retentionDays` | `PLUGCHAT_RETENTION_DAYS` | keep forever | Delete every message and file older than this |
 | `cluster` | `PLUGCHAT_CLUSTER=on` | off | Let several instances that share one data directory act as one |
 | `bus` | — | — | Your own pub/sub (Redis, NATS…) in place of the built-in one for `cluster` |
-| `storage` | — | local disk | Where uploads are kept (see [CONNECTORS.md](CONNECTORS.md)) |
+| `storage` | `PLUGCHAT_STORAGE=s3` and `PLUGCHAT_S3_*` | local disk | Where uploads are kept: settings for an S3-compatible bucket, or your own adapter (see [CONNECTORS.md](CONNECTORS.md)) |
+| `features` | `PLUGCHAT_FEATURES_OFF` (comma-separated) | everything on | Switch features off: `{ "stories": false }` (see [CUSTOMIZING.md](CUSTOMIZING.md)) |
+| `ui` | `PLUGCHAT_UI` (JSON) | none | Your look and wording, applied wherever the chat is shown |
+| `webhookEvents` | `PLUGCHAT_WEBHOOK_EVENTS` | `message.new`, `message.reported`, `call.started` | Which events go to `webhookUrl` |
+| `plugins` | — | none | Functions that receive the running chat (Node) |
+| `studio` | `PLUGCHAT_STUDIO=on` | off | Serve the setup studio at `/plugchat/studio`. For development: it answers only the machine it runs on unless set to `remote` |
+| `port`, `host` | `PORT`, `HOST` | 4400, all interfaces | Where the side service listens |
 | `hooks`, `hookUrl`, `hookEvents`, `hookFailOpen` | `PLUGCHAT_HOOK_URL`, `PLUGCHAT_HOOK_EVENTS`, `PLUGCHAT_HOOK_FAIL_OPEN=on` | none | Your billing, moderation and call-vendor hooks |
 
 ## 2. Sign tokens
@@ -140,6 +175,10 @@ The token is a standard HS256 JWT. Any JWT library works; the claims are:
 Names, avatars and handles are picked up from the token each time, so there is
 nothing to sync. To make people findable before they first open chat, register
 them with the admin API (`PUT /v1/users/:id`, see [API.md](API.md)).
+
+Complete, runnable versions of this endpoint (and the webhook receiver) for
+each language below are in [`starters/`](../starters); `node starters/verify.mjs`
+runs every one whose language is installed against a real PlugChat.
 
 ### Node
 
@@ -269,6 +308,9 @@ session your site already has. Give the element a height with CSS.
 | `lang` | Interface language: `en`, `fr`, `es`, `pt` or `ar`. Defaults to the page's `<html lang>` |
 | `dir` | `rtl` or `ltr`. Right-to-left is chosen automatically for Arabic, Hebrew, Persian and Urdu `lang` values |
 | `e2ee`, `calls`, `stories` | Set to `off` to hide that feature |
+| `layout` | `bubbles` (default) or `flat` |
+| `density` | `compact` for tighter rows |
+| `stylesheet` | URL of a CSS file to apply inside the chat |
 | `history` | Set to `off` if your app manages the browser's back button itself. By default, opening a chat on a phone-width layout adds a history step so the device's back button returns to the chat list |
 | `notification-icon` | An image URL to use in desktop notifications instead of the sender's picture |
 
@@ -277,6 +319,9 @@ bubbles, buttons, badges) and `--pc-accent-fg` (text on it), `--pc-bg` (panels),
 `--pc-chat` (the backdrop behind messages), `--pc-bubble` (incoming bubbles),
 `--pc-surface`, `--pc-fg`, `--pc-muted`, `--pc-border`, `--pc-radius`. Pick an
 accent dark enough for `--pc-accent-fg` to read on it, in both light and dark.
+There are two dozen tokens in all (fonts, corner radii, border width, picture
+shape, sizes), plus `::part()` hooks on every element, your own CSS, slots and
+feature switches: see [CUSTOMIZING.md](CUSTOMIZING.md).
 
 The layout follows the space it is given, not the device: two panes side by
 side from 700px wide, one pane at a time below that, with dialogs rising from
@@ -288,8 +333,10 @@ Events on the element: `plugchat:ready`, `plugchat:unread` (`detail.count`),
 (cancelable, see [CONNECTORS.md](CONNECTORS.md)) and `plugchat:invite` (set
 `detail.text` to the shareable link your site wants shown for `detail.code`).
 
-Properties: `getToken`, `renderers` and `actions` (see connectors), and
-`strings` to translate or reword the interface. Keys are the English text:
+Properties: `getToken`, `renderers`, `actions`, `messageActions` and
+`headerActions` (your own additions), `features`, `ui` and `css` (see
+customising), and `strings` to translate or reword the interface. Keys are the
+English text:
 
 ```js
 chatEl.strings = { 'Send': 'Tuma', 'New chat': 'Mazungumzo mapya' };
@@ -348,8 +395,9 @@ For platforms where you can paste an iframe but not run a module script:
 
 The frame asks for a token whenever it needs one, so your token endpoint never
 has to accept cross-origin requests. Options go in the query string: `peer`,
-`peer-handle`, `invite`, `heading`, `theme`, `accent` (a hex colour), and
-`calls`, `stories`, `e2ee` (`off`). Pass `origin` so the frame only exchanges
+`peer-handle`, `invite`, `heading`, `theme`, `accent` (a hex colour), `layout`,
+`density`, and `calls`, `stories`, `e2ee` (`off`). The rest of the look comes
+from the server's `ui` setting, since a frame cannot be styled from outside. Pass `origin` so the frame only exchanges
 messages with your page. When `origins` is configured on the server, only those
 sites are allowed to frame the chat at all.
 

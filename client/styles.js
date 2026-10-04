@@ -262,6 +262,12 @@ dialog form, dialog .panel { display: flex; flex-direction: column; gap: 12px; p
 dialog h3 { margin: 0; font-size: 18px; display: flex; align-items: center; gap: 8px; }
 dialog h3 span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 dialog textarea { border-radius: 12px; min-height: 90px; flex: none; background: var(--pc-surface); padding: 10px 14px; }
+.hero { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 0 8px; text-align: center; }
+.hero .avatar { width: 88px; height: 88px; font-size: 32px; margin-bottom: 6px; }
+.hero strong { font-size: 19px; }
+.hero small { color: var(--pc-muted); font-size: 13px; }
+.lockline { display: inline-flex; align-items: center; gap: 4px; }
+.lockline svg { width: 13px; height: 13px; }
 .people { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; flex: none; }
 .person { display: flex; gap: 10px; align-items: center; padding: 7px 6px; border-radius: 10px; cursor: pointer; width: 100%; text-align: start; }
 .person:hover { background: var(--pc-surface); }

@@ -1912,7 +1912,13 @@ class PlugChatElement extends HTMLElement {
     });
 
     this._openDialog(h('div', { class: 'panel' },
-      this._dialogTitle(this._title(conv)),
+      this._dialogTitle(isGroup ? T('Group info') : T('Contact info')),
+      // The familiar top of an info screen: a large picture, the name, and a line about them.
+      h('div', { class: 'hero' },
+        this._avatar(this._title(conv), other?.avatar, { online: !!other && this.chat.online.has(other.userId) }),
+        h('strong', {}, this._title(conv)),
+        h('small', {}, isGroup ? T('{n} members', { n: conv.members.length }) : this.chat.online.has(other.userId) ? T('Online') : T('Offline')),
+        conv.encrypted && h('small', { class: 'lockline' }, h('span', { icon: 'lock' }), T('End-to-end encrypted'))),
       isGroup && canManage && h('div', { class: 'inline' }, $name, h('button', { class: 'btn plain', onclick: () => $name.value.trim() && run(this.chat.update(conv.id, { title: $name.value.trim() }), true) }, T('Rename'))),
       isGroup && canManage && h('div', { class: 'inline' }, $desc, h('button', { class: 'btn plain', onclick: () => run(this.chat.update(conv.id, { description: $desc.value.trim() }), true) }, T('Save'))),
       isGroup && !canManage && conv.description && h('div', { class: 'field' }, conv.description),

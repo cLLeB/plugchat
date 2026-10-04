@@ -101,7 +101,7 @@ const header = (id, current) => `<header><div class="top">
 </div></header>`;
 const page = (title, id, current, body) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)} — Alumni Association</title><link rel="stylesheet" href="/site.css">
-<script>document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';</script></head>
+<script>/* the same light or dark look the member chose in the chat */ document.documentElement.dataset.theme = (() => { try { const t = localStorage.getItem('plugchat:theme'); if (t === 'light' || t === 'dark') return t; } catch {} return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; })();</script></head>
 <body>${header(id, current)}<main>${body}</main></body></html>`;
 const html = (res, text, status = 200) => res.writeHead(status, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(text);
 

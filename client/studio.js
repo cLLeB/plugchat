@@ -7,6 +7,14 @@
 import './element.js';
 import './launcher.js';
 
+// Follow the light or dark look chosen in the chat on this device.
+try {
+  const chosen = localStorage.getItem('plugchat:theme');
+  if (chosen === 'light' || chosen === 'dark') document.documentElement.dataset.theme = chosen;
+} catch {
+  // no storage: follow the device
+}
+
 const base = new URL('.', location.href).pathname.replace(/\/$/, '');
 const info = await fetch(`${base}/studio/state`).then((r) => r.json());
 
@@ -72,7 +80,7 @@ const state = {
   layout: info.ui.layout ?? 'flat', density: info.ui.density ?? 'comfortable',
   heading: info.ui.heading ?? '', strings: { ...info.ui.strings }, css: info.ui.css ?? '',
   features: Object.fromEntries(info.featureNames.map((name) => [name, info.features[name] !== false])),
-  viewer: info.users[0].id, device: 'desktop', mode: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', embed: 'html', backend: info.starters[0]?.id, tab: 'embed',
+  viewer: info.users[0].id, device: 'desktop', mode: document.documentElement.dataset.theme ?? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'), embed: 'html', backend: info.starters[0]?.id, tab: 'embed',
   show: 'page', // how the chat appears on the platform: a page, a floating button, or a frame
 };
 

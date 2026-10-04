@@ -71,6 +71,8 @@ const STUDIO_PAGE = `<!doctype html>
 <style>
 :root { color-scheme: light dark; --bg: #f4f5f7; --card: #fff; --fg: #16181d; --muted: #667085; --line: #e3e5ea; --accent: #4e5058; --code: #0f1420; --codefg: #dfe5f2; }
 @media (prefers-color-scheme: dark) { :root { --bg: #0f1115; --card: #191c23; --fg: #e8eaee; --muted: #98a2b3; --line: #2a2e37; --accent: #b5bac1; --code: #0a0c11; } }
+:root[data-theme="light"] { color-scheme: light; --bg: #f4f5f7; --card: #fff; --fg: #16181d; --muted: #667085; --line: #e3e5ea; --accent: #4e5058; --code: #0f1420; --codefg: #dfe5f2; }
+:root[data-theme="dark"] { color-scheme: dark; --bg: #0f1115; --card: #191c23; --fg: #e8eaee; --muted: #98a2b3; --line: #2a2e37; --accent: #b5bac1; --code: #0a0c11; }
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; display: flex; flex-direction: column; }
@@ -153,6 +155,8 @@ const ADMIN_PAGE = `<!doctype html>
 <style>
 :root { color-scheme: light dark; --bg: #f4f5f7; --card: #fff; --fg: #16181d; --muted: #6b7280; --line: #e3e5ea; --accent: #4e5058; --danger: #c92a2a; }
 @media (prefers-color-scheme: dark) { :root { --bg: #111317; --card: #1b1e25; --fg: #e8eaee; --muted: #9199a6; --line: #2a2e37; --accent: #b5bac1; --danger: #ff8787; } }
+:root[data-theme="light"] { color-scheme: light; --bg: #f4f5f7; --card: #fff; --fg: #16181d; --muted: #6b7280; --line: #e3e5ea; --accent: #4e5058; --danger: #c92a2a; }
+:root[data-theme="dark"] { color-scheme: dark; --bg: #111317; --card: #1b1e25; --fg: #e8eaee; --muted: #9199a6; --line: #2a2e37; --accent: #b5bac1; --danger: #ff8787; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
 #app { max-width: 880px; margin: 0 auto; padding: 20px 16px 60px; }
 h1 { font-size: 22px; } h2 { font-size: 17px; margin: 0 0 10px; }

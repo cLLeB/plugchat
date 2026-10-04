@@ -5,6 +5,14 @@
 // token never reaches the server in a URL. Everything is drawn with
 // textContent; reported messages are shown as text, never rendered.
 
+
+// Follow the light or dark look chosen in the chat on this device.
+try {
+  const chosen = localStorage.getItem('plugchat:theme');
+  if (chosen === 'light' || chosen === 'dark') document.documentElement.dataset.theme = chosen;
+} catch {
+  // no storage: follow the device
+}
 const base = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
 let token = new URLSearchParams(location.hash.slice(1)).get('token');
 if (token) history.replaceState(null, '', location.pathname);

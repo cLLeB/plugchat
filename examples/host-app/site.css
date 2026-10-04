@@ -1,6 +1,6 @@
 /* The association's own site. None of this is PlugChat. */
-:root { --brand: #14213d; --accent: #e8452c; --page: #f2f4f3; --card: #fff; --ink: #14201b; --soft: #5f6f68; --line: #dfe5e2; }
-:root[data-theme="dark"] { --brand: #0f1a30; --accent: #ff6a4d; --page: #0f1211; --card: #191d1b; --ink: #e8eeeb; --soft: #9aa8a2; --line: #2a302d; }
+:root { --brand: #14213d; --accent: #4e5058; --page: #f2f4f3; --card: #fff; --ink: #14201b; --soft: #5f6f68; --line: #dfe5e2; }
+:root[data-theme="dark"] { --brand: #0f1a30; --accent: #c4c9d0; --page: #0f1211; --card: #191d1b; --ink: #e8eeeb; --soft: #9aa8a2; --line: #2a302d; }
 * { box-sizing: border-box; }
 body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--page); color: var(--ink); }
 a { color: var(--accent); }
@@ -37,7 +37,7 @@ main { max-width: 1040px; margin: 16px auto; padding: 0 16px; }
 .signin { max-width: 420px; margin: 40px auto; display: flex; flex-direction: column; gap: 12px; }
 .signin label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--soft); }
 .signin select, .signin input { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--page); color: var(--ink); }
-.signin button { font: inherit; font-weight: 600; padding: 11px; border-radius: 10px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
+.signin button { font: inherit; font-weight: 600; padding: 11px; border-radius: 10px; border: 0; background: var(--accent); color: var(--card); cursor: pointer; }
 .signin .error { color: #c92a2a; margin: 0; }
 .hint { font-size: 13px; }
 code { background: var(--page); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }

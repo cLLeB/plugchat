@@ -36,7 +36,8 @@
     </div>
   </main>
   <script>
-    document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    // Start in the look the member last chose in the chat, then follow its switch.
+    document.documentElement.dataset.theme = (() => { try { const t = localStorage.getItem('plugchat:theme'); if (t === 'light' || t === 'dark') return t; } catch {} return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; })();
     const chatEl = document.querySelector('plug-chat');
     if (chatEl) {
     // The page around the chat follows the chat's light/dark switch.

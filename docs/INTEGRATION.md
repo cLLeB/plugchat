@@ -501,7 +501,8 @@ The native bridges follow each platform's documented WebView API but have only
 been exercised here through the browser `postMessage` path.
 
 For a fully native UI, call the REST and WebSocket API in [API.md](API.md)
-directly; note that end-to-end encryption then has to be implemented natively
+directly (an OpenAPI file for generating a client in your language is at
+`/plugchat/openapi.json`); note that end-to-end encryption then has to be implemented natively
 to the format described in [SECURITY.md](SECURITY.md).
 
 ### Your own UI

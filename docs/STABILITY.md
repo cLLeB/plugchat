@@ -20,7 +20,7 @@ same names, and the test suite fails if any of them disappears.
 |---|---|
 | **Token** | HS256 JWT; claims `sub`, `exp`, `name`, `avatar`, `email`, `phone`, `username`, `handles`, `admin` |
 | **Signatures** | `x-plugchat-signature: sha256=<hex HMAC-SHA256 of the raw body>` on webhooks and hooks |
-| **REST and WebSocket** | Every path under `/v1` in [API.md](API.md), its method, and the fields documented there. New fields and endpoints may be added |
+| **REST and WebSocket** | Every path under `/v1` in [API.md](API.md) and [openapi.json](openapi.json), its method, and the fields documented there. New fields and endpoints may be added |
 | **Events** | The ten event names, and their documented fields |
 | **Hooks** | The five hook names, what they receive, and what their answers mean |
 | **Feature switches** | The names in [CUSTOMIZING.md](CUSTOMIZING.md). A new switch always starts on |

@@ -3,7 +3,8 @@ plugchat-data
 examples
 test
 bench
-docs
+docs/*
+!docs/openapi.json
 types
 .git
 *.log

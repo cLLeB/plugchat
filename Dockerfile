@@ -15,6 +15,7 @@ COPY bin ./bin
 COPY server ./server
 COPY client ./client
 COPY starters ./starters
+COPY docs/openapi.json ./docs/openapi.json
 # The data folder must belong to the unprivileged user the server runs as.
 RUN mkdir -p /data && chown node:node /data
 ENV PORT=4400 HOST=0.0.0.0 PLUGCHAT_DATA=/data

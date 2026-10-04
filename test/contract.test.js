@@ -8,6 +8,8 @@ import { FEATURES, EVENTS } from '../server/index.js';
 import { HOOK_EVENTS } from '../server/connectors.js';
 import { CONFIG_KEYS } from '../server/config.js';
 import { PlugChat } from '../client/plugchat.js';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const element = read('../client/element.js');
@@ -70,7 +72,7 @@ test('the REST paths, pages and the headless client keep their shape', () => {
     "'GET', '/v1/me'", "'PUT', '/v1/me/key'", "'PUT', '/v1/me/settings'", "'GET', '/v1/users'", "'GET', '/v1/users/lookup'", "'GET', '/v1/users/:id'",
     "'PUT', '/v1/users/:id'", "'DELETE', '/v1/users/:id'", "'GET', '/v1/me/export'", "'PUT', '/v1/blocks/:id'", "'GET', '/v1/conversations'",
     "'POST', '/v1/conversations'", "'GET', '/v1/conversations/:id'", "'PATCH', '/v1/conversations/:id'", "'PUT', '/v1/conversations/:id/settings'",
-    "'POST', '/v1/conversations/:id/members'", "'DELETE', '/v1/conversations/:id/members/:uid'", "'GET', '/v1/conversations/:id/messages'",
+    "'POST', '/v1/conversations/:id/members'", "'DELETE', '/v1/conversations/:id/members/:userId'", "'GET', '/v1/conversations/:id/messages'",
     "'POST', '/v1/conversations/:id/messages'", "'POST', '/v1/conversations/:id/read'", "'POST', '/v1/conversations/:id/files'", "'GET', '/v1/files/:id'",
     "'PATCH', '/v1/messages/:id'", "'DELETE', '/v1/messages/:id'", "'PUT', '/v1/messages/:id/reactions/:emoji'", "'PUT', '/v1/messages/:id/pin'",
     "'PUT', '/v1/messages/:id/star'", "'PUT', '/v1/messages/:id/vote'", "'POST', '/v1/messages/:id/open'", "'POST', '/v1/messages/:id/report'",
@@ -85,4 +87,13 @@ test('the REST paths, pages and the headless client keep their shape', () => {
     'download', 'user', 'searchUsers', 'block', 'unblock', 'settings', 'update', 'addMembers', 'removeMember', 'leave', 'stories', 'postStory',
     'createInvite', 'joinByInvite', 'startCall', 'joinCall', 'setAvatar', 'setAbout', 'avatarUrl', 'exportMyData',
   ], (n) => typeof PlugChat.prototype[n] === 'function'), []);
+});
+
+test('every endpoint is described in the API reference, and the OpenAPI file matches the server', () => {
+  const run = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/openapi.mjs', import.meta.url)), '--check'], { encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
+  const spec = JSON.parse(read('../docs/openapi.json'));
+  assert.equal(spec.openapi, '3.0.3');
+  assert.ok(Object.keys(spec.paths).length > 50);
+  assert.equal(spec.paths['/v1/conversations/{id}/messages'].post.parameters[0].name, 'id');
 });

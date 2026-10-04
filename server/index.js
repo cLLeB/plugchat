@@ -1028,24 +1028,24 @@ export function createPlugChat(options = {}) {
       return store.conversationFor(conv.id, ctx.auth.sub);
     }],
 
-    ['PATCH', '/v1/conversations/:id/members/:uid', async (ctx) => {
+    ['PATCH', '/v1/conversations/:id/members/:userId', async (ctx) => {
       const { conv, member } = access(ctx, ctx.params.id);
       if (!ctx.auth.admin && member.role !== 'owner') throw forbidden('only the owner can change roles');
       const { role } = await ctx.json();
       if (!['owner', 'admin', 'member'].includes(role)) throw bad('role must be "owner", "admin" or "member"');
-      const target = store.member(conv.id, ctx.params.uid);
+      const target = store.member(conv.id, ctx.params.userId);
       if (!target || target.role === 'owner') throw bad('cannot change that member');
       // Handing over ownership: the previous owner stays on as an admin.
       if (role === 'owner') for (const id of store.memberIds(conv.id)) if (store.member(conv.id, id).role === 'owner') store.setRole(conv.id, id, 'admin');
-      store.setRole(conv.id, ctx.params.uid, role);
+      store.setRole(conv.id, ctx.params.userId, role);
       pushConversation(conv.id);
       return store.conversationFor(conv.id, ctx.auth.sub);
     }],
 
-    ['DELETE', '/v1/conversations/:id/members/:uid', async (ctx) => {
+    ['DELETE', '/v1/conversations/:id/members/:userId', async (ctx) => {
       const { conv, member } = access(ctx, ctx.params.id);
       if (conv.type !== 'group') throw bad('cannot leave a dm');
-      const uid = ctx.params.uid;
+      const uid = ctx.params.userId;
       const target = store.member(conv.id, uid);
       if (!target) throw notFound('member not found');
       const self = uid === ctx.auth.sub;
@@ -1600,6 +1600,18 @@ export function createPlugChat(options = {}) {
 
     try {
       if (path === '/health') return send(res, 200, { ok: true }), true;
+
+      // Every endpoint in OpenAPI form, for client generators and API tools in any language.
+      if (req.method === 'GET' && path === '/openapi.json') {
+        let spec;
+        try {
+          spec = await readFile(join(CLIENT_DIR, '..', 'docs', 'openapi.json'));
+        } catch {
+          throw notFound();
+        }
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache', 'x-content-type-options': 'nosniff' }).end(spec);
+        return true;
+      }
 
       if (req.method === 'GET' && path === '/admin') {
         res.writeHead(200, {

@@ -10,6 +10,12 @@ call signalling). That keeps a native or server-side integration to plain HTTP.
 
 "Admin" marks endpoints that need a token with `admin: true`.
 
+The same list in machine-readable form is [openapi.json](openapi.json), also
+served by every PlugChat at `/plugchat/openapi.json`: load it into a client
+generator (for Kotlin, Swift, Dart, Rust, C#, anything), Postman or an API
+gateway. It names every endpoint, its parameters and its purpose; the request
+and response fields are the ones described on this page.
+
 ## Users
 
 | | |
@@ -52,6 +58,7 @@ call signalling). That keeps a native or server-side integration to plain HTTP.
 | `PATCH /v1/conversations/:id/members/:userId` `{role}` | `admin`, `member`, or `owner` to hand the group over (owner only) |
 | `POST /v1/conversations/:id/keys` `{keys}` | Encrypted: give wrapped keys to member devices that have none. Never overwrites |
 | `POST /v1/conversations/:id/rotate` `{epoch, keys}` | Encrypted: start the next key epoch. Required after a member leaves |
+| `DELETE /v1/conversations/:id/keys/:deviceId/:epoch` | Encrypted: a device discards a wrapped key it could not open, so another member can send a good one. Only for the caller's own devices |
 | `DELETE /v1/conversations/:id/members/:userId` | Remove a member, or leave by naming yourself |
 | `POST /v1/conversations/:id/read` `{seq}` | Mark read up to a message's `seq` |
 | `GET /v1/conversations/:id/pins` | Pinned messages |
@@ -69,6 +76,7 @@ complete list, `createdBy` optional).
 |---|---|
 | `GET /v1/conversations/:id/messages?limit=` | A page, oldest first (default 50, max 200). No range: the latest. `before=<seq>` / `after=<seq>` page backwards and forwards; `around=<seq>` returns the messages either side of one |
 | `GET /v1/messages/:id` | One message |
+| `GET /v1/preview?url=` | Title and description for a link, from the host's `link.preview` hook: `{title, description?, siteName?}`. 404 when the host has no such hook or nothing to show |
 | `POST /v1/conversations/:id/scheduled` `{sendAt, message}` | Send later (text, poll or location; no files). Posted at `sendAt` as its author, through the usual hooks and checks |
 | `GET /v1/scheduled`, `DELETE /v1/scheduled/:id` | The caller's waiting messages (with `error` if one could not be sent); cancel one |
 | `GET /v1/conversations/:id/attachments` | Messages that carry a photo or file, newest first |
@@ -151,6 +159,7 @@ Calls through your own vendor (when a `call.join` hook is registered, see
 
 | | |
 |---|---|
+| `GET /v1/ice` | `{iceServers}` for `RTCPeerConnection`, as configured by the host |
 | `POST /v1/conversations/:id/calls` `{video}` | Start a call. Returns `{call, message, join}` and posts a `kind: "call"` message |
 | `POST /v1/calls/:id/join` | Returns `{call, join}` with this user's `url` and/or `data` |
 
@@ -193,6 +202,7 @@ Server to client:
 | `GET /client/element.js`, `launcher.js`, `plugchat.js`, `calls.js`, `e2ee.js` | The web component, floating launcher and headless client |
 | `GET /admin` | The moderation console for your staff (see [CONNECTORS.md](CONNECTORS.md)) |
 | `GET /studio` | The setup studio. Only when `studio` is on; by default only for requests made on the same machine and not through a proxy |
+| `GET /openapi.json` | This API in OpenAPI 3 form |
 | `GET /health` | `{ok: true}` |
 
 ## Webhooks

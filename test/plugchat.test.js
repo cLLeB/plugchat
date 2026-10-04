@@ -814,9 +814,9 @@ test('moderation console: served locked down, reports carry names and can be dis
   assert.equal(page.headers.get('cache-control'), 'no-store');
   assert.equal((await fetch(`${url}/client/admin.js`)).status, 200);
 
-  const alice = await client('alice', 'Alice');
-  const bob = await client('bob', 'Bob');
-  const dm = await alice.openDm('bob');
+  const alice = await client('mod-alice', 'Alice');
+  const bob = await client('mod-bob', 'Bob');
+  const dm = await alice.openDm('mod-bob');
   const msg = await alice.send(dm.id, { text: 'buy my coins' });
   const { reportId } = await bob.report(msg.id, 'Scam or fraud');
 
@@ -827,12 +827,12 @@ test('moderation console: served locked down, reports carry names and can be dis
   assert.equal(mine.senderName, 'Alice');
   assert.equal(mine.senderSuspended, false);
 
-  assert.equal((await api(`/reports/${reportId}`, { token: signToken({ sub: 'bob' }, SECRET), method: 'DELETE' })).status, 403);
+  assert.equal((await api(`/reports/${reportId}`, { token: signToken({ sub: 'mod-bob' }, SECRET), method: 'DELETE' })).status, 403);
   assert.equal((await api(`/reports/${reportId}`, { token: admin, method: 'DELETE' })).status, 200);
   assert.equal((await api(`/reports/${reportId}`, { token: admin, method: 'DELETE' })).status, 404);
-  const found = await (await api('/users?q=alice', { token: admin })).json();
+  const found = await (await api('/users?q=mod-alice', { token: admin })).json();
   assert.equal(found.users[0].suspended, null, 'admins see suspension state');
-  assert.equal((await bob.user('alice')).suspended, undefined, 'other users do not');
+  assert.equal((await bob.user('mod-alice')).suspended, undefined, 'other users do not');
 });
 
 test('every interface string has a translation in every shipped language', async () => {

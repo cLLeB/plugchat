@@ -266,10 +266,10 @@ export class Store {
     const candidates = handleCandidates(q);
     const marks = candidates.map(() => '?').join(',') || "''";
     return this.db.prepare(
-      `SELECT * FROM users WHERE id != ? AND (name LIKE ? ESCAPE '\\'
+      `SELECT * FROM users WHERE id != ? AND (name LIKE ? ESCAPE '\\' OR id = ?
          OR id IN (SELECT user_id FROM handles WHERE value IN (${marks})))
        ORDER BY name LIMIT ?`,
-    ).all(excludeId, like, ...candidates, limit).map(userOut);
+    ).all(excludeId, like, q, ...candidates, limit).map(userOut);
   }
 
   // ---- handles: the identifiers a platform's users know each other by ----

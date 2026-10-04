@@ -101,6 +101,7 @@ export class PlugChat {
     this._closed = true;
     clearTimeout(this._refreshTimer);
     clearTimeout(this._retryTimer);
+    clearTimeout(this._backupTimer);
     this._ws?.close();
   }
 
@@ -222,7 +223,7 @@ export class PlugChat {
       })();
       this._keys.set(slot, p);
       // A miss can be filled later, when another device shares the key with this one.
-      p.then((k) => k || this._keys.delete(slot));
+      p.then((k) => (k ? this._backupSoon() : this._keys.delete(slot)));
     }
     return p;
   }
@@ -301,7 +302,88 @@ export class PlugChat {
       throw e;
     }
     this._keys.set(`${conv.id}:${epoch}`, Promise.resolve({ epoch, ...fresh }));
+    this._backupSoon();
     return this._hydrateConversation(updated);
+  }
+
+  // ---- key backup: get encrypted history back after losing a device ----
+
+  _backupSlot() {
+    return `backup:${this.url}:${this.me.id}`;
+  }
+
+  /** `{ exists, enabledHere }`: is there a backup on the server, and does this device keep it up to date? */
+  async backupStatus() {
+    const exists = await this._req('GET', '/me/backup').then(() => true, (e) => (e.status === 404 ? false : Promise.reject(e)));
+    return { exists, enabledHere: exists && !!(await this.keyStore.get(this._backupSlot())) };
+  }
+
+  /**
+   * Protect this person's conversation keys with a passphrase and store the
+   * result on the server, which cannot open it. Choose a long passphrase:
+   * whoever holds the stored copy can try guesses against it offline.
+   */
+  async enableBackup(passphrase) {
+    if (!this.identity) throw new PlugChatError(0, 'e2ee_disabled', 'End-to-end encryption is not enabled on this client');
+    if (typeof passphrase !== 'string' || passphrase.length < 8) throw new PlugChatError(0, 'weak_passphrase', 'Use a passphrase of at least 8 characters');
+    const salt = e2ee.newBackupSalt();
+    await this.keyStore.set(this._backupSlot(), { salt, key: await e2ee.deriveBackupKey(passphrase, salt) });
+    await this._uploadBackup();
+  }
+
+  async _uploadBackup() {
+    const backup = await this.keyStore.get(this._backupSlot());
+    if (!backup) return;
+    const keys = {};
+    for (const conv of await this.conversations()) {
+      if (!conv.encrypted) continue;
+      for (const k of await this._heldKeys(conv)) (keys[conv.id] ??= {})[k.epoch] = e2ee.b64(k.raw);
+    }
+    await this._req('PUT', '/me/backup', { json: { salt: backup.salt, data: await e2ee.sealBackup(backup.key, { v: 1, keys }) } });
+  }
+
+  // New keys (a new conversation, a rotation) are added to the backup shortly after they appear.
+  _backupSoon() {
+    clearTimeout(this._backupTimer);
+    this._backupTimer = setTimeout(() => this._uploadBackup().catch(() => {}), 3000);
+  }
+
+  /**
+   * Bring the keys from the server-side backup onto this device. Rejects with
+   * code 'wrong_passphrase' if the passphrase does not open it. Resolves with
+   * the number of conversations restored.
+   */
+  async restoreBackup(passphrase) {
+    const stored = await this._req('GET', '/me/backup');
+    const key = await e2ee.deriveBackupKey(passphrase, stored.salt);
+    let content;
+    try {
+      content = await e2ee.openBackup(key, stored.data);
+    } catch {
+      throw new PlugChatError(0, 'wrong_passphrase', 'That passphrase does not open the backup');
+    }
+    let restored = 0;
+    for (const [conversationId, epochs] of Object.entries(content.keys)) {
+      const conv = await this.conversation(conversationId).catch(() => null);
+      if (!conv) continue; // no longer a member
+      const held = Object.entries(epochs).map(([epoch, raw]) => ({ epoch: Number(epoch), raw: e2ee.unb64(raw) }));
+      // Re-wrap for this device, so from now on it holds the keys like any other.
+      const mine = [{ userId: this.me.id, deviceId: this.identity.deviceId, publicKey: this.identity.publicKey }];
+      await this._req('POST', `/conversations/${conversationId}/keys`, { json: { keys: await this._wrapForDevices(conversationId, held, mine) } });
+      for (const slot of [...this._keys.keys()]) if (slot.startsWith(conversationId + ':')) this._keys.delete(slot);
+      await this.conversation(conversationId);
+      restored += 1;
+    }
+    await this.keyStore.set(this._backupSlot(), { salt: stored.salt, key });
+    this._emit('keys', { restored });
+    return restored;
+  }
+
+  /** Delete the backup from the server and stop maintaining it on this device. */
+  async disableBackup() {
+    clearTimeout(this._backupTimer);
+    await this.keyStore.set(this._backupSlot(), null);
+    await this._req('DELETE', '/me/backup');
   }
 
   /** This person's registered devices; remove one that is lost or no longer used. */
@@ -414,7 +496,7 @@ export class PlugChat {
     }
     const conv = await this._req('POST', '/conversations', { json });
     // An existing DM is returned as-is, in which case our new key was not used.
-    if (fresh && conv.id === json.id) this._keys.set(`${conv.id}:1`, Promise.resolve({ epoch: 1, ...fresh }));
+    if (fresh && conv.id === json.id) this._keys.set(`${conv.id}:1`, Promise.resolve({ epoch: 1, ...fresh })), this._backupSoon();
     return this._hydrateConversation(conv);
   }
 

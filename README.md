@@ -114,7 +114,8 @@ email through your own providers; DOM events (`plugchat:unread`,
 - **End-to-end encryption** per conversation: keys are generated on each
   device, private keys are non-extractable, and the server stores only
   ciphertext for messages and attachments. It works across a person's devices,
-  and the key is replaced when someone leaves. The server refuses plaintext
+  the key is replaced when someone leaves, and an optional passphrase backup
+  restores history on a new device. The server refuses plaintext
   sent to an encrypted conversation.
 - Uploads are never served as a renderable type, so a malicious file cannot run
   as a page on your domain.

@@ -135,6 +135,12 @@ CREATE TABLE IF NOT EXISTS presence (
   at INTEGER NOT NULL,
   PRIMARY KEY (user_id, instance)
 );
+CREATE TABLE IF NOT EXISTS key_backups (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  salt TEXT NOT NULL,
+  data TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS webhook_queue (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   body TEXT NOT NULL,
@@ -1019,6 +1025,25 @@ export class Store {
       files: this.all('SELECT id, name, mime, size, created_at FROM files WHERE owner_id = ?', id).map((r) => ({ fileId: r.id, name: r.name, mime: r.mime, size: r.size, createdAt: r.created_at })),
       blocked: this.blocks(id),
     };
+  }
+
+  // ---- key backups: opaque to the server, opened only by the owner's passphrase ----
+
+  getBackup(userId) {
+    const r = this.get('SELECT salt, data, updated_at FROM key_backups WHERE user_id = ?', userId);
+    return r ? { salt: r.salt, data: r.data, updatedAt: r.updated_at } : null;
+  }
+
+  setBackup(userId, salt, data) {
+    this.run(
+      `INSERT INTO key_backups (user_id, salt, data, updated_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET salt = excluded.salt, data = excluded.data, updated_at = excluded.updated_at`,
+      userId, salt, data, Date.now(),
+    );
+  }
+
+  deleteBackup(userId) {
+    return this.run('DELETE FROM key_backups WHERE user_id = ?', userId).changes > 0;
   }
 
   // ---- webhook queue: events wait here until the host has accepted them ----

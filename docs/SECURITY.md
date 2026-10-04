@@ -61,6 +61,10 @@ What is implemented:
   that holds the conversation keys (their own or another member's) wraps them
   for the new device, which can then read the history. A person can list and
   remove their devices.
+- **Optional key backup.** A person can seal the conversation keys they hold
+  under a passphrase and leave the sealed copy on the server. On a new device,
+  the passphrase restores their encrypted history even if no other device is
+  online. The device that enabled it keeps the backup current as keys change.
 - **Key replacement when someone leaves.** Removing a member (or a member
   leaving) deletes their wrapped keys and marks the conversation; the server
   then refuses every message until a member starts a new epoch with a fresh key
@@ -93,8 +97,13 @@ What it does **not** protect against yet:
   ciphertext, which is access control, not cryptography.
 - **A device that loses its storage loses its keys** (cleared browser data,
   private windows). It is treated as a new device and waits for another device
-  to be online to hand over the keys. If no other device ever comes online,
-  that history is unreadable there. There is no key backup.
+  to be online to hand over the keys, unless the person turned on the
+  passphrase backup below.
+- **A weak backup passphrase.** The optional key backup is sealed with a key
+  stretched from the person's passphrase (PBKDF2-SHA-256, 600,000 rounds) and
+  stored on the server. The server cannot open it, but whoever holds that copy
+  can try passphrases against it offline, so its strength is the passphrase's.
+  A forgotten passphrase cannot be recovered by anyone.
 - **The page itself.** Chat runs inside your site. Script injected into your
   page (XSS, a compromised dependency) can read what the user can read. A strict
   Content-Security-Policy on the host site matters.

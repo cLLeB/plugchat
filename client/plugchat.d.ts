@@ -200,6 +200,13 @@ export class PlugChat {
   blocked(): Promise<string[]>;
   setPrivacy(settings: Partial<Privacy>): Promise<Privacy>;
   exportMyData(): Promise<Record<string, unknown>>;
+  /** Is there a key backup on the server, and does this device keep it current? */
+  backupStatus(): Promise<{ exists: boolean; enabledHere: boolean }>;
+  /** Seal this person's conversation keys under a passphrase and store them on the server. */
+  enableBackup(passphrase: string): Promise<void>;
+  /** Restore keys onto this device. Rejects with code 'wrong_passphrase'. Resolves with the number of conversations restored. */
+  restoreBackup(passphrase: string): Promise<number>;
+  disableBackup(): Promise<void>;
   devices(): Promise<Device[]>;
   removeDevice(deviceId: string): Promise<{ removed: true }>;
 

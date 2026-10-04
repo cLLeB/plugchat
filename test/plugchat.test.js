@@ -223,6 +223,38 @@ test('encryption: a second device gets the keys; the key is replaced when someon
   assert.equal((await ben.devices()).length, 1);
 });
 
+test('encryption: a passphrase backup restores history on a device with no one else online', async () => {
+  const laptop = await client('bk-user');
+  const friend = await client('bk-friend');
+  const group = await laptop.createGroup({ title: 'Vault', memberIds: ['bk-friend'], encrypted: true });
+  await laptop.send(group.id, { text: 'the combination is 12-34-56' });
+  await assert.rejects(laptop.enableBackup('short'), { code: 'weak_passphrase' });
+  await laptop.enableBackup('correct horse battery staple');
+
+  const stored = chat.store.getBackup('bk-user');
+  assert.ok(stored.data.length > 50);
+  assert.ok(!stored.data.includes(group.id), 'the server cannot even see which conversations are inside');
+
+  // The laptop is lost, and nobody else is online to hand over keys.
+  laptop.close();
+  friend.close();
+  await new Promise((r) => setTimeout(r, 100));
+
+  const phone = await client('bk-user');
+  assert.deepEqual(await phone.backupStatus(), { exists: true, enabledHere: false });
+  assert.equal((await phone.messages(group.id))[0].undecryptable, true, 'a brand-new device cannot read anything yet');
+  await assert.rejects(phone.restoreBackup('wrong guess here'), { code: 'wrong_passphrase' });
+  assert.equal(await phone.restoreBackup('correct horse battery staple'), 1);
+  assert.equal((await phone.messages(group.id))[0].text, 'the combination is 12-34-56');
+  assert.deepEqual(await phone.backupStatus(), { exists: true, enabledHere: true });
+  assert.ok((await phone.send(group.id, { text: 'back in' })).body.startsWith('e1.1.'), 'and can write again');
+
+  await phone.disableBackup();
+  assert.equal(chat.store.getBackup('bk-user'), null);
+  const other = signToken({ sub: 'bk-friend' }, SECRET);
+  assert.equal((await api('/me/backup', { token: other })).status, 404, 'each person only ever reaches their own backup');
+});
+
 test('files are only downloadable by conversation members', async () => {
   const alice = await client('alice');
   const bob = await client('bob');

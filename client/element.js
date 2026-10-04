@@ -90,7 +90,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .icon:hover { background: var(--pc-surface); color: var(--pc-fg); }
 .icon.on { color: var(--pc-accent); }
 .icon.rec { color: #fff; background: var(--pc-danger); }
-input[type="text"], input[type="search"], select { font: inherit; color: inherit; background: var(--pc-surface); border: 1px solid var(--pc-border); border-radius: 10px; padding: 8px 12px; width: 100%; min-width: 0; }
+input[type="text"], input[type="search"], input[type="password"], select { font: inherit; color: inherit; background: var(--pc-surface); border: 1px solid var(--pc-border); border-radius: 10px; padding: 8px 12px; width: 100%; min-width: 0; }
 
 .side { width: 300px; flex: none; display: flex; flex-direction: column; border-inline-end: 1px solid var(--pc-border); min-width: 0; }
 .bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; min-height: 58px; border-bottom: 1px solid var(--pc-border); }
@@ -485,6 +485,11 @@ class PlugChatElement extends HTMLElement {
       this.pins = this.pins.filter((p) => p.id !== e.messageId);
       this._renderList();
       if (e.conversationId === this.activeId) (this._renderPins(), this._renderMessages());
+    });
+    // Keys restored from a backup: what could not be read before may be readable now.
+    chat.on('keys', () => {
+      this.msgs.clear();
+      this._reload().then(() => this.activeId && this._select(this.activeId));
     });
     chat.on('star', (e) => this._patch(e.conversationId, e.messageId, (m) => ({ ...m, starred: e.starred })));
     chat.on('reaction', (e) => this._patch(e.conversationId, e.messageId, (m) => ({ ...m, reactions: e.reactions })));
@@ -1770,6 +1775,8 @@ class PlugChatElement extends HTMLElement {
     const privacy = this.chat.me.privacy ?? { readReceipts: true, presence: true };
     const mine = this.chat.identity?.deviceId;
     const devices = mine ? await this.chat.devices().catch(() => []) : [];
+    const backup = mine ? await this.chat.backupStatus().catch(() => null) : null;
+    const $pass = h('input', { type: 'password', placeholder: T('Passphrase'), 'aria-label': T('Passphrase'), autocomplete: 'off' });
     const download = async () => {
       const blob = new Blob([JSON.stringify(await this.chat.exportMyData(), null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -1789,6 +1796,14 @@ class PlugChatElement extends HTMLElement {
         h('div', { class: 'people' }, devices.map((d) => h('div', { class: 'person' },
           h('span', {}, d.deviceId === mine ? T('This device') : new Date(d.lastSeen).toLocaleDateString(LOCALE, { dateStyle: 'medium' })),
           d.deviceId !== mine && h('button', { class: 'linkbtn', onclick: (e) => run(this.chat.removeDevice(d.deviceId).then(() => e.target.closest('.person').remove())) }, T('Remove')))))),
+      backup && h('div', { class: 'field' }, T('Encrypted chat backup'),
+        backup.enabledHere
+          ? [h('small', {}, T('Backup is on. Your encrypted chats can be restored with your passphrase.')),
+            h('button', { class: 'btn warn', onclick: () => run(this.chat.disableBackup().then(() => this._settingsDialog())) }, T('Turn off and delete backup'))]
+          : [h('small', {}, backup.exists ? T('Enter your passphrase to read your encrypted chats on this device.') : T('Choose a long passphrase. Without it the backup cannot be opened, by you or anyone else.')),
+            $pass,
+            h('button', { class: 'btn', onclick: () => run((backup.exists ? this.chat.restoreBackup($pass.value) : this.chat.enableBackup($pass.value)).then(() => this._settingsDialog())) },
+              backup.exists ? T('Restore') : T('Turn on backup'))]),
       h('button', { class: 'btn plain', onclick: () => run(download()) }, T('Download my data')),
       $err,
     ));

@@ -17,6 +17,7 @@ call signalling). That keeps a native or server-side integration to plain HTTP.
 | `PUT /v1/me/key` `{deviceId, publicKey}` | Register this device's encryption key |
 | `GET /v1/me/devices`, `DELETE /v1/me/devices/:deviceId` | The caller's devices; remove a lost one |
 | `PUT /v1/me/settings` `{readReceipts?, presence?}` | Privacy switches |
+| `GET` / `PUT` / `DELETE /v1/me/backup` | The caller's passphrase-sealed key backup: `{salt, data}`, opaque to the server |
 | `GET /v1/users?q=` | Search by name (substring) or handle (exact). Needs the directory on |
 | `GET /v1/users/lookup?handle=&kind=` | Exact lookup by email, phone, username or custom kind |
 | `GET /v1/users/:id` | Profile and online state |

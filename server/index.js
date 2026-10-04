@@ -442,6 +442,19 @@ export function createPlugChat(options = {}) {
       return { ...userView(store.getUser(ctx.auth.sub), ctx.auth), privacy: store.privacy(ctx.auth.sub), suspended: store.suspension(ctx.auth.sub), directory, features: { directory, stories, requireEncryption, calls: callMode } };
     }],
 
+    // The person's conversation keys, sealed with a passphrase the server never sees.
+    ['GET', '/v1/me/backup', (ctx) => {
+      const backup = store.getBackup(ctx.auth.sub);
+      if (!backup) throw notFound('no backup');
+      return backup;
+    }],
+    ['PUT', '/v1/me/backup', async (ctx) => {
+      const b = await ctx.json();
+      store.setBackup(ctx.auth.sub, str(b.salt, 'salt', 64), str(b.data, 'data', 240_000));
+      return { saved: true };
+    }],
+    ['DELETE', '/v1/me/backup', (ctx) => ({ deleted: store.deleteBackup(ctx.auth.sub) })],
+
     ['GET', '/v1/me/devices', (ctx) => ({ devices: store.devicesOf(ctx.auth.sub) })],
     ['DELETE', '/v1/me/devices/:deviceId', (ctx) => {
       if (!store.removeDevice(ctx.auth.sub, ctx.params.deviceId)) throw notFound('device not found');

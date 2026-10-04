@@ -118,6 +118,26 @@ export const epochOf = (body) => Number(/^e1\.(\d+)\./.exec(body ?? '')?.[1] ?? 
 export const encryptBytes = (key, bytes, conversationId) => seal(key, bytes, conversationId);
 export const decryptBytes = (key, bytes, conversationId) => open(key, new Uint8Array(bytes), conversationId);
 
+// ---- passphrase-protected key backup ----
+//
+// The conversation keys a person holds, encrypted under a key stretched from a
+// passphrase only they know. The server stores the result but cannot open it.
+
+const BACKUP_ROUNDS = 600_000;
+
+export const newBackupSalt = () => b64(crypto.getRandomValues(new Uint8Array(16)));
+
+export async function deriveBackupKey(passphrase, salt) {
+  const material = await subtle.importKey('raw', enc.encode(passphrase.normalize('NFKC')), 'PBKDF2', false, ['deriveKey']);
+  return subtle.deriveKey(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: unb64(salt), iterations: BACKUP_ROUNDS },
+    material, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'],
+  );
+}
+
+export const sealBackup = async (key, value) => b64(await seal(key, enc.encode(JSON.stringify(value)), 'plugchat-backup-v1'));
+export const openBackup = async (key, data) => JSON.parse(dec.decode(await open(key, unb64(data), 'plugchat-backup-v1')));
+
 /**
  * A short code two people compare out-of-band to confirm nobody swapped
  * their keys in transit. Same members + same keys => same code.

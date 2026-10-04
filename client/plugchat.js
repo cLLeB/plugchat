@@ -483,10 +483,15 @@ export class PlugChat {
 
   // ---- messages ----
 
-  async messages(conversationId, { before, limit = 50 } = {}) {
+  /**
+   * A page of history, oldest first. With no range: the latest messages.
+   * `before` / `after` page backwards and forwards from a message's `seq`;
+   * `around` returns the messages either side of one.
+   */
+  async messages(conversationId, { before, after, around, limit = 50 } = {}) {
     const conv = await this._conv(conversationId);
     const q = new URLSearchParams({ limit });
-    if (before) q.set('before', before);
+    for (const [k, v] of Object.entries({ before, after, around })) if (v !== undefined) q.set(k, v);
     const { messages } = await this._req('GET', `/conversations/${conversationId}/messages?${q}`);
     return Promise.all(messages.map((m) => this._hydrate(m, conv)));
   }
@@ -590,6 +595,35 @@ export class PlugChat {
     let file;
     if (message.file) file = new File([await this.download(message)], message.file.name, { type: message.file.mime });
     return this.send(toConversationId, { text: message.text, file, forwarded: true });
+  }
+
+  /** One message by id (you must be in its conversation). */
+  async message(messageId) {
+    return this._hydrate(await this._req('GET', `/messages/${messageId}`));
+  }
+
+  /** Bookmark a message privately. */
+  star(messageId) {
+    return this._req('PUT', `/messages/${messageId}/star`);
+  }
+  unstar(messageId) {
+    return this._req('DELETE', `/messages/${messageId}/star`);
+  }
+  async starred() {
+    const { messages } = await this._req('GET', '/starred');
+    return Promise.all(messages.map((m) => this._hydrate(m)));
+  }
+
+  /** What others may see about you: `{ readReceipts, presence }`. */
+  async setPrivacy(settings) {
+    const { privacy } = await this._req('PUT', '/me/settings', { json: settings });
+    this.me.privacy = privacy;
+    return privacy;
+  }
+
+  /** Group owner only: make someone 'admin', 'member', or hand over as 'owner'. */
+  async setRole(conversationId, userId, role) {
+    return this._hydrateConversation(await this._req('PATCH', `/conversations/${conversationId}/members/${encodeURIComponent(userId)}`, { json: { role } }));
   }
 
   async vote(messageId, options) {

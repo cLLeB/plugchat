@@ -708,6 +708,105 @@ test('two instances sharing a database behave as one', async () => {
   }
 });
 
+test('privacy: read receipts and online status can be switched off', async () => {
+  const shy = await client('shy-1');
+  const pal = await client('pal-1');
+  const dm = await pal.openDm('shy-1');
+  await shy.setPrivacy({ readReceipts: false, presence: false });
+
+  const msg = await pal.send(dm.id, { text: 'did you see this?' });
+  let leaked = false;
+  const off = pal.on('read', (e) => e.userId === 'shy-1' && (leaked = true));
+  await shy.read(dm.id, msg.seq);
+  assert.equal((await shy.conversation(dm.id)).unread, 0, 'it still counts as read for the reader');
+  assert.equal((await pal.conversation(dm.id)).members.find((m) => m.userId === 'shy-1').lastReadSeq, 0);
+  assert.equal((await pal.user('shy-1')).online, false, 'appears offline to others');
+  assert.equal((await shy.user('shy-1')).online, true);
+  await new Promise((r) => setTimeout(r, 100));
+  off();
+  assert.equal(leaked, false);
+
+  const back = next(pal, 'presence', (e) => e.userId === 'shy-1' && e.online);
+  assert.deepEqual(await shy.setPrivacy({ presence: true }), { readReceipts: false, presence: true });
+  await back;
+});
+
+test('starred messages are private; history can be entered at any point', async () => {
+  const alice = await client('alice');
+  const bob = await client('bob');
+  const group = await alice.createGroup({ title: 'Long thread', memberIds: ['bob'] });
+  const sent = [];
+  for (let i = 1; i <= 30; i++) sent.push(await alice.send(group.id, { text: `message ${i}` }));
+
+  await bob.star(sent[9].id);
+  assert.deepEqual((await bob.starred()).map((m) => m.text), ['message 10']);
+  assert.equal((await alice.starred()).some((m) => m.id === sent[9].id), false);
+  assert.equal((await bob.messages(group.id)).find((m) => m.id === sent[9].id).starred, true);
+  assert.equal((await alice.messages(group.id)).find((m) => m.id === sent[9].id).starred, false);
+  await bob.unstar(sent[9].id);
+  assert.equal((await bob.starred()).length, 0);
+
+  const window = await bob.messages(group.id, { around: sent[14].seq, limit: 10 });
+  assert.deepEqual(window.map((m) => m.text), ['message 11', 'message 12', 'message 13', 'message 14', 'message 15', 'message 16', 'message 17', 'message 18', 'message 19', 'message 20']);
+  assert.deepEqual((await bob.messages(group.id, { after: sent[27].seq })).map((m) => m.text), ['message 29', 'message 30']);
+  assert.equal((await bob.message(sent[4].id)).text, 'message 5');
+  const eve = await client('eve');
+  await assert.rejects(eve.message(sent[4].id), { status: 404 });
+  await assert.rejects(eve.star(sent[4].id), { status: 404 });
+});
+
+test('ownership transfer, suspension, storage quota and the in-process host API', async () => {
+  const d = mkdtempSync(join(tmpdir(), 'plugchat-host-'));
+  const inst = createPlugChat({ secret: SECRET, dataDir: d, log: { error() {} }, userStorageBytes: 10 });
+  const srv = await inst.listen(0);
+  const mk = async (sub) => {
+    const c = new PlugChat({ url: `http://localhost:${srv.address().port}/plugchat`, getToken: async () => signToken({ sub }, SECRET) });
+    await c.connect();
+    return c;
+  };
+  try {
+    // The host sets things up with plain function calls, no HTTP.
+    await inst.admin.upsertUser('m1', { name: 'Mina', handles: { email: 'mina@x.test' } });
+    await inst.admin.upsertUser('m2', { name: 'Nii' });
+    const group = await inst.admin.createGroup({ title: 'Order #1042', memberIds: ['m1', 'm2'], createdBy: 'm1' });
+    await inst.admin.post(group.id, 'Your order has shipped');
+    await assert.rejects(inst.admin.upsertUser('m3', { handles: { email: 'mina@x.test' } }), { status: 409 });
+
+    const mina = await mk('m1');
+    const nii = await mk('m2');
+    assert.equal((await mina.messages(group.id))[0].text, 'Your order has shipped');
+    assert.deepEqual(await inst.admin.unread('m2'), { total: 1, conversations: [{ id: group.id, type: 'group', title: 'Order #1042', unread: 1, muted: false }] });
+
+    // ownership
+    await assert.rejects(nii.setRole(group.id, 'm1', 'member'), { status: 403 });
+    const handed = await mina.setRole(group.id, 'm2', 'owner');
+    assert.deepEqual(handed.members.map((m) => m.role).sort(), ['admin', 'owner']);
+    assert.equal(handed.members.find((m) => m.userId === 'm2').role, 'owner');
+
+    // storage quota (10 bytes per person in this instance)
+    await mina.send(group.id, { file: new File(['12345678'], 'a.txt') });
+    await assert.rejects(mina.send(group.id, { file: new File(['12345678'], 'b.txt') }), { status: 413, code: 'quota_exceeded' });
+
+    // suspension: can read, cannot write
+    await inst.admin.suspend('m2', 'Suspended for spam');
+    await assert.rejects(nii.send(group.id, { text: 'hello?' }), { status: 403, message: 'Suspended for spam' });
+    assert.ok((await nii.messages(group.id)).length >= 2);
+    await inst.admin.unsuspend('m2');
+    await nii.send(group.id, { text: 'back' });
+
+    const stats = await inst.admin.stats();
+    assert.equal(stats.users, 2);
+    assert.equal(stats.fileBytes, 8);
+    mina.close();
+    nii.close();
+  } finally {
+    srv.close();
+    srv.closeAllConnections();
+    inst.close();
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
 test('every interface string has a translation in every shipped language', async () => {
   const { readFileSync } = await import('node:fs');
   const { DICTIONARIES } = await import('../client/i18n.js');

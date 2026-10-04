@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { Readable } from 'node:stream';
 import { mkdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
@@ -192,7 +193,7 @@ export function createPlugChat(options = {}) {
 
   const userView = (user, auth) => ({
     ...user,
-    online: hub.isOnline(user.id),
+    online: hub.isOnline(user.id) && (auth.admin || auth.sub === user.id || store.privacy(user.id).presence),
     handles: auth.admin || auth.sub === user.id || handleVisibility === 'all' ? store.handlesOf(user.id) : undefined,
   });
 
@@ -325,7 +326,7 @@ export function createPlugChat(options = {}) {
   };
 
   const routes = [
-    ['GET', '/v1/me', (ctx) => ({ ...userView(store.getUser(ctx.auth.sub), ctx.auth), directory, features: { directory, stories, requireEncryption, calls: callMode } })],
+    ['GET', '/v1/me', (ctx) => ({ ...userView(store.getUser(ctx.auth.sub), ctx.auth), privacy: store.privacy(ctx.auth.sub), suspended: store.suspension(ctx.auth.sub), directory, features: { directory, stories, requireEncryption, calls: callMode } })],
 
     ['GET', '/v1/ice', () => ({ iceServers })],
 
@@ -347,7 +348,7 @@ export function createPlugChat(options = {}) {
       const b = await ctx.json();
       const fresh = store.registerDevice(ctx.auth.sub, str(b.deviceId, 'deviceId', 64), str(b.publicKey, 'publicKey', 256));
       if (fresh) for (const id of store.encryptedConversationIds(ctx.auth.sub)) pushConversation(id);
-      return { ...userView(store.getUser(ctx.auth.sub), ctx.auth), directory, features: { directory, stories, requireEncryption, calls: callMode } };
+      return { ...userView(store.getUser(ctx.auth.sub), ctx.auth), privacy: store.privacy(ctx.auth.sub), suspended: store.suspension(ctx.auth.sub), directory, features: { directory, stories, requireEncryption, calls: callMode } };
     }],
 
     ['GET', '/v1/me/devices', (ctx) => ({ devices: store.devicesOf(ctx.auth.sub) })],
@@ -381,14 +382,19 @@ export function createPlugChat(options = {}) {
       adminOnly(ctx);
       const b = await ctx.json();
       const id = str(ctx.params.id, 'id', 128);
-      seen.delete(id);
-      store.upsertUser(id, str(b.name, 'name', 120, { optional: true }), str(b.avatar, 'avatar', 500, { optional: true }));
       if (b.handles !== undefined) {
         if (!b.handles || typeof b.handles !== 'object') throw bad('handles must be an object of kind -> value');
         for (const [k, v] of Object.entries(b.handles)) if (!HANDLE_KIND.test(k) || typeof v !== 'string') throw bad(`invalid handle "${k}"`);
-        const taken = store.setHandles(id, b.handles);
+        // Check before writing anything, so a refused request leaves no half-made user behind.
+        const taken = Object.entries(b.handles).filter(([k, v]) => {
+          const holder = store.findByHandle(v, k);
+          return holder && holder.id !== id;
+        }).map(([k]) => k);
         if (taken.length) throw new HttpError(409, 'handle_taken', `already used by another user: ${taken.join(', ')}`);
       }
+      seen.delete(id);
+      store.upsertUser(id, str(b.name, 'name', 120, { optional: true }), str(b.avatar, 'avatar', 500, { optional: true }));
+      if (b.handles !== undefined) store.setHandles(id, b.handles);
       return userView(store.getUser(id), ctx.auth);
     }],
 
@@ -608,9 +614,11 @@ export function createPlugChat(options = {}) {
       const { conv, member } = access(ctx, ctx.params.id);
       if (!ctx.auth.admin && member.role !== 'owner') throw forbidden('only the owner can change roles');
       const { role } = await ctx.json();
-      if (role !== 'admin' && role !== 'member') throw bad('role must be "admin" or "member"');
+      if (!['owner', 'admin', 'member'].includes(role)) throw bad('role must be "owner", "admin" or "member"');
       const target = store.member(conv.id, ctx.params.uid);
       if (!target || target.role === 'owner') throw bad('cannot change that member');
+      // Handing over ownership: the previous owner stays on as an admin.
+      if (role === 'owner') for (const id of store.memberIds(conv.id)) if (store.member(conv.id, id).role === 'owner') store.setRole(conv.id, id, 'admin');
       store.setRole(conv.id, ctx.params.uid, role);
       pushConversation(conv.id);
       return store.conversationFor(conv.id, ctx.auth.sub);
@@ -644,12 +652,43 @@ export function createPlugChat(options = {}) {
     ['GET', '/v1/conversations/:id/messages', (ctx) => {
       access(ctx, ctx.params.id);
       const q = ctx.url.searchParams;
-      const before = q.has('before') ? Number(q.get('before')) : undefined;
+      const num = (name) => {
+        if (!q.has(name)) return undefined;
+        const v = Number(q.get(name));
+        if (!Number.isInteger(v) || v < 0) throw bad(`${name} must be a message seq`);
+        return v;
+      };
       const limit = Math.min(Math.max(Number(q.get('limit')) || 50, 1), 200);
-      if (before !== undefined && !Number.isInteger(before)) throw bad('before must be an integer seq');
-      return { messages: store.listMessages(ctx.params.id, { before, limit }) };
+      const page = (range) => store.listMessages(ctx.params.id, { ...range, limit, userId: ctx.auth.sub });
+      const around = num('around');
+      // `around` returns the messages either side of one, for jumping into the middle of a long history.
+      if (around !== undefined) {
+        const half = Math.ceil(limit / 2);
+        return { messages: [...store.listMessages(ctx.params.id, { before: around + 1, limit: half, userId: ctx.auth.sub }), ...store.listMessages(ctx.params.id, { after: around, limit: half, userId: ctx.auth.sub })] };
+      }
+      return { messages: page({ before: num('before'), after: num('after') }) };
     }],
 
+    ['GET', '/v1/messages/:id', (ctx) => {
+      const { message } = messageAccess(ctx, ctx.params.id);
+      return { ...message, starred: store._starred(ctx.auth.sub, [message.id]).has(message.id) };
+    }],
+
+    ['PUT', '/v1/messages/:id/star', (ctx) => star(ctx, true)],
+    ['DELETE', '/v1/messages/:id/star', (ctx) => star(ctx, false)],
+    ['GET', '/v1/starred', (ctx) => ({ messages: store.listStarred(ctx.auth.sub) })],
+
+    // What others may see about the caller.
+    ['PUT', '/v1/me/settings', async (ctx) => {
+      const b = await ctx.json();
+      const pick = (k) => (b[k] === undefined ? undefined : b[k] === true);
+      const before = store.privacy(ctx.auth.sub);
+      const privacy = store.setPrivacy(ctx.auth.sub, { readReceipts: pick('readReceipts'), presence: pick('presence') });
+      if (before.presence !== privacy.presence && hub.isOnline(ctx.auth.sub)) {
+        hub.emit(store.peers(ctx.auth.sub), { type: 'presence', userId: ctx.auth.sub, online: privacy.presence });
+      }
+      return { privacy };
+    }],
     ['POST', '/v1/conversations/:id/messages', async (ctx) => {
       const { conv, member } = access(ctx, ctx.params.id);
       const b = await ctx.json();
@@ -750,7 +789,9 @@ export function createPlugChat(options = {}) {
       if (!Number.isInteger(seq) || seq < 0) throw bad('seq must be a non-negative integer');
       if (store.markRead(conv.id, ctx.auth.sub, seq)) {
         const at = store.member(conv.id, ctx.auth.sub).last_read_seq;
-        hub.emit(store.memberIds(conv.id), { type: 'read', conversationId: conv.id, userId: ctx.auth.sub, seq: at });
+        // With read receipts off, only the reader's own devices hear about it.
+        const audience = store.privacy(ctx.auth.sub).readReceipts ? store.memberIds(conv.id) : [ctx.auth.sub];
+        hub.emit(audience, { type: 'read', conversationId: conv.id, userId: ctx.auth.sub, seq: at });
       }
       return { ok: true };
     }],
@@ -877,6 +918,22 @@ export function createPlugChat(options = {}) {
       return { call, join: await joinCall(call, ctx.auth.sub, store.memberIds(call.conversationId)) };
     }],
 
+    // Suspended people can still read, but cannot send, upload, react or call.
+    ['PUT', '/v1/users/:id/suspension', async (ctx) => {
+      adminOnly(ctx);
+      const b = await ctx.json();
+      const reason = b.suspended === false ? null : str(b.reason ?? 'Your account is suspended', 'reason', 300);
+      if (!store.setSuspension(ctx.params.id, reason)) throw notFound('user not found');
+      return { userId: ctx.params.id, suspended: reason };
+    }],
+
+    ['GET', '/v1/users/:id/unread', (ctx) => {
+      adminOnly(ctx);
+      if (!store.getUser(ctx.params.id)) throw notFound('user not found');
+      return store.unreadSummary(ctx.params.id);
+    }],
+
+    ['GET', '/v1/stats', (ctx) => (adminOnly(ctx), store.stats())],
     ['GET', '/v1/reports', (ctx) => (adminOnly(ctx), { reports: store.listReports() })],
 
     ['POST', '/v1/files', async (ctx) => {
@@ -945,6 +1002,9 @@ export function createPlugChat(options = {}) {
     name = name.replace(/[\\/\0-\x1f]/g, '_').slice(0, 200) || 'file';
     const mime = String(ctx.req.headers['content-type'] ?? 'application/octet-stream').split(';')[0].trim().slice(0, 100);
     const id = randomUUID();
+    if (userStorageBytes > 0 && !ctx.auth.admin && store.storageUsed(ctx.auth.sub) + data.length > userStorageBytes) {
+      throw new HttpError(413, 'quota_exceeded', 'you have used all of your file storage; delete some older files first');
+    }
     if (!ctx.auth.admin) await gate('upload.before', { userId: ctx.auth.sub, conversationId, name, mime, size: data.length });
     await storage.put(id, data);
     store.addFile({ id, conversationId, ownerId: ctx.auth.sub, name, mime, size: data.length });
@@ -961,6 +1021,14 @@ export function createPlugChat(options = {}) {
     return updated;
   }
 
+  function star(ctx, on) {
+    const { message, member } = messageAccess(ctx, ctx.params.id);
+    if (!member) throw forbidden();
+    store.setStar(ctx.auth.sub, message.id, on);
+    // Private to the person: only their own devices are told.
+    hub.emit([ctx.auth.sub], { type: 'star', conversationId: message.conversationId, messageId: message.id, starred: on });
+    return { starred: on };
+  }
   function react(ctx, on) {
     const { message, conv, member } = messageAccess(ctx, ctx.params.id);
     if (!member) throw forbidden();
@@ -1073,6 +1141,10 @@ export function createPlugChat(options = {}) {
       if (req.method !== 'GET' && !auth.admin && !allowWrite(auth.sub)) {
         throw new HttpError(429, 'rate_limited', 'slow down');
       }
+      if (req.method !== 'GET' && !auth.admin) {
+        const reason = store.suspension(auth.sub);
+        if (reason) throw new HttpError(403, 'suspended', reason);
+      }
 
       const ctx = {
         req, res, url, auth, params, status: 200,
@@ -1126,12 +1198,64 @@ export function createPlugChat(options = {}) {
     store.close();
   }
 
+  /**
+   * Call the REST API from inside the host's own Node process: admin rights,
+   * no network hop, same validation and realtime events as an HTTP call.
+   * JSON endpoints only.
+   */
+  async function api(method, path, body) {
+    const token = signToken({ sub: 'host', admin: true }, secret, 60);
+    const req = Object.assign(Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))]), {
+      method, url: base + path, headers: { authorization: `Bearer ${token}` },
+    });
+    let status = 200;
+    let text = '';
+    const res = {
+      headersSent: false,
+      setHeader() {},
+      writeHead(code) {
+        status = code;
+        this.headersSent = true;
+        return this;
+      },
+      end(data) {
+        if (data) text += data;
+      },
+    };
+    await handle(req, res);
+    const out = text ? JSON.parse(text) : undefined;
+    if (status >= 400) throw Object.assign(new Error(out?.message ?? `request failed (${status})`), { status, code: out?.error });
+    return out;
+  }
+
+  const u = encodeURIComponent;
+  /** The things a host backend most often does, as plain function calls. */
+  const admin = {
+    upsertUser: (id, profile = {}) => api('PUT', `/v1/users/${u(id)}`, profile),
+    deleteUser: (id) => api('DELETE', `/v1/users/${u(id)}`),
+    exportUser: (id) => api('GET', `/v1/users/${u(id)}/export`),
+    suspend: (id, reason) => api('PUT', `/v1/users/${u(id)}/suspension`, { suspended: true, reason }),
+    unsuspend: (id) => api('PUT', `/v1/users/${u(id)}/suspension`, { suspended: false }),
+    unread: (id) => api('GET', `/v1/users/${u(id)}/unread`),
+    openDm: (a, b) => api('POST', '/v1/conversations', { type: 'dm', memberIds: [a, b] }),
+    createGroup: (group) => api('POST', '/v1/conversations', { type: 'group', ...group }),
+    addMembers: (conversationId, userIds) => api('POST', `/v1/conversations/${conversationId}/members`, { userIds }),
+    removeMember: (conversationId, userId) => api('DELETE', `/v1/conversations/${conversationId}/members/${u(userId)}`),
+    /** Post a notice (a string) or any message object, e.g. { kind: 'text', senderId, body }. */
+    post: (conversationId, message) => api('POST', `/v1/conversations/${conversationId}/messages`, typeof message === 'string' ? { body: message } : message),
+    deleteMessage: (id) => api('DELETE', `/v1/messages/${id}`),
+    reports: () => api('GET', '/v1/reports').then((r) => r.reports),
+    stats: () => api('GET', '/v1/stats'),
+  };
+
   return {
     handle,
     attach,
     listen,
     close,
     store,
+    api,
+    admin,
     basePath: base,
     /** Mint a user token: `signToken({ sub, name, avatar })`. Admin token: `{ sub, admin: true }`. */
     signToken: (claims, ttlSeconds) => signToken(claims, secret, ttlSeconds),

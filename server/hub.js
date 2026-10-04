@@ -134,8 +134,10 @@ export class Hub {
       set.add(ws);
       this.bus?.setPresence?.(ws.userId, true);
       const peers = this.store.peers(ws.userId);
-      if (!wasOnline) this.emit(peers, { type: 'presence', userId: ws.userId, online: true });
-      ws.send(JSON.stringify({ type: 'ready', userId: ws.userId, online: peers.filter((p) => this.isOnline(p)) }));
+      // People who chose not to show when they are online are never announced.
+      const visible = (id) => this.store.privacy(id).presence;
+      if (!wasOnline && visible(ws.userId)) this.emit(peers, { type: 'presence', userId: ws.userId, online: true });
+      ws.send(JSON.stringify({ type: 'ready', userId: ws.userId, online: peers.filter((p) => this.isOnline(p) && visible(p)) }));
     }
   }
 
@@ -161,6 +163,7 @@ export class Hub {
         this.store.touchUser(ws.userId);
         // Still connected through another instance: not offline yet.
         if (this.isOnline(ws.userId)) return;
+        if (!this.store.privacy(ws.userId).presence) return;
         this.emit(this.store.peers(ws.userId), { type: 'presence', userId: ws.userId, online: false, lastSeen: Date.now() });
       } catch {
         // store already closed during shutdown

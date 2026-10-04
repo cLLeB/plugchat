@@ -668,14 +668,101 @@ export class Store {
     return this.getMessage(id);
   }
 
-  listMessages(conversationId, { before, limit }) {
-    const rows = this.all(
-      `SELECT * FROM messages WHERE conversation_id = ? AND seq < ? AND (expires_at IS NULL OR expires_at > ?)
-       ORDER BY seq DESC LIMIT ?`,
-      conversationId, before ?? Number.MAX_SAFE_INTEGER, Date.now(), limit,
-    ).reverse();
+  /** A page of messages: the latest, those `before` a seq, or those `after` one. */
+  listMessages(conversationId, { before, after, limit, userId }) {
+    const rows = after !== undefined
+      ? this.all(
+        `SELECT * FROM messages WHERE conversation_id = ? AND seq > ? AND (expires_at IS NULL OR expires_at > ?)
+         ORDER BY seq LIMIT ?`,
+        conversationId, after, Date.now(), limit,
+      )
+      : this.all(
+        `SELECT * FROM messages WHERE conversation_id = ? AND seq < ? AND (expires_at IS NULL OR expires_at > ?)
+         ORDER BY seq DESC LIMIT ?`,
+        conversationId, before ?? Number.MAX_SAFE_INTEGER, Date.now(), limit,
+      ).reverse();
     const reactions = this._reactions(rows.map((r) => r.id));
-    return rows.map((r) => this._messageOut(r, reactions));
+    const starred = userId ? this._starred(userId, rows.map((r) => r.id)) : null;
+    return rows.map((r) => ({ ...this._messageOut(r, reactions), ...(starred && { starred: starred.has(r.id) }) }));
+  }
+
+  // ---- starred messages: a private bookmark list ----
+
+  _starred(userId, messageIds) {
+    if (!messageIds.length) return new Set();
+    return new Set(this.db
+      .prepare(`SELECT message_id FROM stars WHERE user_id = ? AND message_id IN (${messageIds.map(() => '?').join(',')})`)
+      .all(userId, ...messageIds).map((r) => r.message_id));
+  }
+
+  setStar(userId, messageId, on) {
+    if (on) this.run('INSERT OR IGNORE INTO stars (user_id, message_id, at) VALUES (?, ?, ?)', userId, messageId, Date.now());
+    else this.run('DELETE FROM stars WHERE user_id = ? AND message_id = ?', userId, messageId);
+  }
+
+  /** Only messages in conversations the person still belongs to. */
+  listStarred(userId, limit = 100) {
+    const rows = this.all(
+      `SELECT m.* FROM stars s JOIN messages m ON m.id = s.message_id
+       JOIN members mb ON mb.conversation_id = m.conversation_id AND mb.user_id = s.user_id
+       WHERE s.user_id = ? AND m.deleted_at IS NULL AND (m.expires_at IS NULL OR m.expires_at > ?)
+       ORDER BY s.at DESC LIMIT ?`,
+      userId, Date.now(), limit,
+    );
+    const reactions = this._reactions(rows.map((r) => r.id));
+    return rows.map((r) => ({ ...this._messageOut(r, reactions), starred: true }));
+  }
+
+  // ---- privacy, suspension, usage ----
+
+  privacy(userId) {
+    const r = this.get('SELECT hide_read, hide_presence FROM users WHERE id = ?', userId);
+    return { readReceipts: !r?.hide_read, presence: !r?.hide_presence };
+  }
+
+  setPrivacy(userId, { readReceipts, presence }) {
+    if (readReceipts !== undefined) this.run('UPDATE users SET hide_read = ? WHERE id = ?', readReceipts ? 0 : 1, userId);
+    if (presence !== undefined) this.run('UPDATE users SET hide_presence = ? WHERE id = ?', presence ? 0 : 1, userId);
+    return this.privacy(userId);
+  }
+
+  /** The reason a user is suspended, or null. */
+  suspension(userId) {
+    return this.get('SELECT suspended FROM users WHERE id = ?', userId)?.suspended ?? null;
+  }
+
+  setSuspension(userId, reason) {
+    return this.run('UPDATE users SET suspended = ? WHERE id = ?', reason, userId).changes > 0;
+  }
+
+  storageUsed(userId) {
+    return this.get('SELECT COALESCE(SUM(size), 0) AS n FROM files WHERE owner_id = ?', userId).n;
+  }
+
+  stats() {
+    const n = (sql) => this.get(sql).n;
+    return {
+      users: n('SELECT COUNT(*) AS n FROM users'),
+      conversations: n('SELECT COUNT(*) AS n FROM conversations'),
+      messages: n('SELECT COUNT(*) AS n FROM messages'),
+      files: n('SELECT COUNT(*) AS n FROM files'),
+      fileBytes: n('SELECT COALESCE(SUM(size), 0) AS n FROM files'),
+      openReports: n('SELECT COUNT(*) AS n FROM reports'),
+    };
+  }
+
+  /** What a person has not read yet, for the host's own email or push digests. */
+  unreadSummary(userId) {
+    const rows = this.all(
+      `SELECT c.id, c.type, c.title, c.last_seq - m.last_read_seq AS unread, m.muted FROM members m
+       JOIN conversations c ON c.id = m.conversation_id
+       WHERE m.user_id = ? AND c.last_seq > m.last_read_seq ORDER BY c.updated_at DESC`,
+      userId,
+    );
+    return {
+      total: rows.reduce((sum, r) => sum + (r.muted ? 0 : r.unread), 0),
+      conversations: rows.map((r) => ({ id: r.id, type: r.type, title: r.title, unread: r.unread, muted: !!r.muted })),
+    };
   }
 
   editMessage(id, body) {

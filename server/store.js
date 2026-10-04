@@ -101,6 +101,15 @@ CREATE TABLE IF NOT EXISTS calls (
   video INTEGER NOT NULL,
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS invites (
+  code TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER,
+  max_uses INTEGER,
+  uses INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS reports (
   id TEXT PRIMARY KEY,
   message_id TEXT NOT NULL,
@@ -727,6 +736,55 @@ export class Store {
   getCall(id) {
     const r = this.get('SELECT * FROM calls WHERE id = ?', id);
     return r ? { id: r.id, conversationId: r.conversation_id, startedBy: r.started_by, video: !!r.video, createdAt: r.created_at } : null;
+  }
+
+  // ---- invite codes: let people join a group themselves ----
+
+  addInvite({ code, conversationId, createdBy, ttlSeconds, maxUses }) {
+    const t = Date.now();
+    this.run('INSERT INTO invites (code, conversation_id, created_by, created_at, expires_at, max_uses) VALUES (?, ?, ?, ?, ?, ?)',
+      code, conversationId, createdBy, t, ttlSeconds ? t + ttlSeconds * 1000 : null, maxUses ?? null);
+    return this.getInvite(code);
+  }
+
+  /** A usable invite, or null if unknown, expired or used up. */
+  getInvite(code) {
+    const r = this.get('SELECT * FROM invites WHERE code = ?', code);
+    if (!r || (r.expires_at && r.expires_at <= Date.now()) || (r.max_uses && r.uses >= r.max_uses)) return null;
+    return { code: r.code, conversationId: r.conversation_id, createdBy: r.created_by, expiresAt: r.expires_at, maxUses: r.max_uses, uses: r.uses };
+  }
+
+  useInvite(code) {
+    this.run('UPDATE invites SET uses = uses + 1 WHERE code = ?', code);
+  }
+
+  listInvites(conversationId) {
+    return this.all('SELECT code FROM invites WHERE conversation_id = ?', conversationId).map((r) => this.getInvite(r.code)).filter(Boolean);
+  }
+
+  deleteInvite(code, conversationId) {
+    return this.run('DELETE FROM invites WHERE code = ? AND conversation_id = ?', code, conversationId).changes > 0;
+  }
+
+  // ---- data portability ----
+
+  /** Everything held about one user, for access and portability requests. */
+  exportUser(id) {
+    const user = this.getUser(id);
+    if (!user) return null;
+    const sent = this.all('SELECT * FROM messages WHERE sender_id = ? ORDER BY created_at', id);
+    return {
+      exportedAt: Date.now(),
+      user: { ...user, handles: this.handlesOf(id) },
+      conversations: this.all(
+        'SELECT c.id, c.type, c.title, c.encrypted, m.role, m.joined_at FROM members m JOIN conversations c ON c.id = m.conversation_id WHERE m.user_id = ?', id,
+      ).map((r) => ({ id: r.id, type: r.type, title: r.title, encrypted: !!r.encrypted, role: r.role, joinedAt: r.joined_at })),
+      messages: sent.map((r) => this._messageOut(r, undefined, { reveal: true })),
+      reactions: this.all('SELECT message_id, emoji FROM reactions WHERE user_id = ?', id).map((r) => ({ messageId: r.message_id, emoji: r.emoji })),
+      stories: this.all('SELECT * FROM stories WHERE user_id = ?', id).map((r) => this._storyOut(r, id)),
+      files: this.all('SELECT id, name, mime, size, created_at FROM files WHERE owner_id = ?', id).map((r) => ({ fileId: r.id, name: r.name, mime: r.mime, size: r.size, createdAt: r.created_at })),
+      blocked: this.blocks(id),
+    };
   }
 
   // ---- reports ----

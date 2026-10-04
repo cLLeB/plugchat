@@ -66,6 +66,10 @@ location /plugchat/ {
 | `iceServers` | `PLUGCHAT_ICE_SERVERS` (JSON) | a public STUN server | STUN/TURN servers for calls |
 | `maxFileBytes` | `PLUGCHAT_MAX_FILE_MB` | 10 MB | Upload size limit |
 | `rateLimit` | — | 5 writes/s, burst 30 | Per-user write limit |
+| `maxTokenLifetimeSeconds` | `PLUGCHAT_MAX_TOKEN_SECONDS` | 86400 | Tokens valid for longer than this are refused |
+| `previousSecrets` | `PLUGCHAT_PREVIOUS_SECRETS` | none | Outgoing secrets still accepted while you rotate |
+| `storage` | — | local disk | Where uploads are kept (see [CONNECTORS.md](CONNECTORS.md)) |
+| `hooks`, `hookUrl`, `hookEvents`, `hookFailOpen` | `PLUGCHAT_HOOK_URL`, `PLUGCHAT_HOOK_EVENTS`, `PLUGCHAT_HOOK_FAIL_OPEN=on` | none | Your billing, moderation and call-vendor hooks |
 
 ## 2. Sign tokens
 
@@ -183,6 +187,16 @@ static string ChatToken(string secret, string userId, string name, int ttlSecond
 
 ## 3. Show the UI
 
+Pick whichever fits the platform. All of them talk to the same server and can be mixed.
+
+| Your platform is… | Use |
+|---|---|
+| A site or web app where you can add a script tag | `<plug-chat>` on a page |
+| A site with no page to spare for chat | `<plug-chat-launcher>`, a floating button |
+| A site builder, CMS or anything that only accepts a URL | An `<iframe>` of `/plugchat/embed` |
+| A native iOS, Android, Flutter or React Native app | A WebView of `/plugchat/embed`, or the REST API |
+| Something with its own design system | The headless client, or the REST and WebSocket API |
+
 ### Any web page
 
 ```html
@@ -200,6 +214,7 @@ session your site already has. Give the element a height with CSS.
 | `token` | A token rendered into the page, if you prefer (it cannot refresh itself) |
 | `peer` | Open straight into a chat with this user id, e.g. a "Message seller" button |
 | `peer-handle` | Same, by email, phone or username |
+| `invite` | Join a group by invite code on load, e.g. from your own `/join/CODE` links |
 | `heading` | Sidebar title |
 | `theme` | `light` or `dark`; follows the system by default |
 | `e2ee`, `calls`, `stories` | Set to `off` to hide that feature |
@@ -208,7 +223,11 @@ Theme it with CSS variables: `--pc-accent`, `--pc-accent-fg`, `--pc-bg`,
 `--pc-surface`, `--pc-fg`, `--pc-muted`, `--pc-border`, `--pc-bubble`, `--pc-radius`.
 
 Events on the element: `plugchat:ready`, `plugchat:unread` (`detail.count`),
-`plugchat:message` (`detail.message`), `plugchat:call`.
+`plugchat:message` (`detail.message`), `plugchat:call`, `plugchat:call-join`
+(cancelable, see [CONNECTORS.md](CONNECTORS.md)) and `plugchat:invite` (set
+`detail.text` to the shareable link your site wants shown for `detail.code`).
+
+Properties: `getToken`, `renderers` and `actions` (see connectors).
 
 ### React, Vue, Angular, Svelte
 
@@ -226,14 +245,69 @@ function Chat() {
 In Vue, mark it as a custom element (`compilerOptions.isCustomElement`); in
 Angular, add `CUSTOM_ELEMENTS_SCHEMA`.
 
+### Floating button
+
+```html
+<script type="module" src="/plugchat/client/launcher.js"></script>
+<plug-chat-launcher server="/plugchat" token-url="/api/chat-token"></plug-chat-launcher>
+```
+
+A button in the corner with an unread badge; pressing it opens the chat in a
+panel (full screen on phones). It takes the same attributes, properties and
+events as `<plug-chat>`, plus `position="left"` and `label`. Colour it with
+`plug-chat-launcher { --pc-accent: #0b6b4f; }`.
+
+### Iframe
+
+For platforms where you can paste an iframe but not run a module script:
+
+```html
+<iframe id="chat" src="https://chat.your-site.example/plugchat/embed?origin=https://your-site.example"
+        allow="camera; microphone; display-capture" style="width:100%;height:600px;border:0"></iframe>
+<script>
+  const frame = document.getElementById('chat');
+  addEventListener('message', async (e) => {
+    if (e.source !== frame.contentWindow) return;
+    if (e.data?.type === 'plugchat:token-request') {
+      const { token } = await (await fetch('/api/chat-token')).json();
+      frame.contentWindow.postMessage({ type: 'plugchat:token', token }, 'https://chat.your-site.example');
+    }
+    if (e.data?.type === 'plugchat:unread') showBadge(e.data.count);
+  });
+</script>
+```
+
+The frame asks for a token whenever it needs one, so your token endpoint never
+has to accept cross-origin requests. Options go in the query string: `peer`,
+`peer-handle`, `invite`, `heading`, `theme`, `accent` (a hex colour), and
+`calls`, `stories`, `e2ee` (`off`). Pass `origin` so the frame only exchanges
+messages with your page. When `origins` is configured on the server, only those
+sites are allowed to frame the chat at all.
+
 ### Mobile apps
 
-Serve a page on your site that contains only the `<plug-chat>` tag and open it
-in a WebView (`WKWebView`, Android `WebView`, `react-native-webview`,
-Flutter `webview_flutter`). The page authenticates the same way your mobile web
-session does. For a fully native UI, call the REST and WebSocket API in
-[API.md](API.md) directly; note that end-to-end encryption then has to be
-implemented natively to the format described in [SECURITY.md](SECURITY.md).
+Open `https://chat.your-site.example/plugchat/embed` in a WebView and hand it
+tokens from native code. The page calls out when it needs one and accepts it back:
+
+| Platform | Page → app | App → page |
+|---|---|---|
+| React Native (`react-native-webview`) | `onMessage` receives `{"type":"plugchat:token-request"}` | `webview.injectJavaScript("plugchatSetToken('…')")` |
+| Android `WebView` | `addJavascriptInterface(obj, "PlugChatNative")`, method `postMessage(String)` | `webView.evaluateJavascript("plugchatSetToken('…')", null)` |
+| iOS `WKWebView` | script message handler named `PlugChatNative` | `webView.evaluateJavaScript("plugchatSetToken('…')")` |
+| Flutter `webview_flutter` | `JavaScriptChannel` named `PlugChatNative` | `controller.runJavaScript("plugchatSetToken('…')")` |
+
+The same channel delivers `plugchat:unread` (for the app icon badge) and
+`plugchat:message` (ids only, never content). Add `?calls=native` and the page
+hands `plugchat:call-join` to your app instead of opening calls itself, so you
+can run them in your call vendor's native SDK. Grant the WebView camera and
+microphone permission if you use built-in calls or voice notes.
+
+The native bridges follow each platform's documented WebView API but have only
+been exercised here through the browser `postMessage` path.
+
+For a fully native UI, call the REST and WebSocket API in [API.md](API.md)
+directly; note that end-to-end encryption then has to be implemented natively
+to the format described in [SECURITY.md](SECURITY.md).
 
 ### Your own UI
 

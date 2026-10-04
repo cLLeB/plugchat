@@ -61,6 +61,10 @@ const server = createServer(async (req, res) => {
     if (!MEMBERS[id]) return res.writeHead(401).end();
     const token = chat.signToken({ sub: id, ...MEMBERS[id] }, 600);
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ token }));
+  } else if (url.pathname === '/iframe' || url.pathname === '/widget') {
+    // Two other ways to embed the same chat; see iframe.html and widget.html.
+    if (!MEMBERS[sessionUser(req)]) return res.writeHead(302, { location: '/' }).end();
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(await readFile(here(`.${url.pathname}.html`), 'utf8'));
   } else if (url.pathname === '/') {
     const id = sessionUser(req);
     const page = (await readFile(here('./index.html'), 'utf8'))

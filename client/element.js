@@ -262,7 +262,7 @@ function linkify(text) {
 }
 
 class PlugChatElement extends HTMLElement {
-  static observedAttributes = ['server', 'token', 'token-url', 'peer', 'peer-handle'];
+  static observedAttributes = ['server', 'token', 'token-url', 'peer', 'peer-handle', 'heading', 'invite'];
 
   constructor() {
     super();
@@ -325,7 +325,11 @@ class PlugChatElement extends HTMLElement {
   }
 
   attributeChangedCallback(name, old, value) {
-    if ((name === 'peer' || name === 'peer-handle') && this.chat?.me && value && value !== old) this._openPeer();
+    if (name === 'heading') {
+      if (this.$heading) this.$heading.textContent = value ?? 'Chats';
+    } else if (name === 'invite') {
+      if (this.chat?.me && value && value !== old) this._joinInvite(value).catch((e) => this._error(e.message));
+    } else if ((name === 'peer' || name === 'peer-handle') && this.chat?.me && value && value !== old) this._openPeer();
     else this._maybeStart();
   }
 
@@ -362,6 +366,7 @@ class PlugChatElement extends HTMLElement {
       await this._reload();
       this._loadStories();
       await this._openPeer();
+      if (this.getAttribute('invite')) await this._joinInvite(this.getAttribute('invite')).catch((e) => this._error(e.message));
       this.dispatchEvent(new CustomEvent('plugchat:ready', { detail: { user: chat.me } }));
     } catch (e) {
       fill(this.$list, h('div', { class: 'hint' }, `Chat is unavailable: ${e.message}`));
@@ -381,7 +386,7 @@ class PlugChatElement extends HTMLElement {
     this.$root = h('div', { class: 'root' },
       h('aside', { class: 'side' },
         h('div', { class: 'bar' },
-          h('h2', {}, this.getAttribute('heading') ?? 'Chats'),
+          (this.$heading = h('h2', {}, this.getAttribute('heading') ?? 'Chats')),
           h('button', { class: 'icon', icon: 'plus', title: 'New chat', 'aria-label': 'New chat', onclick: () => this._newChatDialog() }),
         ),
         h('div', { class: 'find' }, h('input', { type: 'search', placeholder: 'Search chats and messages', 'aria-label': 'Search chats and messages',
@@ -953,7 +958,8 @@ class PlugChatElement extends HTMLElement {
 
   _markRead() {
     const conv = this.convs.get(this.activeId);
-    if (!conv || document.visibilityState !== 'visible' || conv.unread === 0) return;
+    // Not read until it is actually on screen (the tab is visible and the chat is not tucked inside a closed launcher).
+    if (!conv || document.visibilityState !== 'visible' || !this.getClientRects().length || conv.unread === 0) return;
     conv.unread = 0;
     this._renderList();
     this._announceUnread();
@@ -1148,6 +1154,7 @@ class PlugChatElement extends HTMLElement {
     const $announceRow = h('label', { class: 'check', hidden: true }, $announce, h('span', {}, 'Announcement channel', h('small', {}, 'Only you and admins you appoint can post.')));
     const $err = h('div', { class: 'error', hidden: true, role: 'alert' });
     const $go = h('button', { class: 'btn', type: 'submit', disabled: true }, 'Start chat');
+    const $code = h('input', { type: 'text', placeholder: 'Have an invite code?', 'aria-label': 'Invite code', maxlength: '40' });
     const sync = () => {
       $title.hidden = $announceRow.hidden = picked.size < 2;
       $go.disabled = picked.size === 0;
@@ -1188,7 +1195,15 @@ class PlugChatElement extends HTMLElement {
       this._on('e2ee') && h('label', { class: 'check' }, $e2ee,
         h('span', {}, 'End-to-end encrypt', h('small', {}, 'Only members can read messages, on the device where they joined. Not even the server can.'))),
       $err, $go,
+      h('div', { class: 'inline' }, $code, h('button', { class: 'btn plain', type: 'button', onclick: () => $code.value.trim() && this._joinInvite($code.value.trim()).catch((e) => (($err.textContent = e.message), ($err.hidden = false))) }, 'Join')),
     ));
+  }
+
+  async _joinInvite(code) {
+    const conv = await this.chat.joinByInvite(code);
+    this.convs.set(conv.id, conv);
+    if (this.$dialog.open) this.$dialog.close();
+    await this._select(conv.id);
   }
 
   async _detailsDialog(conv) {
@@ -1216,6 +1231,20 @@ class PlugChatElement extends HTMLElement {
     const other = isGroup ? null : this._other(conv);
     const blocked = other ? (await this.chat.blocked().catch(() => [])).includes(other.userId) : false;
 
+    const $invite = h('div', { class: 'field' }, h('button', { class: 'btn plain', onclick: async () => {
+      try {
+        const { code } = await this.chat.createInvite(conv.id);
+        // The host decides what a shareable link looks like; it gets the code to build one.
+        const event = new CustomEvent('plugchat:invite', { detail: { code, conversation: conv, text: code } });
+        this.dispatchEvent(event);
+        const $code = h('input', { type: 'text', readonly: true, value: event.detail.text, 'aria-label': 'Invite code', onfocus: (e) => e.target.select() });
+        fill($invite, 'Anyone on this platform with this code can join for the next 7 days.', $code,
+          h('button', { class: 'btn plain', onclick: (e) => navigator.clipboard?.writeText(event.detail.text).then(() => (e.target.textContent = 'Copied')) }, 'Copy'));
+      } catch (e) {
+        $err.textContent = e.message;
+        $err.hidden = false;
+      }
+    } }, 'Create invite code'));
     const $name = h('input', { type: 'text', value: conv.title ?? '', maxlength: '120', 'aria-label': 'Group name' });
     const adder = isGroup && canManage && this._peoplePicker({
       exclude: new Set(conv.members.map((m) => m.userId)),
@@ -1232,6 +1261,7 @@ class PlugChatElement extends HTMLElement {
           isGroup && canManage && m.userId !== me && m.role !== 'owner'
             && h('button', { class: 'icon', icon: 'close', title: `Remove ${m.name}`, 'aria-label': `Remove ${m.name}`, onclick: () => run(this.chat.removeMember(conv.id, m.userId), true) })))),
       adder && h('div', { class: 'field' }, 'Add people', adder.$search, adder.$people),
+      isGroup && canManage && !conv.encrypted && $invite,
       toggle('Mute notifications', conv.muted, (v) => this.chat.settings(conv.id, { muted: v })),
       toggle('Pin to top', conv.pinned, (v) => this.chat.settings(conv.id, { pinned: v })),
       toggle('Archive', conv.archived, (v) => this.chat.settings(conv.id, { archived: v })),

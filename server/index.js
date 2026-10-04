@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { mkdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Store } from './store.js';
@@ -12,7 +12,22 @@ import { diskStorage, createHooks } from './connectors.js';
 export { signToken, verifyToken, signWebhook, diskStorage };
 
 const CLIENT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'client');
-const CLIENT_FILES = new Set(['plugchat.js', 'e2ee.js', 'calls.js', 'element.js']);
+const CLIENT_FILES = new Set(['plugchat.js', 'e2ee.js', 'calls.js', 'element.js', 'launcher.js', 'embed.js']);
+// The chat as a standalone page, for iframes and native WebViews.
+const EMBED_PAGE = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Messages</title>
+<style>html, body { margin: 0; height: 100%; } plug-chat { height: 100%; --pc-radius: 0; }</style>
+</head>
+<body>
+<plug-chat></plug-chat>
+<script type="module" src="client/embed.js"></script>
+</body>
+</html>
+`;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_JSON = 256 * 1024;
 const MAX_BODY_CHARS = 32_000;
@@ -111,6 +126,8 @@ export function createPlugChat(options = {}) {
     hookEvents,
     hookTimeoutMs,
     hookFailOpen = false,
+    previousSecrets = [],
+    maxTokenLifetimeSeconds = 86_400,
     log = console,
   } = options;
 
@@ -129,8 +146,24 @@ export function createPlugChat(options = {}) {
   const seen = new Map(); // sub -> "name\navatar" already written to the store
   const allowWrite = limiter(rateLimit.perSecond, rateLimit.burst);
 
+  function verifyAny(token) {
+    // During a secret rotation, tokens signed with the outgoing secret stay valid.
+    let failure;
+    for (const s of [secret, ...previousSecrets]) {
+      try {
+        return verifyToken(token, s);
+      } catch (e) {
+        failure ??= e;
+        if (e.message !== 'bad signature') break;
+      }
+    }
+    throw failure;
+  }
+
   function authenticate(token) {
-    const claims = verifyToken(token, secret);
+    const claims = verifyAny(token);
+    // A long-lived token is a long-lived liability if it leaks.
+    if (claims.exp - Date.now() / 1000 > maxTokenLifetimeSeconds) throw new Error(`token lifetime exceeds ${maxTokenLifetimeSeconds}s`);
     if (claims.admin === true) return claims;
     const name = typeof claims.name === 'string' ? claims.name.slice(0, 120) : undefined;
     const avatar = typeof claims.avatar === 'string' && /^https?:\/\//.test(claims.avatar) ? claims.avatar.slice(0, 500) : undefined;
@@ -341,6 +374,15 @@ export function createPlugChat(options = {}) {
       return { deleted: true };
     }],
 
+    // A person's own data on request; the host can fetch anyone's with an admin token.
+    ['GET', '/v1/me/export', (ctx) => store.exportUser(ctx.auth.sub)],
+    ['GET', '/v1/users/:id/export', (ctx) => {
+      adminOnly(ctx);
+      const data = store.exportUser(ctx.params.id);
+      if (!data) throw notFound('user not found');
+      return data;
+    }],
+
     ['GET', '/v1/blocks', (ctx) => ({ blocked: store.blocks(ctx.auth.sub) })],
     ['PUT', '/v1/blocks/:id', (ctx) => (store.block(ctx.auth.sub, ctx.params.id), { blocked: store.blocks(ctx.auth.sub) })],
     ['DELETE', '/v1/blocks/:id', (ctx) => (store.unblock(ctx.auth.sub, ctx.params.id), { blocked: store.blocks(ctx.auth.sub) })],
@@ -423,6 +465,60 @@ export function createPlugChat(options = {}) {
       const view = store.conversationFor(conv.id, ctx.auth.sub);
       hub.emit([ctx.auth.sub], { type: 'conversation.updated', conversation: view });
       return view;
+    }],
+
+    // Invite codes. Not offered for encrypted groups: a newcomer needs the
+    // conversation key handed over by an existing member, which a code cannot do.
+    ['POST', '/v1/conversations/:id/invites', async (ctx) => {
+      const { conv, member } = access(ctx, ctx.params.id);
+      if (conv.type !== 'group') throw bad('only groups have invites');
+      if (conv.encrypted) throw bad('encrypted groups cannot be joined by invite code; add members directly');
+      if (!ctx.auth.admin && member.role === 'member') throw forbidden('only group admins can create invites');
+      const b = await ctx.json();
+      const maxUses = b.maxUses === undefined || b.maxUses === null ? null : b.maxUses;
+      if (maxUses !== null && (!Number.isInteger(maxUses) || maxUses < 1 || maxUses > MAX_MEMBERS)) throw bad('maxUses must be a positive integer');
+      const invite = store.addInvite({
+        code: randomBytes(9).toString('base64url'),
+        conversationId: conv.id,
+        createdBy: ctx.auth.sub,
+        ttlSeconds: b.ttlSeconds === undefined ? 7 * 86_400 : ttl(b.ttlSeconds),
+        maxUses,
+      });
+      ctx.status = 201;
+      return invite;
+    }],
+
+    ['GET', '/v1/conversations/:id/invites', (ctx) => {
+      const { conv, member } = access(ctx, ctx.params.id);
+      if (!ctx.auth.admin && member.role === 'member') throw forbidden('only group admins can see invites');
+      return { invites: store.listInvites(conv.id) };
+    }],
+
+    ['DELETE', '/v1/conversations/:id/invites/:code', (ctx) => {
+      const { conv, member } = access(ctx, ctx.params.id);
+      if (!ctx.auth.admin && member.role === 'member') throw forbidden('only group admins can revoke invites');
+      if (!store.deleteInvite(ctx.params.code, conv.id)) throw notFound('invite not found');
+      return { revoked: true };
+    }],
+
+    ['GET', '/v1/invites/:code', (ctx) => {
+      const invite = store.getInvite(ctx.params.code);
+      const conv = invite && store.rawConversation(invite.conversationId);
+      if (!conv) throw notFound('this invite is not valid any more');
+      return { title: conv.title, description: conv.description, memberCount: store.memberIds(conv.id).length, alreadyMember: !!store.member(conv.id, ctx.auth.sub) };
+    }],
+
+    ['POST', '/v1/invites/:code/join', (ctx) => {
+      const invite = store.getInvite(ctx.params.code);
+      const conv = invite && store.rawConversation(invite.conversationId);
+      if (!conv) throw notFound('this invite is not valid any more');
+      if (!store.member(conv.id, ctx.auth.sub)) {
+        if (store.memberIds(conv.id).length >= MAX_MEMBERS) throw bad('group is full');
+        store.addMembers(conv.id, [ctx.auth.sub]);
+        store.useInvite(invite.code);
+        pushConversation(conv.id);
+      }
+      return store.conversationFor(conv.id, ctx.auth.sub);
     }],
 
     ['GET', '/v1/conversations/:id/pins', (ctx) => {
@@ -861,6 +957,20 @@ export function createPlugChat(options = {}) {
 
     try {
       if (path === '/health') return send(res, 200, { ok: true }), true;
+
+      if (req.method === 'GET' && path === '/embed') {
+        // Only the host's own sites may frame the chat, and the page may only talk to this server.
+        const ancestors = origins === '*' ? '*' : ["'self'", ...origins].join(' ');
+        res.writeHead(200, {
+          'content-type': 'text/html; charset=utf-8',
+          'cache-control': 'no-cache',
+          'x-content-type-options': 'nosniff',
+          'referrer-policy': 'no-referrer',
+          'content-security-policy': `default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self' ws: wss:; img-src blob: data: https:; media-src blob:; frame-src https:; base-uri 'none'; form-action 'none'; frame-ancestors ${ancestors}`,
+        });
+        res.end(EMBED_PAGE);
+        return true;
+      }
 
       if (req.method === 'GET' && path.startsWith('/client/')) {
         const name = path.slice('/client/'.length);

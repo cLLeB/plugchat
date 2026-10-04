@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Alumni Association — chat in an iframe</title>
+  <style>
+    body { margin: 0; font: 15px/1.5 system-ui, sans-serif; background: #f2f3f5; color: #1c1e21; }
+    main { max-width: 980px; margin: 20px auto; padding: 0 16px; }
+    iframe { width: 100%; height: min(640px, calc(100vh - 140px)); border: 1px solid #d5d8dd; border-radius: 14px; background: #fff; }
+    @media (prefers-color-scheme: dark) { body { background: #101214; color: #e8eaee; } iframe { border-color: #2a2e37; } }
+  </style>
+</head>
+<body>
+  <main>
+    <p><a href="/">← Back</a> · The same chat, embedded as an iframe. This is what a site builder, or a WebView in a native app, would use. <span id="unread"></span></p>
+
+    <!-- Everything the host adds: a frame, and a few lines that answer its request for a token. -->
+    <iframe id="chat" title="Messages" src="/plugchat/embed?accent=%230b6b4f&heading=Member%20messages" allow="camera; microphone; display-capture"></iframe>
+    <script>
+      const frame = document.getElementById('chat');
+      addEventListener('message', async (e) => {
+        if (e.source !== frame.contentWindow) return;
+        if (e.data?.type === 'plugchat:token-request') {
+          const { token } = await (await fetch('/api/chat-token')).json();
+          frame.contentWindow.postMessage({ type: 'plugchat:token', token }, location.origin);
+        }
+        if (e.data?.type === 'plugchat:unread') {
+          document.getElementById('unread').textContent = e.data.count ? `(${e.data.count} unread)` : '';
+        }
+      });
+    </script>
+  </main>
+</body>
+</html>

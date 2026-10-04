@@ -34,6 +34,8 @@ if (cmd === 'secret') {
     webhookUrl: env.PLUGCHAT_WEBHOOK_URL,
     directory: env.PLUGCHAT_DIRECTORY !== 'off',
     stories: env.PLUGCHAT_STORIES !== 'off',
+    previousSecrets: env.PLUGCHAT_PREVIOUS_SECRETS ? env.PLUGCHAT_PREVIOUS_SECRETS.split(',') : [],
+    maxTokenLifetimeSeconds: env.PLUGCHAT_MAX_TOKEN_SECONDS ? Number(env.PLUGCHAT_MAX_TOKEN_SECONDS) : undefined,
     hookUrl: env.PLUGCHAT_HOOK_URL,
     hookEvents: env.PLUGCHAT_HOOK_EVENTS ? env.PLUGCHAT_HOOK_EVENTS.split(',').map((s) => s.trim()) : [],
     hookFailOpen: env.PLUGCHAT_HOOK_FAIL_OPEN === 'on',

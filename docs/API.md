@@ -21,6 +21,8 @@ call signalling). That keeps a native or server-side integration to plain HTTP.
 | `GET /v1/users/:id/key` | Public encryption key |
 | `PUT /v1/users/:id` `{name, avatar, handles}` | **Admin.** Create or update a user ahead of their first visit |
 | `DELETE /v1/users/:id` | **Admin.** Erase the user and everything they sent |
+| `GET /v1/me/export` | Everything held about the caller: profile, memberships, sent messages, reactions, stories, files |
+| `GET /v1/users/:id/export` | **Admin.** The same for any user |
 | `GET /v1/blocks`, `PUT /v1/blocks/:id`, `DELETE /v1/blocks/:id` | The caller's block list |
 
 ## Conversations
@@ -37,6 +39,10 @@ call signalling). That keeps a native or server-side integration to plain HTTP.
 | `DELETE /v1/conversations/:id/members/:userId` | Remove a member, or leave by naming yourself |
 | `POST /v1/conversations/:id/read` `{seq}` | Mark read up to a message's `seq` |
 | `GET /v1/conversations/:id/pins` | Pinned messages |
+| `POST /v1/conversations/:id/invites` `{ttlSeconds?, maxUses?}` | Create an invite code (group admins; not for encrypted groups). Default lifetime 7 days |
+| `GET /v1/conversations/:id/invites`, `DELETE /v1/conversations/:id/invites/:code` | List and revoke |
+| `GET /v1/invites/:code` | What the code leads to: `{title, description, memberCount, alreadyMember}` |
+| `POST /v1/invites/:code/join` | Join; returns the conversation |
 
 Admin tokens may create conversations among any users (`memberIds` is then the
 complete list, `createdBy` optional).
@@ -155,6 +161,14 @@ Server to client:
 | `signal` | `conversationId`, `from`, `data` |
 | `user.deleted` | `userId` |
 
+## Pages
+
+| | |
+|---|---|
+| `GET /embed` | The chat as a standalone page for iframes and WebViews (see [INTEGRATION.md](INTEGRATION.md)) |
+| `GET /client/element.js`, `launcher.js`, `plugchat.js`, `calls.js`, `e2ee.js` | The web component, floating launcher and headless client |
+| `GET /health` | `{ok: true}` |
+
 ## Webhooks
 
 POSTed to `webhookUrl` with header `x-plugchat-signature: sha256=<hex HMAC-SHA256 of the raw body>`.
@@ -171,5 +185,7 @@ POSTed to `webhookUrl` with header `x-plugchat-signature: sha256=<hex HMAC-SHA25
 ```
 
 `message.reported`: `reportId`, `reporterId`, `reason`, `message`, `conversation`.
+
+`call.started`: `call`, `message`, `conversation`, `recipients` (so you can ring phones that are not in the app).
 
 Delivery is fire-and-forget with a 5 second timeout; there are no retries.

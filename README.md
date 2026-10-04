@@ -78,8 +78,14 @@ menu actions (payments, orders, bookings).
 **Identity** — people are found by whatever your platform uses: user id, email,
 phone number, username, or custom kinds such as a membership number.
 
-**Safety** — blocking, reporting to your moderators, admin API to remove
-content and erase a user's data.
+**Groups that grow themselves** — invite codes your site can turn into its own
+join links.
+
+**Safety and compliance** — blocking, reporting to your moderators, admin API to
+remove content, per-user data export, and erasure of a user's data.
+
+**Four ways to embed** — a page component, a floating button with an unread
+badge, an iframe for site builders, and a WebView page for native mobile apps.
 
 **For the host platform** — signed webhooks so you send push notifications or
 email through your own providers; DOM events (`plugchat:unread`,
@@ -127,8 +133,12 @@ Stated plainly so you can plan around them:
   forward secrecy or key rotation when a member leaves. See the security doc.
 - **Built-in calls are one-to-one**, and need a TURN server of yours to connect
   across strict networks. Group calls need your own call vendor (see connectors).
-- **No native mobile SDKs.** Mobile apps embed the web component in a WebView or
+- **No native mobile SDKs.** Mobile apps open the embed page in a WebView or
   call the REST/WebSocket API.
 - **Push notifications are yours to send**, driven by the webhook.
-- The Dockerfile and the non-Node token snippets were written without being
-  run in this repository's test suite.
+- **The interface is English only** for now.
+- **Not yet exercised here:** the Dockerfile, the token snippets for languages
+  other than Node, the native WebView bridges, and calls between two real
+  devices on different networks (the call flow is tested in one browser with
+  synthetic media). Treat those as written to spec, not proven.
+- **No license has been chosen**, so nobody else may legally use the code yet.

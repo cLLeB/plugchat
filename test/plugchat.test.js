@@ -546,6 +546,81 @@ test('a hook that is down blocks the action unless the host chose fail-open', as
   }
 });
 
+test('invite codes let people join a group themselves; encrypted groups refuse them', async () => {
+  const alice = await client('alice');
+  const bob = await client('bob');
+  const newcomer = await client('newcomer-1');
+  const group = await alice.createGroup({ title: 'Open house', memberIds: ['bob'] });
+
+  await assert.rejects(bob.createInvite(group.id), { status: 403 }, 'members cannot mint invites');
+  const { code } = await alice.createInvite(group.id, { maxUses: 1 });
+  assert.equal((await newcomer.invite(code)).title, 'Open house');
+
+  const seen = next(alice, 'conversation', (c) => c.id === group.id && c.members.length === 3);
+  const joined = await newcomer.joinByInvite(code);
+  assert.equal(joined.id, group.id);
+  await seen;
+  await newcomer.send(group.id, { text: 'hello, I used the code' });
+
+  const late = await client('newcomer-2');
+  await assert.rejects(late.joinByInvite(code), { status: 404 }, 'a single-use code is spent');
+
+  const second = await alice.createInvite(group.id);
+  await alice.revokeInvite(group.id, second.code);
+  await assert.rejects(late.joinByInvite(second.code), { status: 404 });
+
+  const secret = await alice.createGroup({ title: 'Sealed', memberIds: ['bob'], encrypted: true });
+  await assert.rejects(alice.createInvite(secret.id), { status: 400 });
+});
+
+test('data export covers what a user sent; the embed page is framable and locked down', async () => {
+  const exporter = await client('exporter', 'Expo');
+  await client('bob');
+  const dm = await exporter.openDm('bob');
+  await exporter.send(dm.id, { text: 'remember this' });
+  await exporter.react((await exporter.messages(dm.id))[0].id, '👍');
+
+  const data = await exporter.exportMyData();
+  assert.equal(data.user.id, 'exporter');
+  assert.ok(data.messages.some((m) => m.body === 'remember this'));
+  assert.equal(data.conversations.length, 1);
+  assert.equal(data.reactions.length, 1);
+  assert.equal((await api('/users/bob/export', { token: signToken({ sub: 'exporter' }, SECRET) })).status, 403);
+  assert.equal((await api('/users/bob/export', { token: signToken({ sub: 'host', admin: true }, SECRET) })).status, 200);
+
+  const page = await fetch(`${url}/embed`);
+  assert.equal(page.status, 200);
+  assert.match(page.headers.get('content-security-policy'), /script-src 'self'.*frame-ancestors \*/);
+  assert.match(await page.text(), /<plug-chat><\/plug-chat>/);
+  for (const file of ['element.js', 'launcher.js', 'embed.js', 'plugchat.js', 'calls.js', 'e2ee.js']) {
+    const res = await fetch(`${url}/client/${file}`);
+    assert.equal(res.status, 200, file);
+    const again = await fetch(`${url}/client/${file}`, { headers: { 'if-none-match': res.headers.get('etag') } });
+    assert.equal(again.status, 304, `${file} revalidates`);
+  }
+  assert.equal((await fetch(`${url}/client/../server/index.js`)).status, 404);
+  assert.equal((await fetch(`${url}/client/secrets.js`)).status, 404);
+});
+
+test('secret rotation keeps old tokens working; over-long tokens are refused', async () => {
+  const OLD = 'the-old-secret-the-old-secret-the-old-secret';
+  const d = mkdtempSync(join(tmpdir(), 'plugchat-rot-'));
+  const inst = createPlugChat({ secret: SECRET, previousSecrets: [OLD], maxTokenLifetimeSeconds: 3600, dataDir: d, log: { error() {} } });
+  const srv = await inst.listen(0);
+  const me = (token) => fetch(`http://localhost:${srv.address().port}/plugchat/v1/me`, { headers: { authorization: `Bearer ${token}` } }).then((r) => r.status);
+  try {
+    assert.equal(await me(signToken({ sub: 'u' }, SECRET, 600)), 200);
+    assert.equal(await me(signToken({ sub: 'u' }, OLD, 600)), 200, 'outgoing secret still accepted');
+    assert.equal(await me(signToken({ sub: 'u' }, 'some-unknown-secret-some-unknown-secret', 600)), 401);
+    assert.equal(await me(signToken({ sub: 'u' }, SECRET, 7200)), 401, 'a two-hour token exceeds the one-hour cap');
+  } finally {
+    srv.close();
+    srv.closeAllConnections();
+    inst.close();
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
 test('writes are rate limited per user', async () => {
   const d = mkdtempSync(join(tmpdir(), 'plugchat-rl-'));
   const limited = createPlugChat({ secret: SECRET, dataDir: d, log: { error() {} }, rateLimit: { perSecond: 1, burst: 3 } });

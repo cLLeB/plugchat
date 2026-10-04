@@ -9,15 +9,22 @@
 | A user's browser | That user's own messages and keys only. |
 
 There is one secret. Anyone who has it can mint a token for any user, including
-admin tokens, so keep it in server-side configuration only and rotate it if it
-leaks (rotating invalidates all outstanding tokens; nothing else needs migrating).
+admin tokens, so keep it in server-side configuration only. To rotate it
+without logging anyone out, start PlugChat with the new `secret` and the old
+one in `previousSecrets`, switch your backend to sign with the new one, then
+drop the old one. If the secret leaked, replace it outright instead: that
+invalidates every outstanding token, and nothing else needs migrating.
+
+The same secret signs outgoing webhooks and hook requests, which is how your
+backend knows they came from PlugChat.
 
 ## Authentication
 
 - Tokens are HS256 JWTs. The server ignores the token's own `alg` claim for
   anything other than HS256, so "alg: none" and algorithm-confusion tokens are rejected.
-- `exp` is mandatory. Issue short-lived tokens (about 10 minutes); the client
-  fetches a new one from your endpoint automatically.
+- `exp` is mandatory, and tokens valid for more than `maxTokenLifetimeSeconds`
+  (24 hours by default) are refused. Issue short-lived tokens (about 10
+  minutes); the client fetches a new one from your endpoint automatically.
 - The realtime socket authenticates with its first message rather than a URL
   parameter, so tokens do not end up in proxy or access logs. The server closes
   a socket at the moment its token expires unless the client has re-authenticated.

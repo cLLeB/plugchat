@@ -374,6 +374,29 @@ export class PlugChat {
     return this._hydrateConversation(await this._req('POST', `/conversations/${conversationId}/members`, { json }));
   }
 
+  /** Create a code people can use to join a (non-encrypted) group themselves. */
+  createInvite(conversationId, { ttlSeconds, maxUses } = {}) {
+    return this._req('POST', `/conversations/${conversationId}/invites`, { json: { ttlSeconds, maxUses } });
+  }
+  invites(conversationId) {
+    return this._req('GET', `/conversations/${conversationId}/invites`).then((r) => r.invites);
+  }
+  revokeInvite(conversationId, code) {
+    return this._req('DELETE', `/conversations/${conversationId}/invites/${encodeURIComponent(code)}`);
+  }
+  /** What an invite leads to, before joining. */
+  invite(code) {
+    return this._req('GET', `/invites/${encodeURIComponent(code)}`);
+  }
+  async joinByInvite(code) {
+    return this._hydrateConversation(await this._req('POST', `/invites/${encodeURIComponent(code)}/join`));
+  }
+
+  /** Everything the server holds about the signed-in user. */
+  exportMyData() {
+    return this._req('GET', '/me/export');
+  }
+
   removeMember(conversationId, userId) {
     return this._req('DELETE', `/conversations/${conversationId}/members/${encodeURIComponent(userId)}`);
   }

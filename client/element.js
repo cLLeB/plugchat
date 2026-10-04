@@ -8,7 +8,7 @@
 //
 // What the host can change, from least to most effort:
 //   - colours, fonts, radii, sizes:  the --pc-* CSS variables (see styles.js)
-//   - layout and density:            layout="bubbles|flat"  density="compact"
+//   - layout and density:            layout="bubbles|flat"  density="compact"  nav="off"
 //   - any single element:            plug-chat::part(bubble) { ... }  (see PARTS)
 //   - anything else:                 stylesheet="/my.css", or el.css = '...'
 //   - wording and icons:             el.strings, el.ui = { strings, icons }
@@ -44,7 +44,7 @@ const ICON = {
   plus: svg('<path d="M12 5v14M5 12h14"/>'),
   back: svg('<path d="M15 5l-7 7 7 7"/>'),
   next: svg('<path d="M9 5l7 7-7 7"/>'),
-  send: svg('<path d="M4 12l16-8-6 16-3-7-7-1z"/>'),
+  send: svg('<path d="M12 19V5M5.5 11.5L12 5l6.5 6.5"/>'),
   clip: svg('<path d="M20 11l-8.5 8.5a5 5 0 01-7-7L13 4a3.5 3.5 0 015 5l-8.5 8.5a2 2 0 01-3-3L14 7"/>'),
   lock: svg('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>'),
   info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>'),
@@ -97,6 +97,7 @@ const PARTS = {
   main: 'thread', msgs: 'messages', row: 'message', bubble: 'bubble', sender: 'sender-name', meta: 'message-meta', quote: 'quote',
   reacts: 'reactions', react: 'reaction', acts: 'message-toolbar', day: 'day-label', sys: 'system-message', seen: 'seen-by',
   composer: 'composer', pill: 'input-box', action: 'send-button', menu: 'menu', sheet: 'attach-menu', pop: 'popup',
+  rail: 'nav', navbtn: 'nav-button', dock: 'composer-box',
   btn: 'button', icon: 'icon-button', hero: 'profile', group: 'settings-group', toast: 'toast', call: 'call', pinbar: 'pinned-bar',
   filecard: 'file', voice: 'voice-note', poll: 'poll', card: 'link-preview', typing: 'typing',
 };
@@ -155,6 +156,16 @@ const dayLabel = (t) => {
   return d.toLocaleDateString(LOCALE, { weekday: 'short', month: 'short', day: 'numeric', year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric' });
 };
 const shortWhen = (t) => (new Date(t).toDateString() === new Date().toDateString() ? clock(t) : new Date(t).toLocaleDateString(LOCALE, { month: 'short', day: 'numeric' }));
+// How long ago, as briefly as the language allows: "5m", "2h", "3d".
+const ago = (t) => {
+  const s = Math.max(0, Date.now() - t) / 1000;
+  const [n, unit] = s < 3600 ? [Math.max(1, Math.floor(s / 60)), 'minute'] : s < 86400 ? [Math.floor(s / 3600), 'hour'] : s < 604800 ? [Math.floor(s / 86400), 'day'] : [Math.floor(s / 604800), 'week'];
+  try {
+    return new Intl.NumberFormat(LOCALE, { style: 'unit', unit, unitDisplay: 'narrow' }).format(n);
+  } catch {
+    return shortWhen(t);
+  }
+};
 const size = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 const mmss = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
 const debounce = (fn, ms) => {
@@ -419,13 +430,34 @@ class PlugChatElement extends HTMLElement {
     this.$stories = h('div', { class: 'stories', hidden: true });
     this.$main = h('section', { class: 'main' }, this._emptyState());
     const runSearch = debounce(() => this._search(), 250);
-    this.$root = h('div', { class: 'root' },
+    // Getting around: a rail beside the chat list on a wide layout, a tab bar under it on a phone.
+    // nav="off" leaves it out and puts the same controls in the chat list's header instead.
+    const nav = this._on('nav');
+    this.$theme = h('button', { class: nav ? 'navbtn themebtn' : 'icon', onclick: () => this._setTheme(this._dark() ? 'light' : 'dark') });
+    this.$navBadge = h('span', { class: 'badge', hidden: true });
+    this.$navStars = h('button', { class: 'navbtn', icon: 'star', title: T('Starred messages'), 'aria-label': T('Starred messages'), onclick: () => this._starredDialog() });
+    this.$me = h('button', { class: 'navme', title: T('Settings'), 'aria-label': T('Settings'), onclick: () => this._settingsDialog() }, h('span', { icon: 'gear' }));
+    const rail = nav && h('nav', { class: 'rail' },
+      h('button', { class: 'navbtn on', icon: 'bubbles', title: T('Chats'), 'aria-label': T('Chats'), onclick: () => {
+        this.showArchived = false;
+        this.filter = 'all';
+        if (this.activeId && this._narrow()) this._back();
+        this._renderList();
+      } }, this.$navBadge),
+      this.$navStars,
+      h('button', { class: 'navbtn compose', icon: 'edit', title: T('New chat'), 'aria-label': T('New chat'), onclick: () => this._newChatDialog() }),
+      h('span', { class: 'gap' }),
+      this.$theme,
+      this.$me,
+    );
+    this.$root = h('div', { class: `root${nav ? ' nav' : ''}` },
+      rail,
       h('aside', { class: 'side' },
         h('div', { class: 'bar' },
           (this.$heading = h('h2', { part: 'heading' }, this.getAttribute('heading') ?? ui.heading ?? T('Chats'))),
-          (this.$theme = h('button', { class: 'icon', onclick: () => this._setTheme(this._dark() ? 'light' : 'dark') })),
-          h('button', { class: 'icon', icon: 'gear', title: T('Settings'), 'aria-label': T('Settings'), onclick: () => this._settingsDialog() }),
-          h('button', { class: 'icon newbtn', icon: 'plus', title: T('New chat'), 'aria-label': T('New chat'), onclick: () => this._newChatDialog() }),
+          !nav && this.$theme,
+          !nav && h('button', { class: 'icon', icon: 'gear', title: T('Settings'), 'aria-label': T('Settings'), onclick: () => this._settingsDialog() }),
+          h('button', { class: 'icon newbtn', icon: 'edit', title: T('New chat'), 'aria-label': T('New chat'), onclick: () => this._newChatDialog() }),
         ),
         h('div', { class: 'find' }, h('input', { type: 'search', placeholder: T('Search chats and messages'), 'aria-label': T('Search chats and messages'),
           oninput: (e) => {
@@ -438,7 +470,7 @@ class PlugChatElement extends HTMLElement {
         this.$stories,
         this.$list,
         h('slot', { name: 'sidebar-bottom' }),
-        h('button', { class: 'fab', icon: 'edit', title: T('New chat'), 'aria-label': T('New chat'), onclick: () => this._newChatDialog() }),
+        !nav && h('button', { class: 'fab', icon: 'edit', title: T('New chat'), 'aria-label': T('New chat'), onclick: () => this._newChatDialog() }),
       ),
       this.$main,
     );
@@ -572,10 +604,15 @@ class PlugChatElement extends HTMLElement {
     this.convs = new Map((await this.chat.conversations()).map((c) => [c.id, c]));
     this._renderList();
     this._announceUnread();
+    // The person's own picture is the way into their settings.
+    this.$navStars.hidden = !this._can('stars');
+    fill(this.$me, this._avatar(this.chat.me.name, this.chat.me.avatar, { small: true }));
   }
 
   _announceUnread() {
     const count = [...this.convs.values()].reduce((n, c) => n + (c.muted ? 0 : c.unread), 0);
+    this.$navBadge.hidden = !count;
+    this.$navBadge.textContent = count > 99 ? '99+' : String(count);
     if (count === this._lastUnread) return;
     this._lastUnread = count;
     this.dispatchEvent(new CustomEvent('plugchat:unread', { detail: { count } }));
@@ -1048,23 +1085,25 @@ class PlugChatElement extends HTMLElement {
       const typing = this.typing.get(c.id)?.size > 0;
       const draft = c.id !== this.activeId && this._draft(c.id);
       const mineLast = last && last.senderId === me && last.kind !== 'system' && !last.deleted;
+      const picture = this._avatar(title, other ? other.avatar : c.avatar, { online: !!other && this.chat.online.has(other.userId) });
+      // A ring around someone's picture says they have a story you have not seen.
+      if (other && this.feed.some((g) => g.user.id === other.userId && g.stories.some((s) => !s.seen))) picture.classList.add('storied');
       nodes.push(h('button', { class: `conv${unread ? ' unread' : ''}`, role: 'listitem', 'data-id': c.id, 'aria-current': String(c.id === this.activeId), onclick: () => this._select(c.id) },
-        this._avatar(title, other ? other.avatar : c.avatar, { online: !!other && this.chat.online.has(other.userId) }),
+        picture,
         h('div', { class: 'body' },
           h('div', { class: 'line' },
             h('span', { class: 'name' }, title),
-            last && h('span', { class: 'when' }, shortWhen(last.createdAt)),
+            c.pinned && h('span', { icon: 'pin', title: T('Pinned') }),
+            c.muted && h('span', { icon: 'mute', title: T('Muted') }),
           ),
           h('div', { class: 'line' },
-            !typing && !draft && mineLast && this._ticks(last.seq <= this._othersRead(c)),
             typing ? h('span', { class: 'preview live' }, T('typing…'))
               : draft ? h('span', { class: 'preview draft' }, T('Draft: {text}', { text: draft }))
               : h('span', { class: 'preview' }, this._preview(c, last)),
-            c.pinned && h('span', { icon: 'pin', title: T('Pinned') }),
-            c.muted && h('span', { icon: 'mute', title: T('Muted') }),
-            unread && h('span', { class: `badge${c.muted ? ' quiet' : ''}`, 'aria-label': T('{n} unread', { n: c.unread }) }, c.unread > 99 ? '99+' : String(c.unread)),
+            last && !typing && h('span', { class: 'when' }, `· ${ago(last.createdAt)}`),
           ),
         ),
+        unread && h('span', { class: `badge${c.muted ? ' quiet' : ''}`, 'aria-label': T('{n} unread', { n: c.unread }) }, c.unread > 99 ? '99+' : String(c.unread)),
       ));
     }
     if (!q && !this.showArchived && archived.length) {
@@ -1267,7 +1306,8 @@ class PlugChatElement extends HTMLElement {
     this.$action = h('button', { class: 'action', type: 'submit', icon: 'mic' });
     this.$composer = h('form', { class: 'composer', onsubmit: (e) => (e.preventDefault(), this._primary()) },
       this.$file, this.$menu, this.$mentions, this.$toBottom, this.$emoji,
-      // Adding things sits outside the box; the box holds the words, with emoji at its far end.
+      // One rounded box holds everything: add on the left, the words, emoji, and the send or record button.
+      h('div', { class: 'dock' },
       this._attachItems().length > 0 && h('button', { class: 'icon attach', icon: 'plus', type: 'button', title: T('Attach'), 'aria-label': T('Attach'), 'aria-haspopup': 'menu', onclick: () => this._toggleMenu() }),
       h('div', { class: 'pill' },
         this.$input,
@@ -1278,7 +1318,7 @@ class PlugChatElement extends HTMLElement {
           this._attach(this.$camera.files);
           this.$camera.value = '';
         } }))),
-      this.$rec, this.$action,
+      this.$rec, this.$action),
     );
     this.$readonly = h('div', { class: 'hint', hidden: true }, T('Only admins can post in this channel.'));
     fill(this.$main, this.$header, h('slot', { name: 'thread-top' }), this.$pins, this.$notice, this.$live, this.$msgs, this.$typing, this.$error, this.$banner, this.$composer, this.$readonly);
@@ -1494,7 +1534,6 @@ class PlugChatElement extends HTMLElement {
       if (m.deleted) bubble = h('div', { class: 'bubble ghost' }, T('Message deleted'));
       else if (m.undecryptable) bubble = h('div', { class: 'bubble ghost' }, T('Waiting for this device to receive the key for this message.'));
       else {
-        const parent = m.replyTo && byId.get(m.replyTo);
         const shown = m.viewOnce ? this.opened.get(m.id) : m;
         // A photo on its own fills the bubble edge to edge, with the time laid over it.
         const photoOnly = shown?.file && INLINE_IMAGES.has(shown.file.mime) && !shown.text && !m.replyTo && !m.forwarded && !(showAvatars && isFirst);
@@ -1502,25 +1541,32 @@ class PlugChatElement extends HTMLElement {
         bubble = h('div', { part: `bubble ${mine ? 'bubble-out' : 'bubble-in'}`, class: `bubble${m.mentions?.includes(me) ? ' mention' : ''}${photoOnly ? ' media' : ''}${jumbo ? ' jumbo' : ''}${m.pending ? ' pending' : ''}` },
           showAvatars && isFirst && h('button', { class: 'sender', style: `--h:${hue(name)}`, onclick: () => this._profileDialog(m.senderId) }, name),
           m.forwarded && h('div', { class: 'tag' }, h('span', { icon: 'forward' }), T('Forwarded')),
-          m.replyTo && h('button', { class: 'quote', onclick: () => this._jumpTo(m.replyTo) }, parent ? `${this._memberName(conv, parent.senderId)}: ${this._snippet(parent)}` : T('Earlier message')),
           this._content(m, conv, mine),
-          h('span', { class: 'meta' },
-            m.starred && h('span', { icon: 'star', title: T('Starred') }),
-            m.pinned && h('span', { icon: 'pin', title: T('Pinned') }),
-            m.expiresAt && h('span', { icon: 'timer', title: T('Disappearing message') }),
-            m.editedAt && T('edited ·'),
-            clock(m.createdAt),
-            m.pending && !m.failed && h('span', { icon: 'clock', title: T('Sending…') }),
-            mine && !m.pending && this._ticks(m.seq <= othersRead),
-          ),
         );
+        bubble.title = clock(m.createdAt);
       }
+      const plainRow = !m.deleted && !m.undecryptable;
+      const parent = plainRow && m.replyTo && byId.get(m.replyTo);
+      // Time and status sit under the last message of a block (or under one with something to say:
+      // edited, starred, pinned, timed, still sending), not inside every bubble.
+      const foot = plainRow && (isLast || m.starred || m.pinned || m.expiresAt || m.editedAt || m.pending) && h('span', { class: 'meta' },
+        m.starred && h('span', { icon: 'star', title: T('Starred') }),
+        m.pinned && h('span', { icon: 'pin', title: T('Pinned') }),
+        m.expiresAt && h('span', { icon: 'timer', title: T('Disappearing message') }),
+        m.editedAt && T('edited ·'),
+        clock(m.createdAt),
+        m.pending && !m.failed && h('span', { icon: 'clock', title: T('Sending…') }),
+        mine && !m.pending && this._ticks(m.seq <= othersRead),
+      );
 
       const reacts = Object.entries(m.reactions ?? {});
       const usable = !m.deleted && !m.undecryptable && !m.pending;
       const row = h('div', { class: `row${mine ? ' mine' : ''}${isFirst ? ' first' : ''}${isLast ? ' last' : ''}${state.shown && !state.shown.has(m.id) ? ' new' : ''}`, 'data-id': m.id },
         showAvatars && ((flat ? isFirst : isLast) ? this._avatar(name, conv.members.find((x) => x.userId === m.senderId)?.avatar, { small: true }) : h('div', { class: 'spacer' })),
         h('div', { class: 'col' },
+          // What this answers: a faded line above the message, which jumps to the original.
+          plainRow && m.replyTo && h('button', { class: 'quote', onclick: () => this._jumpTo(m.replyTo) }, h('span', { icon: 'reply' }),
+            h('span', {}, parent ? `${first(this._memberName(conv, parent.senderId))}: ${this._snippet(parent)}` : T('Earlier message'))),
           bubble,
           reacts.length > 0 && h('div', { class: 'reacts' }, reacts.map(([emoji, users]) =>
             h('button', {
@@ -1532,6 +1578,7 @@ class PlugChatElement extends HTMLElement {
           m.failed && h('div', { class: 'failed', role: 'alert' }, `${T('Not sent')} · ${m.failed} `,
             h('button', { class: 'linkbtn', onclick: () => this._deliver(m.conversationId, m.content, m.id) }, T('Retry')),
             h('button', { class: 'linkbtn', onclick: () => ((state.list = state.list.filter((x) => x.id !== m.id)), this._renderMessages()) }, T('Discard'))),
+          foot,
           seenAt.has(m.id) && h('div', { class: 'seen', title: `${T('Read')}: ${seenAt.get(m.id).map((x) => x.name).join(', ')}` },
             seenAt.get(m.id).slice(0, 6).map((x) => this._avatar(x.name, x.avatar, { small: true }))),
           usable && this._actions(m, mine, conv),
@@ -1922,6 +1969,7 @@ class PlugChatElement extends HTMLElement {
     const canRecord = this._canRecord();
     const sending = !!this._rec || !!el.value.trim() || !!this.pendingFile || !canRecord;
     this.$action.innerHTML = ICON[sending ? 'send' : 'mic'];
+    this.$action.classList.toggle('mic', !sending);
     this.$action.disabled = sending && !this._rec && !el.value.trim() && !this.pendingFile;
     this.$composer.classList.toggle('typing', !!el.value.trim());
     const label = this._rec ? T('Send voice message') : sending ? T('Send') : T('Record a voice note');

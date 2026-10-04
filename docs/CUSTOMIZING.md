@@ -99,22 +99,22 @@ server (`accentFg` or `accent-fg`, both work).
 
 | Token | CSS variable | Default (light) | What it controls |
 |---|---|---|---|
-| `accent` | `--pc-accent` | `#2f6fed` | Your brand colour: buttons, badges, links, outgoing messages |
+| `accent` | `--pc-accent` | `#5146e5` | Your brand colour: buttons, badges, links, outgoing messages |
 | `accentFg` | `--pc-accent-fg` | `#fff` | Text on the brand colour |
 | `bg` | `--pc-bg` | `#fff` | Panels, the chat list, the composer |
-| `surface` | `--pc-surface` | `#f1f3f6` | Fields, hover, settings cards |
-| `chat` | `--pc-chat` | `#eef1f5` | The backdrop behind messages |
+| `surface` | `--pc-surface` | `#f2f3f7` | Fields, hover, settings cards |
+| `chat` | `--pc-chat` | `#fff` | The backdrop behind messages |
 | `fg` | `--pc-fg` | `#111418` | Text |
 | `muted` | `--pc-muted` | `#667085` | Secondary text and icons |
-| `border` | `--pc-border` | `#e4e7ec` | Lines |
-| `bubble` | `--pc-bubble` | `#fff` | Incoming message background |
+| `border` | `--pc-border` | `#e6e8ee` | Lines |
+| `bubble` | `--pc-bubble` | `#eef0f5` | Incoming message background |
 | `bubbleFg` | `--pc-bubble-fg` | text colour | Incoming message text |
-| `bubbleOut` | `--pc-bubble-out` | a soft gradient of the accent | Outgoing message background: a colour or any CSS gradient |
+| `bubbleOut` | `--pc-bubble-out` | a gradient built from the accent that shifts down the screen | Outgoing message background: a single colour (`#0b6b4f`) for a flat look, or any CSS gradient |
 | `bubbleOutFg` | `--pc-bubble-out-fg` | `accentFg` | Outgoing message text |
 | `danger` | `--pc-danger` | `#d92d20` | Destructive actions, errors |
 | `online` | `--pc-online` | `#12b76a` | The online dot |
 | `radius` | `--pc-radius` | `16px` | Corners of the whole frame |
-| `bubbleRadius` | `--pc-bubble-radius` | `18px` | Message corners |
+| `bubbleRadius` | `--pc-bubble-radius` | `20px` | Message corners |
 | `avatarRadius` | `--pc-avatar-radius` | `50%` | Picture shape: `50%` circle, `30%` rounded, `6px` square |
 | `controlRadius` | `--pc-control-radius` | `12px` | Buttons and fields |
 | `borderWidth` | `--pc-border-width` | `1px` | Line thickness (`0` removes lines) |
@@ -122,7 +122,7 @@ server (`accentFg` or `accent-fg`, both work).
 | `fontSize` | `--pc-font-size` | `15px` | Base text size |
 | `sidebarWidth` | `--pc-sidebar-width` | `340px` | Width of the chat list on wide layouts |
 | `height` | `--pc-height` | `640px` | Height of the element (or just set `height` in your CSS) |
-| `pattern` | `--pc-pattern` | faint dots | Backdrop pattern; `none` for a plain backdrop |
+| `pattern` | `--pc-pattern` | `none` | A backdrop pattern behind the messages: any CSS background image |
 
 **Dark look.** `ui.dark` (or `plug-chat[theme="dark"] { ... }` in your CSS)
 holds the colours that differ in the dark. Brand colour, shapes, type and sizes
@@ -137,6 +137,7 @@ background never leaks into the dark look.
 | `layout` | `bubbles` (default) | Messages in bubbles, yours on one side |
 | | `flat` | No bubbles, everyone on one side, a picture and name on every block, a line between days. Suits workspaces, support desks and communities |
 | `density` | `comfortable` (default), `compact` | Tighter rows and headers |
+| `nav` (attribute) | `off` | Leave out the navigation rail (a tab bar on phones); its controls move into the chat list's header |
 
 The layout follows the space the element is given, not the device: two panes
 from 700px wide (info screens slide in beside the conversation), one pane below

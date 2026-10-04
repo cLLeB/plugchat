@@ -310,6 +310,7 @@ session your site already has. Give the element a height with CSS.
 | `e2ee`, `calls`, `stories` | Set to `off` to hide that feature |
 | `layout` | `bubbles` (default) or `flat` |
 | `density` | `compact` for tighter rows |
+| `nav` | `off` leaves out the navigation rail (a tab bar on phones) and puts its controls in the chat list's header |
 | `stylesheet` | URL of a CSS file to apply inside the chat |
 | `history` | Set to `off` if your app manages the browser's back button itself. By default, opening a chat on a phone-width layout adds a history step so the device's back button returns to the chat list |
 | `notification-icon` | An image URL to use in desktop notifications instead of the sender's picture |

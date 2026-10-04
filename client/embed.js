@@ -11,7 +11,7 @@ const el = document.querySelector('plug-chat');
 const query = new URLSearchParams(location.search);
 const hostOrigin = query.get('origin'); // the embedding page, when it wants messages pinned to it
 
-for (const name of ['peer', 'peer-handle', 'invite', 'lang', 'dir', 'theme', 'heading', 'calls', 'stories', 'e2ee', 'layout', 'density']) {
+for (const name of ['peer', 'peer-handle', 'invite', 'lang', 'dir', 'theme', 'heading', 'calls', 'stories', 'e2ee', 'layout', 'density', 'nav']) {
   if (query.has(name)) el.setAttribute(name, query.get(name));
 }
 if (/^#[0-9a-f]{3,8}$/i.test(query.get('accent') ?? '')) el.style.setProperty('--pc-accent', query.get('accent'));

@@ -25,36 +25,36 @@ function h(tag, props = {}, ...kids) {
 const SYSTEM_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 // [token, label, kind, default, extra]
 const TOKENS = [
-  ['accent', 'Brand colour', 'color', '#2f6fed'],
+  ['accent', 'Brand colour', 'color', '#5146e5'],
   ['accentFg', 'Text on the brand colour', 'color', '#ffffff'],
   ['bg', 'Panels', 'color', '#ffffff'],
-  ['surface', 'Fields and hover', 'color', '#f1f3f6'],
-  ['chat', 'Behind the messages', 'color', '#eef1f5'],
+  ['surface', 'Fields and hover', 'color', '#f2f3f7'],
+  ['chat', 'Behind the messages', 'color', '#ffffff'],
   ['fg', 'Text', 'color', '#111418'],
   ['muted', 'Secondary text', 'color', '#667085'],
-  ['border', 'Lines', 'color', '#e4e7ec'],
-  ['bubble', 'Incoming message', 'color', '#ffffff'],
+  ['border', 'Lines', 'color', '#e6e8ee'],
+  ['bubble', 'Incoming message', 'color', '#eef0f5'],
   ['bubbleOut', 'Outgoing message', 'text', '', 'a colour or a CSS gradient'],
   ['radius', 'Frame corners', 'range', 16, [0, 28, 'px']],
-  ['bubbleRadius', 'Message corners', 'range', 18, [0, 24, 'px']],
+  ['bubbleRadius', 'Message corners', 'range', 20, [0, 24, 'px']],
   ['controlRadius', 'Buttons and fields', 'range', 12, [0, 24, 'px']],
   ['borderWidth', 'Line thickness', 'range', 1, [0, 3, 'px']],
   ['fontSize', 'Text size', 'range', 15, [12, 20, 'px']],
   ['sidebarWidth', 'Chat list width', 'range', 340, [240, 440, 'px']],
   ['avatarRadius', 'Picture shape', 'select', '50%', [['50%', 'Circle'], ['30%', 'Rounded'], ['6px', 'Square']]],
   ['font', 'Typeface', 'select', SYSTEM_FONT, [[SYSTEM_FONT, 'System'], ['Georgia, "Times New Roman", serif', 'Serif'], ['"Trebuchet MS", "Segoe UI", sans-serif', 'Humanist'], ['ui-monospace, Consolas, monospace', 'Monospace']]],
-  ['pattern', 'Backdrop pattern', 'select', '', [['', 'Dots'], ['none', 'None']]],
+  ['pattern', 'Backdrop pattern', 'select', 'none', [['none', 'None'], ['radial-gradient(color-mix(in srgb, currentColor 7%, transparent) 1px, transparent 1.4px)', 'Dots']]],
 ];
 const DARK_TOKENS = [
-  ['bg', 'Panels', '#15181d'], ['surface', 'Fields and hover', '#20242c'], ['chat', 'Behind the messages', '#0e1014'],
-  ['fg', 'Text', '#e9ecf1'], ['border', 'Lines', '#2a2f38'], ['bubble', 'Incoming message', '#232831'],
+  ['bg', 'Panels', '#14161c'], ['surface', 'Fields and hover', '#20232c'], ['chat', 'Behind the messages', '#14161c'],
+  ['fg', 'Text', '#e9ecf1'], ['border', 'Lines', '#2a2f38'], ['bubble', 'Incoming message', '#262a35'],
 ];
 const PRESETS = {
   'Default': {},
   'Workspace': { layout: 'flat', density: 'compact', theme: { accent: '#5b3df5', radius: '8px', controlRadius: '6px', avatarRadius: '6px', pattern: 'none' } },
-  'Soft': { theme: { accent: '#e5484d', radius: '24px', bubbleRadius: '22px', controlRadius: '20px', chat: '#fff5f5', pattern: 'none' } },
+  'Soft': { theme: { accent: '#e5484d', radius: '24px', bubbleRadius: '24px', controlRadius: '20px', chat: '#fff7f6', bubble: '#ffffff' } },
   'Minimal': { theme: { accent: '#111418', bubbleOut: '#111418', radius: '0px', bubbleRadius: '6px', controlRadius: '4px', chat: '#ffffff', pattern: 'none' }, dark: { accent: '#e9ecf1', accentFg: '#111418', bubbleOut: '#e9ecf1', bubbleOutFg: '#111418' } },
-  'Forest': { theme: { accent: '#0b6b4f', chat: '#eef5f1', surface: '#eef3f0' } },
+  'Forest': { theme: { accent: '#0b6b4f', bubbleOut: '#0b6b4f', chat: '#eef5f1', bubble: '#ffffff', surface: '#e9f0ec' } },
 };
 const FEATURE_LABELS = {
   groups: 'Group chats', directory: 'Browse people', files: 'Photos and files', voiceNotes: 'Voice notes', reactions: 'Reactions', replies: 'Replies',

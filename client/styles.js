@@ -1,7 +1,10 @@
-// The look of <plug-chat>. Patterned on what people already know from the
-// messengers on their phones: a chat list with previews and badges, grouped
-// bubbles on a tinted backdrop, time and ticks inside the bubble, a rounded
-// composer whose main button is a microphone until there is something to send.
+// The look of <plug-chat>. It borrows what each well-known messenger does best
+// and belongs to none of them: a navigation rail (a tab bar on phones), a chat
+// list with brief "2h" times, story rings and unread counts; clean bubbles on
+// a plain backdrop, with a gradient that shifts down the screen on your own
+// messages; time and delivery status under a block of messages rather than in
+// every bubble; replies as a faded line above the answer; and one rounded box
+// for composing, with add on the left and send or record on the right.
 //
 // Nothing here is fixed. Hosts change colours, fonts, corner radii, border
 // widths and sizes with the --pc-* variables, restyle any element through
@@ -12,30 +15,30 @@
 export const STYLE = `
 :host {
   color-scheme: light;
-  --pc-accent: #2f6fed; --pc-accent-fg: #fff;
-  --pc-bg: #fff; --pc-surface: #f1f3f6; --pc-chat: #eef1f5; --pc-fg: #111418; --pc-muted: #667085;
-  --pc-border: #e4e7ec; --pc-bubble: #fff; --pc-danger: #d92d20; --pc-online: #12b76a; --pc-radius: 16px;
+  --pc-accent: #5146e5; --pc-accent-fg: #fff;
+  --pc-bg: #fff; --pc-surface: #f2f3f7; --pc-chat: #fff; --pc-fg: #111418; --pc-muted: #667085;
+  --pc-border: #e6e8ee; --pc-bubble: #eef0f5; --pc-danger: #d92d20; --pc-online: #12b76a; --pc-radius: 16px;
   /* type */
   --pc-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; --pc-font-size: 15px;
   /* shape */
-  --pc-bubble-radius: 18px; --pc-avatar-radius: 50%; --pc-control-radius: 12px; --pc-border-width: 1px;
+  --pc-bubble-radius: 20px; --pc-avatar-radius: 50%; --pc-control-radius: 12px; --pc-border-width: 1px;
   /* messages: incoming text colour, and the outgoing bubble (any CSS background, so a gradient works) */
   --pc-bubble-fg: var(--pc-fg); --pc-bubble-out-fg: var(--pc-accent-fg);
-  --pc-bubble-out: linear-gradient(135deg, color-mix(in oklab, var(--pc-accent) 86%, #fff), var(--pc-accent) 55%, color-mix(in oklab, var(--pc-accent) 84%, #000));
+  --pc-bubble-out: linear-gradient(to bottom, color-mix(in oklab, var(--pc-accent) 50%, #ff4fb8), var(--pc-accent) 45%, color-mix(in oklab, var(--pc-accent) 55%, #19b5fe));
   /* sizes, and the backdrop behind the messages ("none" for a plain one) */
   --pc-sidebar-width: 340px; --pc-height: 640px; --pc-sender-l: 40%;
-  --pc-pattern: radial-gradient(color-mix(in srgb, var(--pc-fg) 6%, transparent) 1px, transparent 1.4px);
+  --pc-pattern: none;
   display: block; height: var(--pc-height); container-type: inline-size;
   font: var(--pc-font-size)/1.4 var(--pc-font); color: var(--pc-fg);
 }
 :host([theme="dark"]) {
-  color-scheme: dark; --pc-accent: #3d7bf0; --pc-accent-fg: #fff; --pc-bg: #15181d; --pc-surface: #20242c; --pc-chat: #0e1014;
-  --pc-fg: #e9ecf1; --pc-muted: #98a2b3; --pc-border: #2a2f38; --pc-bubble: #232831; --pc-danger: #f97066; --pc-sender-l: 72%;
+  color-scheme: dark; --pc-accent: #7c74ff; --pc-accent-fg: #fff; --pc-bg: #14161c; --pc-surface: #20232c; --pc-chat: #14161c;
+  --pc-fg: #e9ecf1; --pc-muted: #98a2b3; --pc-border: #2a2f38; --pc-bubble: #262a35; --pc-danger: #f97066; --pc-sender-l: 72%;
 }
 @media (prefers-color-scheme: dark) {
   :host(:not([theme="light"])) {
-    color-scheme: dark; --pc-accent: #3d7bf0; --pc-accent-fg: #fff; --pc-bg: #15181d; --pc-surface: #20242c; --pc-chat: #0e1014;
-    --pc-fg: #e9ecf1; --pc-muted: #98a2b3; --pc-border: #2a2f38; --pc-bubble: #232831; --pc-danger: #f97066; --pc-sender-l: 72%;
+    color-scheme: dark; --pc-accent: #7c74ff; --pc-accent-fg: #fff; --pc-bg: #14161c; --pc-surface: #20232c; --pc-chat: #14161c;
+    --pc-fg: #e9ecf1; --pc-muted: #98a2b3; --pc-border: #2a2f38; --pc-bubble: #262a35; --pc-danger: #f97066; --pc-sender-l: 72%;
   }
 }
 * { box-sizing: border-box; scrollbar-width: thin; }
@@ -508,6 +511,71 @@ dialog.drawer { position: absolute; inset-block: 0; inset-inline: auto 0; margin
 slot[name="empty"] { display: contents; }
 ::slotted([slot="sidebar-top"]), ::slotted([slot="sidebar-bottom"]), ::slotted([slot="thread-top"]) { flex: none; }
 
+/* ---- identity ---- */
+/* getting around: a rail beside the chat list */
+.rail { width: 64px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0; background: var(--pc-surface); border-inline-end: var(--pc-border-width) solid var(--pc-border); }
+.rail .gap { flex: 1; }
+.navbtn { position: relative; width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; color: var(--pc-muted); flex: none; }
+.navbtn:hover { background: color-mix(in srgb, var(--pc-fg) 7%, transparent); color: var(--pc-fg); }
+.navbtn.on { color: var(--pc-accent); background: color-mix(in srgb, var(--pc-accent) 14%, transparent); }
+.navbtn.compose, .navbtn.compose:hover { background: var(--pc-accent); color: var(--pc-accent-fg); }
+.navbtn .badge { position: absolute; top: -5px; inset-inline-end: -7px; min-width: 18px; height: 18px; font-size: 11px; padding: 0 4px; box-shadow: 0 0 0 2px var(--pc-surface); }
+.navme { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--pc-muted); flex: none; }
+.navme .avatar { width: 34px; height: 34px; font-size: 13px; }
+.navme:hover { box-shadow: 0 0 0 2px var(--pc-accent); }
+
+/* chat list: a large title, roomy rows, brief times, a ring for unseen stories */
+.side > .bar { padding-top: 14px; }
+.side > .bar h2 { font-size: 26px; font-weight: 800; letter-spacing: -.025em; }
+.find input { border-radius: 14px; }
+.story { width: 66px; }
+.ring .avatar { width: 54px; height: 54px; }
+.conv { border-radius: 16px; padding: 10px; gap: 12px; }
+.conv > .avatar { width: 52px; height: 52px; font-size: 18px; }
+.conv .name { font-weight: 600; flex: 0 1 auto; }
+.conv .preview { flex: 0 1 auto; }
+.conv .when { font-size: 13px; }
+.conv.unread .when { color: var(--pc-muted); font-weight: 400; }
+.conv > .badge { min-width: 20px; height: 20px; font-size: 11px; padding: 0 6px; }
+.avatar.storied { box-shadow: 0 0 0 2px var(--pc-bg), 0 0 0 4px var(--pc-accent); }
+
+/* conversation: plain backdrop, soft incoming bubbles, a gradient that shifts down the screen on your own */
+.msgs { gap: 3px; padding-inline: 16px; }
+.bubble { box-shadow: none; padding: 8px 14px 9px; }
+.mine .bubble { background-attachment: fixed; }
+.bubble.mention { box-shadow: 0 0 0 2px color-mix(in srgb, var(--pc-accent) 60%, transparent); }
+.col > .meta { float: none; margin: 3px 6px 2px; color: var(--pc-muted); opacity: 1; font-size: 11px; }
+.col > .meta .ticks.read { color: var(--pc-accent); }
+.day, .sys { background: none; box-shadow: none; }
+.day { position: static; text-transform: uppercase; letter-spacing: .07em; font-size: 11px; font-weight: 600; margin: 14px 0 6px; }
+/* what a message answers: a faded line tucked behind the top of the bubble */
+.col > .quote { display: inline-flex; align-items: center; gap: 6px; width: auto; max-width: 100%; border: 0; border-radius: 16px; background: var(--pc-surface); color: var(--pc-muted); padding: 6px 12px 13px; margin: 0 0 -9px; font-size: 13px; }
+.col > .quote span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col > .quote svg { width: 13px; height: 13px; flex: none; }
+.col > .quote + .bubble { position: relative; }
+.reacts { margin: -8px 10px 2px; }
+.react { border: 0; background: var(--pc-surface); box-shadow: 0 0 0 2px var(--pc-chat); line-height: 22px; }
+.react.on { background: color-mix(in srgb, var(--pc-accent) 18%, var(--pc-surface)); box-shadow: 0 0 0 2px var(--pc-chat), 0 0 0 3px var(--pc-accent); }
+
+/* composing: one rounded box */
+.composer { border-top: 0; padding: 6px 12px calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--pc-chat); }
+.dock { flex: 1; min-width: 0; display: flex; align-items: flex-end; gap: 2px; padding: 4px; background: var(--pc-surface); border: var(--pc-border-width) solid var(--pc-border); border-radius: 26px; }
+.dock:focus-within { border-color: color-mix(in srgb, var(--pc-accent) 55%, var(--pc-border)); }
+.dock .pill { background: none; padding: 0; }
+.dock > .attach, .dock > .attach:hover { width: 34px; height: 34px; margin: 2px; background: var(--pc-accent); color: var(--pc-accent-fg); }
+.dock > .attach svg { width: 18px; height: 18px; stroke-width: 2.2; }
+.dock .rec { background: none; height: 38px; }
+.dock .action { width: 38px; height: 38px; }
+.dock .action svg { width: 20px; height: 20px; stroke-width: 2.2; }
+.dock .action.mic { background: none; color: var(--pc-muted); }
+.dock .action.mic:hover { color: var(--pc-fg); filter: none; }
+.dock textarea { padding: 9px 6px; min-height: 38px; }
+.dock .pill .icon { width: 36px; height: 36px; }
+.extras { background: var(--pc-chat); border-top: 0; }
+.root.flat .col > .meta { margin-inline: 0; }
+.root.flat .col > .quote { margin-bottom: 2px; padding-bottom: 6px; }
+.root.flat .composer, .root.flat .extras { background: var(--pc-bg); }
+
 /* ---- one pane at a time on phones and narrow embeds ---- */
 @container (max-width: 700px) {
   .root { border: 0; border-radius: 0; }
@@ -559,4 +627,19 @@ slot[name="empty"] { display: contents; }
 @keyframes pc-up { from { transform: translateY(40px); opacity: .6; } }
 @keyframes pc-side { from { transform: translateX(28px); opacity: .6; } }
 @media (prefers-reduced-motion: reduce) { dialog, .row.new .col, .toast { animation: none !important; } }
+/* on a phone the rail becomes a tab bar along the bottom of the chat list */
+@container (max-width: 700px) {
+  .rail { position: absolute; inset-inline: 0; bottom: 0; z-index: 3; width: auto; height: calc(58px + env(safe-area-inset-bottom, 0px)); padding: 7px 12px env(safe-area-inset-bottom, 0px); flex-direction: row; align-items: flex-start; justify-content: space-around; border-inline-end: 0; border-top: var(--pc-border-width) solid var(--pc-border); background: color-mix(in srgb, var(--pc-bg) 86%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+  .rail .gap, .rail .themebtn { display: none; }
+  .root.open .rail { display: none; }
+  .navbtn.compose { border-radius: 50%; }
+  .navme { margin-top: 2px; }
+  .root.nav .side { padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
+  .root.nav .list { padding-bottom: 8px; }
+  .side > .bar h2 { font-size: 28px; }
+  .conv { border-radius: 0; padding: 10px 14px; }
+  .conv .body { border-bottom: 0; padding-bottom: 0; margin-bottom: 0; }
+  .msgs { padding-inline: 12px; }
+  .composer { padding-inline: 10px; }
+}
 `;

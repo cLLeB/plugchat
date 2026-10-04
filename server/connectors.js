@@ -121,7 +121,7 @@ export function databaseBus(store, { pollMs = 150 } = {}) {
     publish: (msg) => void store.run('INSERT INTO bus (instance, payload, at) VALUES (?, ?, ?)', instance, JSON.stringify(msg), Date.now()),
     subscribe: (fn) => void (handler = fn),
     setPresence(userId, online) {
-      if (online) store.run('INSERT OR REPLACE INTO presence (user_id, instance, at) VALUES (?, ?, ?)', userId, instance, Date.now());
+      if (online) store.run('INSERT INTO presence (user_id, instance, at) VALUES (?, ?, ?) ON CONFLICT(user_id, instance) DO UPDATE SET at = excluded.at', userId, instance, Date.now());
       else store.run('DELETE FROM presence WHERE user_id = ? AND instance = ?', userId, instance);
     },
     isOnline: (userId) => !!store.get('SELECT 1 FROM presence WHERE user_id = ? AND instance != ? AND at > ?', userId, instance, Date.now() - STALE_MS),

@@ -99,7 +99,7 @@ server (`accentFg` or `accent-fg`, both work).
 
 | Token | CSS variable | Default (light) | What it controls |
 |---|---|---|---|
-| `accent` | `--pc-accent` | `#5146e5` | Your brand colour: buttons, badges, links, outgoing messages |
+| `accent` | `--pc-accent` | `#e8452c` | Your brand colour: buttons, badges, links, outgoing messages |
 | `accentFg` | `--pc-accent-fg` | `#fff` | Text on the brand colour |
 | `bg` | `--pc-bg` | `#fff` | Panels, the chat list, the composer |
 | `surface` | `--pc-surface` | `#f2f3f7` | Fields, hover, settings cards |

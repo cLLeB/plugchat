@@ -2,7 +2,16 @@
   "name": "plugchat",
   "version": "0.1.0",
   "description": "Self-hosted in-app messaging you add to a platform that already exists: one endpoint, one tag, your own servers.",
-  "keywords": ["chat", "messaging", "self-hosted", "web-component", "websocket", "end-to-end-encryption", "embeddable", "in-app-chat"],
+  "keywords": [
+    "chat",
+    "messaging",
+    "self-hosted",
+    "web-component",
+    "websocket",
+    "end-to-end-encryption",
+    "embeddable",
+    "in-app-chat"
+  ],
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -57,5 +66,8 @@
   "devDependencies": {
     "@types/node": "^26.6.4",
     "typescript": "^7.0.2"
+  },
+  "optionalDependencies": {
+    "pg": "^8.23.1"
   }
 }

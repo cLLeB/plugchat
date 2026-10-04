@@ -145,7 +145,11 @@ function h(tag, props = {}, ...kids) {
 // Like replaceChildren, but drops null/false and flattens arrays the way h() does.
 const fill = (el, ...kids) => el.replaceChildren(...kids.flat(Infinity).filter((c) => c != null && c !== false));
 
-const hue = (s) => [...s].reduce((a, c) => (a * 31 + c.codePointAt(0)) % 360, 7);
+// A steady colour per name, for initials and sender names. Violet and purple hues (240–330) are left out of the wheel.
+const hue = (s) => {
+  const h = [...s].reduce((a, c) => (a * 31 + c.codePointAt(0)) % 270, 7);
+  return h < 240 ? h : h + 90;
+};
 const initials = (name) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => [...w][0].toUpperCase()).join('') || '?';
 const first = (name) => name.split(/\s+/)[0];
 const clock = (t) => new Date(t).toLocaleTimeString(LOCALE, { hour: 'numeric', minute: '2-digit' });
@@ -2069,14 +2073,14 @@ class PlugChatElement extends HTMLElement {
   /** What the + button offers here: [icon, label, colour, action]. Depends on what the platform switched on. */
   _attachItems() {
     return [
-      this._can('files') && ['image', T('Photo or file'), '#7c5cff', () => this.$file.click()],
+      this._can('files') && ['image', T('Photo or file'), '#0ea5e9', () => this.$file.click()],
       this._can('polls') && ['poll', T('Poll'), '#f79009', () => this._pollDialog()],
       this._can('location') && navigator.geolocation && ['map', T('Location'), '#12b76a', () => this._shareLocation()],
       this._can('viewOnce') && ['eye', this.viewOnce ? T('View once: on') : T('View once: off'), this.viewOnce ? '#2f6fed' : '#667085', () => {
         this.viewOnce = !this.viewOnce;
         this._renderBanner();
       }],
-      this._can('scheduled') && ['timer', T('Send later'), '#0ea5e9', () => this._scheduleDialog()],
+      this._can('scheduled') && ['timer', T('Send later'), '#e0245e', () => this._scheduleDialog()],
       // Whatever else the host platform offers: send money, share a product, book a slot...
       ...(this.actions ?? []).map((a) => [a.icon in ICON ? a.icon : 'plus', a.label, a.color ?? '#e5484d', () =>
         this._guard(Promise.resolve().then(() => a.run({ conversation: this.convs.get(this.activeId), chat: this.chat, element: this })))]),

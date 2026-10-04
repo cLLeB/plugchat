@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
+import { PostgresDatabase } from './postgres.js';
 
 // All SQL lives in this file so another database can be supported by
 // re-implementing this one class.
@@ -240,13 +241,24 @@ const ADDED_COLUMNS = [
 const MAX_DEVICES = 10;
 
 export class Store {
-  constructor(file) {
-    this.db = new DatabaseSync(file);
-    this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
-    this.db.exec(SCHEMA);
-    for (const [table, column, ddl] of ADDED_COLUMNS) {
-      const has = this.db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
-      if (!has) this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+  /**
+   * @param {string} file                      Path of the SQLite database file.
+   * @param {{ url: string, schema?: string }} [database]  Use PostgreSQL instead.
+   */
+  constructor(file, database) {
+    this.postgres = !!database;
+    if (database) {
+      this.db = new PostgresDatabase(database);
+      this.db.exec(SCHEMA);
+      for (const [table, column, ddl] of ADDED_COLUMNS) this.db.exec(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} ${ddl}`);
+    } else {
+      this.db = new DatabaseSync(file);
+      this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
+      this.db.exec(SCHEMA);
+      for (const [table, column, ddl] of ADDED_COLUMNS) {
+        const has = this.db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
+        if (!has) this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+      }
     }
     this._stmts = new Map();
   }
@@ -1147,6 +1159,7 @@ export class Store {
 
   /** A consistent copy of the database in one file, safe to take while running. */
   backupTo(file) {
+    if (this.postgres) throw new Error('This PlugChat keeps its data in PostgreSQL: back it up with pg_dump.');
     this.db.prepare('VACUUM INTO ?').run(file);
   }
 

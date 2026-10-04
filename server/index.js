@@ -3,7 +3,7 @@ import { Readable } from 'node:stream';
 import { mkdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Store } from './store.js';
 import { Hub } from './hub.js';
@@ -69,8 +69,8 @@ const STUDIO_PAGE = `<!doctype html>
 <meta name="robots" content="noindex">
 <title>PlugChat setup studio</title>
 <style>
-:root { color-scheme: light dark; --bg: #f4f5f7; --card: #fff; --fg: #16181d; --muted: #667085; --line: #e3e5ea; --accent: #3b5bdb; --code: #0f1420; --codefg: #dfe5f2; }
-@media (prefers-color-scheme: dark) { :root { --bg: #0f1115; --card: #191c23; --fg: #e8eaee; --muted: #98a2b3; --line: #2a2e37; --accent: #8ea2ff; --code: #0a0c11; } }
+:root { color-scheme: light dark; --bg: #f4f5f7; --card: #fff; --fg: #16181d; --muted: #667085; --line: #e3e5ea; --accent: #d83c24; --code: #0f1420; --codefg: #dfe5f2; }
+@media (prefers-color-scheme: dark) { :root { --bg: #0f1115; --card: #191c23; --fg: #e8eaee; --muted: #98a2b3; --line: #2a2e37; --accent: #ff7a5c; --code: #0a0c11; } }
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; display: flex; flex-direction: column; }
@@ -140,8 +140,8 @@ const ADMIN_PAGE = `<!doctype html>
 <meta name="robots" content="noindex">
 <title>Chat moderation</title>
 <style>
-:root { color-scheme: light dark; --bg: #f4f5f7; --card: #fff; --fg: #16181d; --muted: #6b7280; --line: #e3e5ea; --accent: #3b5bdb; --danger: #c92a2a; }
-@media (prefers-color-scheme: dark) { :root { --bg: #111317; --card: #1b1e25; --fg: #e8eaee; --muted: #9199a6; --line: #2a2e37; --accent: #748ffc; --danger: #ff8787; } }
+:root { color-scheme: light dark; --bg: #f4f5f7; --card: #fff; --fg: #16181d; --muted: #6b7280; --line: #e3e5ea; --accent: #d83c24; --danger: #c92a2a; }
+@media (prefers-color-scheme: dark) { :root { --bg: #111317; --card: #1b1e25; --fg: #e8eaee; --muted: #9199a6; --line: #2a2e37; --accent: #ff7a5c; --danger: #ff8787; } }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
 #app { max-width: 880px; margin: 0 auto; padding: 20px 16px 60px; }
 h1 { font-size: 22px; } h2 { font-size: 17px; margin: 0 0 10px; }
@@ -297,6 +297,7 @@ export function createPlugChat(options = {}) {
     plugins = [],
     webhookEvents = ['message.new', 'message.reported', 'call.started'],
     studio = false,
+    database,
     log = console,
   } = options;
 
@@ -319,7 +320,12 @@ export function createPlugChat(options = {}) {
   const callMode = hooks.has('call.join') ? 'external' : 'p2p';
   const removeFile = (id) => Promise.resolve().then(() => storage.remove(id)).catch(() => {});
 
-  const store = new Store(join(dataDir, 'plugchat.db'));
+  // SQLite in the data folder by default; `database` points at the platform's own PostgreSQL instead.
+  // (PLUGCHAT_TEST_DATABASE runs the test suite against PostgreSQL, each data folder in a schema of its own.)
+  const testUrl = process.env.PLUGCHAT_TEST_DATABASE;
+  const databaseSettings = typeof database === 'string' ? { url: database } : database
+    ?? (testUrl ? { url: testUrl, schema: `t_${createHash('sha1').update(resolve(dataDir)).digest('hex').slice(0, 20)}` } : undefined);
+  const store = new Store(join(dataDir, 'plugchat.db'), databaseSettings);
   const previews = new Map(); // url -> { at, value } (a small cache in front of the host's preview hook)
   const seen = new Map(); // sub -> "name\navatar" already written to the store
   const allowWrite = limiter(rateLimit.perSecond, rateLimit.burst);

@@ -15,7 +15,7 @@
 export const STYLE = `
 :host {
   color-scheme: light;
-  --pc-accent: #5146e5; --pc-accent-fg: #fff;
+  --pc-accent: #e8452c; --pc-accent-fg: #fff;
   --pc-bg: #fff; --pc-surface: #f2f3f7; --pc-chat: #fff; --pc-fg: #111418; --pc-muted: #667085;
   --pc-border: #e6e8ee; --pc-bubble: #eef0f5; --pc-danger: #d92d20; --pc-online: #12b76a; --pc-radius: 16px;
   /* type */
@@ -24,7 +24,7 @@ export const STYLE = `
   --pc-bubble-radius: 20px; --pc-avatar-radius: 50%; --pc-control-radius: 12px; --pc-border-width: 1px;
   /* messages: incoming text colour, and the outgoing bubble (any CSS background, so a gradient works) */
   --pc-bubble-fg: var(--pc-fg); --pc-bubble-out-fg: var(--pc-accent-fg);
-  --pc-bubble-out: linear-gradient(to bottom, color-mix(in oklab, var(--pc-accent) 50%, #ff4fb8), var(--pc-accent) 45%, color-mix(in oklab, var(--pc-accent) 55%, #19b5fe));
+  --pc-bubble-out: linear-gradient(to bottom, color-mix(in oklab, var(--pc-accent) 55%, #ffb02e), var(--pc-accent) 45%, color-mix(in oklab, var(--pc-accent) 60%, #e0245e));
   /* sizes, and the backdrop behind the messages ("none" for a plain one) */
   --pc-sidebar-width: 340px; --pc-height: 640px; --pc-sender-l: 40%;
   --pc-pattern: none;
@@ -32,13 +32,13 @@ export const STYLE = `
   font: var(--pc-font-size)/1.4 var(--pc-font); color: var(--pc-fg);
 }
 :host([theme="dark"]) {
-  color-scheme: dark; --pc-accent: #7c74ff; --pc-accent-fg: #fff; --pc-bg: #14161c; --pc-surface: #20232c; --pc-chat: #14161c;
-  --pc-fg: #e9ecf1; --pc-muted: #98a2b3; --pc-border: #2a2f38; --pc-bubble: #262a35; --pc-danger: #f97066; --pc-sender-l: 72%;
+  color-scheme: dark; --pc-accent: #ff6a4d; --pc-accent-fg: #fff; --pc-bg: #14161c; --pc-surface: #20232c; --pc-chat: #14161c;
+  --pc-fg: #e9ecf1; --pc-muted: #98a2b3; --pc-border: #2a2f38; --pc-bubble: #262a35; --pc-danger: #f97066; --pc-sender-l: 70%;
 }
 @media (prefers-color-scheme: dark) {
   :host(:not([theme="light"])) {
-    color-scheme: dark; --pc-accent: #7c74ff; --pc-accent-fg: #fff; --pc-bg: #14161c; --pc-surface: #20232c; --pc-chat: #14161c;
-    --pc-fg: #e9ecf1; --pc-muted: #98a2b3; --pc-border: #2a2f38; --pc-bubble: #262a35; --pc-danger: #f97066; --pc-sender-l: 72%;
+    color-scheme: dark; --pc-accent: #ff6a4d; --pc-accent-fg: #fff; --pc-bg: #14161c; --pc-surface: #20232c; --pc-chat: #14161c;
+    --pc-fg: #e9ecf1; --pc-muted: #98a2b3; --pc-border: #2a2f38; --pc-bubble: #262a35; --pc-danger: #f97066; --pc-sender-l: 70%;
   }
 }
 * { box-sizing: border-box; scrollbar-width: thin; }

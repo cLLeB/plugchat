@@ -25,7 +25,7 @@ function h(tag, props = {}, ...kids) {
 const SYSTEM_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 // [token, label, kind, default, extra]
 const TOKENS = [
-  ['accent', 'Brand colour', 'color', '#5146e5'],
+  ['accent', 'Brand colour', 'color', '#e8452c'],
   ['accentFg', 'Text on the brand colour', 'color', '#ffffff'],
   ['bg', 'Panels', 'color', '#ffffff'],
   ['surface', 'Fields and hover', 'color', '#f2f3f7'],
@@ -51,8 +51,8 @@ const DARK_TOKENS = [
 ];
 const PRESETS = {
   'Default': {},
-  'Workspace': { layout: 'flat', density: 'compact', theme: { accent: '#5b3df5', radius: '8px', controlRadius: '6px', avatarRadius: '6px', pattern: 'none' } },
-  'Soft': { theme: { accent: '#e5484d', radius: '24px', bubbleRadius: '24px', controlRadius: '20px', chat: '#fff7f6', bubble: '#ffffff' } },
+  'Workspace': { layout: 'flat', density: 'compact', theme: { accent: '#0e7c86', bubbleOut: '#0e7c86', radius: '8px', controlRadius: '6px', avatarRadius: '6px' } },
+  'Soft': { theme: { accent: '#d6336c', bubbleOut: 'linear-gradient(to bottom, #ff8a5c, #d6336c)', radius: '24px', bubbleRadius: '24px', controlRadius: '20px', chat: '#fff7f6', bubble: '#ffffff' } },
   'Minimal': { theme: { accent: '#111418', bubbleOut: '#111418', radius: '0px', bubbleRadius: '6px', controlRadius: '4px', chat: '#ffffff', pattern: 'none' }, dark: { accent: '#e9ecf1', accentFg: '#111418', bubbleOut: '#e9ecf1', bubbleOutFg: '#111418' } },
   'Forest': { theme: { accent: '#0b6b4f', bubbleOut: '#0b6b4f', chat: '#eef5f1', bubble: '#ffffff', surface: '#e9f0ec' } },
 };

@@ -25,9 +25,15 @@ const installed = (command) => spawnSync(command.join(' '), { stdio: 'ignore', s
 
 function stop(child) {
   if (child.exitCode !== null) return;
-  // Compilers and `dotnet run` start the real server as a child process: stop the whole tree.
+  // The real server is often a grandchild (a shell, a compiler, `dotnet run`): stop the whole tree.
   if (windows) spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
-  else child.kill('SIGKILL');
+  else {
+    try {
+      process.kill(-child.pid, 'SIGKILL'); // the process group started with detached: true
+    } catch {
+      child.kill('SIGKILL');
+    }
+  }
 }
 
 async function check(starter, port) {
@@ -38,7 +44,7 @@ async function check(starter, port) {
   const api = `http://127.0.0.1:${server.address().port}/plugchat/v1`;
   const command = starter.run.join(' ').replace('{port}', String(port));
   let output = '';
-  const child = spawn(command, { cwd: join(here, dirname(starter.file)), env: { ...process.env, PLUGCHAT_SECRET: SECRET, PORT: String(port) }, shell: true });
+  const child = spawn(command, { cwd: join(here, dirname(starter.file)), env: { ...process.env, PLUGCHAT_SECRET: SECRET, PORT: String(port) }, shell: true, detached: !windows });
   child.stdout.on('data', (d) => (output += d));
   child.stderr.on('data', (d) => (output += d));
   try {

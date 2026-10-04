@@ -1,0 +1,4 @@
+# The same bytes on every system: scripts with a #! line must not gain Windows line endings.
+* text=auto eol=lf
+*.png binary
+*.jpg binary

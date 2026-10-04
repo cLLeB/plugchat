@@ -18,6 +18,12 @@ const secret = randomBytes(48).toString('base64url');
 const work = mkdtempSync(join(tmpdir(), 'plugchat-proxy-'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const windows = process.platform === 'win32';
+for (const tool of ['php', 'nginx']) {
+  if (spawnSync(`${tool} -v`, { shell: true, stdio: 'ignore' }).status !== 0) {
+    console.error(`This example needs ${tool} on the PATH.`);
+    process.exit(1);
+  }
+}
 
 // nginx wants its own folder with logs/ and temp/ inside it.
 for (const dir of ['logs', 'temp', 'conf']) mkdirSync(join(work, dir));
@@ -25,7 +31,7 @@ cpSync(join(here, 'nginx.conf'), join(work, 'conf', 'nginx.conf'));
 
 const children = [];
 const start = (command, options) => {
-  const child = spawn(command, { shell: true, stdio: check ? 'ignore' : 'inherit', ...options });
+  const child = spawn(command, { shell: true, detached: !windows, stdio: check ? 'ignore' : 'inherit', ...options });
   children.push(child);
   return child;
 };
@@ -33,8 +39,15 @@ const stop = () => {
   spawnSync(`nginx -p "${work}" -c conf/nginx.conf -s stop`, { shell: true, stdio: 'ignore' });
   for (const child of children) {
     if (child.exitCode !== null) continue;
+    // The real server is often a grandchild (a shell, a compiler, `dotnet run`): stop the whole tree.
     if (windows) spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
-    else child.kill('SIGKILL');
+    else {
+      try {
+        process.kill(-child.pid, 'SIGKILL'); // the process group started with detached: true
+      } catch {
+        child.kill('SIGKILL');
+      }
+    }
   }
 };
 

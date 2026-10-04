@@ -174,6 +174,15 @@ audio, video.media { display: block; max-width: 260px; margin-bottom: 4px; borde
 .acts .emoji:hover { background: var(--pc-surface); }
 .acts .danger:hover { color: var(--pc-danger); }
 .typing { min-height: 20px; padding: 0 16px; font-size: 12px; color: var(--pc-muted); }
+.newline { display: flex; align-items: center; gap: 10px; color: var(--pc-accent); font-size: 12px; font-weight: 600; margin: 8px 0; }
+.newline::before, .newline::after { content: ""; flex: 1; height: 1px; background: var(--pc-accent); opacity: .5; }
+.bubble.pending { opacity: .65; }
+.failed { color: var(--pc-danger); font-size: 12px; margin: 2px 0 4px; }
+.tobottom { position: absolute; right: 16px; bottom: calc(100% + 30px); min-width: 38px; height: 38px; padding: 0 10px; border-radius: 19px; background: var(--pc-bg); border: 1px solid var(--pc-border); box-shadow: 0 4px 14px rgba(0, 0, 0, .18); font-weight: 600; z-index: 1; }
+.menu .sel { background: var(--pc-surface); }
+.main.drop { outline: 2px dashed var(--pc-accent); outline-offset: -6px; }
+.pic { cursor: zoom-in; }
+img.full { max-width: 100%; max-height: 70vh; border-radius: 8px; align-self: center; }
 .banner { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-top: 1px solid var(--pc-border); font-size: 13px; color: var(--pc-muted); }
 .banner span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .banner .icon { width: 26px; height: 26px; }
@@ -304,6 +313,9 @@ class PlugChatElement extends HTMLElement {
     this.editing = null;
     this.pendingFile = null;
     this.viewOnce = false;
+    this.lastSeen = new Map(); // userId -> timestamp, for "last seen" in one-to-one chats
+    this._below = 0; // messages that arrived while scrolled up
+    this._mention = null; // open @-mention picker: { start, items, index }
     /** Host-supplied renderers for custom message types: { [type]: (message) => Node | string }. */
     this.renderers ??= {};
     /** Host-supplied entries for the attach menu: [{ label, run({ conversation, chat, element }) }]. */
@@ -436,9 +448,11 @@ class PlugChatElement extends HTMLElement {
       this._renderList();
       if (m.conversationId === this.activeId) {
         this._clearTyping(m.conversationId, m.senderId);
+        if (m.senderId !== chat.me.id && !this.$toBottom.hidden) this._below += 1;
         this._renderMessages({ stick: true });
         this._markRead();
       }
+      if (m.senderId !== chat.me.id) this._notify(m);
       if (m.kind === 'call' && m.senderId !== chat.me.id && Date.now() - m.createdAt < 45_000) this._ring(m);
       this._announceUnread();
       if (m.senderId !== chat.me.id) this.dispatchEvent(new CustomEvent('plugchat:message', { detail: { message: m } }));
@@ -475,7 +489,11 @@ class PlugChatElement extends HTMLElement {
       who.set(e.userId, setTimeout(() => this._clearTyping(e.conversationId, e.userId), 4000));
       this._renderTyping();
     });
-    chat.on('presence', () => (this._renderList(), this._renderHeader()));
+    chat.on('presence', (e) => {
+      if (!e.online && e.lastSeen) this.lastSeen.set(e.userId, e.lastSeen);
+      this._renderList();
+      this._renderHeader();
+    });
     chat.on('conversation', (c) => {
       this.convs.set(c.id, c);
       // Keys may just have arrived from another device: retry what could not be read.
@@ -587,7 +605,7 @@ class PlugChatElement extends HTMLElement {
             c.lastMessage && h('span', { class: 'when' }, shortWhen(c.lastMessage.createdAt)),
           ),
           h('div', { class: 'line' },
-            h('span', { class: 'preview' }, this._preview(c, c.lastMessage)),
+            h('span', { class: 'preview' }, c.id !== this.activeId && this._draft(c.id) ? T('Draft: {text}', { text: this._draft(c.id) }) : this._preview(c, c.lastMessage)),
             c.unread > 0 && c.id !== this.activeId && h('span', { class: `badge${c.muted ? ' quiet' : ''}`, 'aria-label': T('{n} unread', { n: c.unread }) }, c.unread > 99 ? '99+' : String(c.unread)),
           ),
         ),
@@ -661,8 +679,31 @@ class PlugChatElement extends HTMLElement {
     }
   }
 
+  // Unsent text is kept per conversation, across reloads, on this device only.
+  _draftKey(id) {
+    return `plugchat:draft:${this.chat.me.id}:${id}`;
+  }
+  _draft(id) {
+    try {
+      return localStorage.getItem(this._draftKey(id)) ?? '';
+    } catch {
+      return '';
+    }
+  }
+  _saveDraft(id, text) {
+    try {
+      if (text.trim()) localStorage.setItem(this._draftKey(id), text);
+      else localStorage.removeItem(this._draftKey(id));
+    } catch {
+      // storage unavailable (private window): drafts simply do not persist
+    }
+  }
+
   async _select(id, focusMessageId) {
+    if (this.activeId && this.$input?.isConnected && !this.editing) this._saveDraft(this.activeId, this.$input.value);
     this.activeId = id;
+    this._below = 0;
+    this._mention = null;
     this.replyTo = this.editing = this.pendingFile = null;
     this.viewOnce = false;
     this.pins = [];
@@ -679,24 +720,29 @@ class PlugChatElement extends HTMLElement {
     this.$error = h('div', { class: 'error', hidden: true, role: 'alert' });
     this.$banner = h('div', { class: 'banner', hidden: true });
     this.$input = h('textarea', { rows: '1', placeholder: T('Message'), 'aria-label': T('Message'),
-      oninput: () => this._onInput(),
+      oninput: () => (this._onInput(), this._mentionLookup()),
       onkeydown: (e) => {
+        if (this._mention && this._mentionKey(e)) return;
         if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) (e.preventDefault(), this._submit());
         if (e.key === 'Escape') this._setDraftMode(null);
       },
+      onpaste: (e) => {
+        const file = [...(e.clipboardData?.files ?? [])][0];
+        if (file) (e.preventDefault(), this._attach(file));
+      },
     });
+    this.$mentions = h('div', { class: 'menu', hidden: true, role: 'listbox', 'aria-label': T('Mention someone') });
+    this.$toBottom = h('button', { class: 'tobottom', hidden: true, type: 'button', title: T('Jump to latest'), 'aria-label': T('Jump to latest'), onclick: () => this._toLatest() });
     this.$file = h('input', { type: 'file', hidden: true, onchange: () => {
-      this.pendingFile = this.$file.files[0] ?? null;
+      this._attach(this.$file.files[0] ?? null);
       this.$file.value = '';
-      this._renderBanner();
-      this._onInput();
     } });
     this.$menu = h('div', { class: 'menu', hidden: true, role: 'menu' });
     this.$mic = h('button', { class: 'icon', icon: 'mic', type: 'button', title: T('Record a voice note'), 'aria-label': T('Record a voice note'),
       hidden: !(navigator.mediaDevices && globalThis.MediaRecorder), onclick: () => this._toggleRecording() });
     this.$send = h('button', { class: 'icon sendbtn', icon: 'send', type: 'submit', title: T('Send'), 'aria-label': T('Send'), disabled: true });
     this.$composer = h('form', { class: 'composer', onsubmit: (e) => (e.preventDefault(), this._submit()) },
-      this.$file, this.$menu,
+      this.$file, this.$menu, this.$mentions, this.$toBottom,
       h('button', { class: 'icon', icon: 'plus', type: 'button', title: T('Attach'), 'aria-label': T('Attach'), 'aria-haspopup': 'menu', onclick: () => this._toggleMenu() }),
       this.$input, this.$mic, this.$send,
     );
@@ -705,12 +751,32 @@ class PlugChatElement extends HTMLElement {
     this._renderHeader();
     this._renderComposerState();
     this.chat.pins(id).then((p) => this.activeId === id && ((this.pins = p), this._renderPins()), () => {});
+    this.$input.value = this._draft(id);
+    this._onInput(true);
+
+    // Dropping a file anywhere on the conversation attaches it.
+    this.$main.ondragover = (e) => e.dataTransfer?.types.includes('Files') && (e.preventDefault(), this.$main.classList.add('drop'));
+    this.$main.ondragleave = () => this.$main.classList.remove('drop');
+    this.$main.ondrop = (e) => {
+      this.$main.classList.remove('drop');
+      const file = e.dataTransfer?.files[0];
+      if (file) (e.preventDefault(), this._attach(file));
+    };
+    this.$msgs.onscroll = () => this._onScroll();
+
+    // Where this person left off, so new messages can be marked as such.
+    const conv = this.convs.get(id);
+    const unreadFrom = conv.unread > 0 ? conv.lastSeq - conv.unread : null;
+    const peer = conv.type === 'dm' ? this._other(conv) : null;
+    if (peer && !this.chat.online.has(peer.userId)) {
+      this.chat.user(peer.userId).then((u) => u.lastSeen && (this.lastSeen.set(u.id, u.lastSeen), this._renderHeader()), () => {});
+    }
 
     if (!this.msgs.has(id)) {
       fill(this.$msgs, h('div', { class: 'hint' }, T('Loading…')));
       try {
         const list = await this.chat.messages(id);
-        this.msgs.set(id, { list, more: list.length === 50, moreAfter: false });
+        this.msgs.set(id, { list, more: list.length === 50, moreAfter: false, unreadFrom });
       } catch (e) {
         if (this.activeId === id) fill(this.$msgs, h('div', { class: 'hint' }, T('Could not load messages: {reason}', { reason: e.message })));
         return;
@@ -737,7 +803,8 @@ class PlugChatElement extends HTMLElement {
     const other = conv.type === 'dm' ? this._other(conv) : null;
     // The host's own call vendor handles groups too; built-in peer-to-peer calls are one-to-one.
     const canCall = this._on('calls') && (this._external() || (other && this.calls));
-    const status = other ? (this.chat.online.has(other.userId) ? T('Online') : T('Offline')) : T('{n} members', { n: conv.members.length }) + (conv.announce ? T(' · announcements') : '');
+    const seen = other && this.lastSeen.get(other.userId);
+    const status = other ? (this.chat.online.has(other.userId) ? T('Online') : seen ? T('Last seen {when}', { when: shortWhen(seen) }) : T('Offline')) : T('{n} members', { n: conv.members.length }) + (conv.announce ? T(' · announcements') : '');
     fill(this.$header, 
       h('button', { class: 'icon backbtn', icon: 'back', title: T('Back'), 'aria-label': T('Back to conversations'), onclick: () => this._select(null) }),
       this._avatar(this._title(conv), other?.avatar, { online: !!other && this.chat.online.has(other.userId) }),
@@ -826,9 +893,15 @@ class PlugChatElement extends HTMLElement {
     if (!state.list.length) nodes.push(h('div', { class: 'hint' }, conv.encrypted ? T('Messages here are end-to-end encrypted. Say hello.') : T('No messages yet. Say hello.')));
 
     let prev = null;
+    let divided = false;
     for (const m of state.list) {
       const newDay = !prev || new Date(prev.createdAt).toDateString() !== new Date(m.createdAt).toDateString();
       if (newDay) nodes.push(h('div', { class: 'day' }, dayLabel(m.createdAt)));
+      // A line where this person stopped reading last time.
+      if (state.unreadFrom != null && !divided && m.seq > state.unreadFrom && m.senderId !== me) {
+        divided = true;
+        nodes.push(h('div', { class: 'newline', role: 'separator' }, T('New messages')));
+      }
       if (m.kind === 'system') {
         nodes.push(h('div', { class: 'sys' }, m.text));
         prev = null;
@@ -854,10 +927,11 @@ class PlugChatElement extends HTMLElement {
             m.pinned && h('span', { icon: 'pin', title: T('Pinned') }),
             m.expiresAt && h('span', { icon: 'timer', title: T('Disappearing message') }),
             m.editedAt && T('edited ·'),
-            clock(m.createdAt),
-            mine && h('span', { title: m.seq <= othersRead ? T('Read') : T('Sent') }, m.seq <= othersRead ? '✓✓' : '✓'),
+            m.pending && !m.failed ? T('Sending…') : clock(m.createdAt),
+            mine && !m.pending && h('span', { title: m.seq <= othersRead ? T('Read') : T('Sent') }, m.seq <= othersRead ? '✓✓' : '✓'),
           ),
         );
+        if (m.pending) bubble.classList.add('pending');
       }
 
       const reacts = Object.entries(m.reactions ?? {});
@@ -871,8 +945,11 @@ class PlugChatElement extends HTMLElement {
               title: users.map((u) => this._memberName(conv, u)).join(', '),
               onclick: () => this._toggleReaction(m, emoji),
             }, `${emoji} ${users.length}`))),
+          m.failed && h('div', { class: 'failed', role: 'alert' }, `${T('Not sent')} · ${m.failed} `,
+            h('button', { class: 'linkbtn', onclick: () => this._deliver(m.conversationId, m.content, m.id) }, T('Retry')),
+            h('button', { class: 'linkbtn', onclick: () => ((state.list = state.list.filter((x) => x.id !== m.id)), this._renderMessages()) }, T('Discard'))),
         ),
-        !m.deleted && !m.undecryptable && this._actions(m, mine, conv),
+        !m.deleted && !m.undecryptable && !m.pending && this._actions(m, mine, conv),
       );
       bubble.addEventListener('click', (e) => {
         if (e.target.closest('a, button, audio, video')) return;
@@ -893,6 +970,34 @@ class PlugChatElement extends HTMLElement {
       if (nearBottom || instant) box.scrollTop = box.scrollHeight;
     } else {
       box.scrollTop = nearBottom ? box.scrollHeight : box.scrollHeight - keep;
+    }
+    this._onScroll();
+  }
+
+  /** A photo, full size. */
+  _lightbox(url, name) {
+    this._openDialog(h('div', { class: 'panel' }, this._dialogTitle(name), h('img', { class: 'full', src: url, alt: name })));
+  }
+
+  /** A system notification for a message that arrived while this tab was not being looked at. */
+  _notify(m) {
+    const conv = this.convs.get(m.conversationId);
+    const wanted = this._notifyOn() && globalThis.Notification?.permission === 'granted';
+    const looking = document.visibilityState === 'visible' && m.conversationId === this.activeId && this.getClientRects().length;
+    if (!wanted || looking || !conv || (conv.muted && !m.mentions?.includes(this.chat.me.id))) return;
+    const note = new Notification(this._title(conv), { body: this._preview(conv, m), tag: conv.id });
+    note.onclick = () => {
+      window.focus();
+      this._select(conv.id);
+      note.close();
+    };
+  }
+
+  _notifyOn() {
+    try {
+      return localStorage.getItem('plugchat:notify') === 'on';
+    } catch {
+      return false;
     }
   }
 
@@ -990,7 +1095,7 @@ class PlugChatElement extends HTMLElement {
     };
     const small = m.file.size <= 8 * 1048576;
     if (INLINE_IMAGES.has(m.file.mime) && small) {
-      const img = h('img', { class: 'pic', alt: m.file.name, title: label });
+      const img = h('img', { class: 'pic', alt: m.file.name, title: label, onclick: () => img.src && this._lightbox(img.src, m.file.name) });
       blobUrl().then((u) => (img.src = u), () => (img.alt = T('Image unavailable')));
       return img;
     }
@@ -1034,16 +1139,94 @@ class PlugChatElement extends HTMLElement {
 
   // ---- composer ----
 
-  _onInput() {
+  _onInput(restoring = false) {
     const el = this.$input;
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight + 2, 120)}px`;
     this.$send.disabled = !el.value.trim() && !this.pendingFile;
     const t = Date.now();
-    if (el.value && t - (this._typedAt ?? 0) > 2000) {
+    if (!restoring && el.value && t - (this._typedAt ?? 0) > 2000) {
       this._typedAt = t;
       this.chat.typing(this.activeId);
     }
+  }
+
+  _attach(file) {
+    this.pendingFile = file;
+    this._renderBanner();
+    this._onInput(true);
+    this.$input.focus();
+  }
+
+  // ---- @-mentions: typing "@" in a group offers its members ----
+
+  _mentionLookup() {
+    const conv = this.convs.get(this.activeId);
+    const el = this.$input;
+    const typed = /(^|\s)@([^\s@]*)$/.exec(el.value.slice(0, el.selectionStart));
+    if (!typed || conv?.type !== 'group') return this._closeMentions();
+    const q = typed[2].toLowerCase();
+    const items = conv.members.filter((m) => m.userId !== this.chat.me.id && m.name.toLowerCase().split(/\s+/).some((part) => part.startsWith(q))).slice(0, 6);
+    if (!items.length) return this._closeMentions();
+    this._mention = { start: el.selectionStart - typed[2].length - 1, items, index: 0 };
+    this._renderMentions();
+  }
+
+  _renderMentions() {
+    const { items, index } = this._mention;
+    this.$mentions.hidden = false;
+    fill(this.$mentions, items.map((m, i) =>
+      h('button', { type: 'button', role: 'option', 'aria-selected': String(i === index), class: i === index ? 'sel' : '', onclick: () => this._pickMention(m) },
+        this._avatar(m.name, m.avatar, { small: true }), m.name)));
+  }
+
+  _closeMentions() {
+    this._mention = null;
+    if (this.$mentions) this.$mentions.hidden = true;
+  }
+
+  /** Arrow keys, Enter and Tab drive the picker while it is open. Returns true when it used the key. */
+  _mentionKey(e) {
+    const mention = this._mention;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      mention.index = (mention.index + (e.key === 'ArrowDown' ? 1 : mention.items.length - 1)) % mention.items.length;
+      this._renderMentions();
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      this._pickMention(mention.items[mention.index]);
+    } else if (e.key === 'Escape') {
+      this._closeMentions();
+    } else {
+      return false;
+    }
+    e.preventDefault();
+    return true;
+  }
+
+  _pickMention(member) {
+    const el = this.$input;
+    const before = el.value.slice(0, this._mention.start);
+    const insert = `@${first(member.name)} `;
+    el.value = before + insert + el.value.slice(el.selectionStart);
+    el.selectionStart = el.selectionEnd = before.length + insert.length;
+    this._closeMentions();
+    this._onInput();
+    el.focus();
+  }
+
+  // ---- staying oriented in a busy conversation ----
+
+  _onScroll() {
+    const box = this.$msgs;
+    const away = box.scrollHeight - box.scrollTop - box.clientHeight > 200;
+    if (!away) this._below = 0;
+    this.$toBottom.hidden = !away;
+    this.$toBottom.textContent = this._below ? `↓ ${this._below}` : '↓';
+  }
+
+  _toLatest() {
+    const state = this.msgs.get(this.activeId);
+    if (state?.moreAfter) return (this.msgs.delete(this.activeId), this._select(this.activeId));
+    this.$msgs.scrollTop = this.$msgs.scrollHeight;
   }
 
   _toggleMenu(force) {
@@ -1104,13 +1287,48 @@ class PlugChatElement extends HTMLElement {
       ? conv.members.filter((m) => m.userId !== this.chat.me.id && text.toLowerCase().includes(`@${first(m.name).toLowerCase()}`)).map((m) => m.userId)
       : [];
     this.$input.value = '';
+    this._saveDraft(id, '');
+    this._closeMentions();
     this._setDraftMode(null);
+    if (editing) {
+      try {
+        await this.chat.edit(editing, text);
+      } catch (e) {
+        if (this.activeId === id && !this.$input.value) (this.$input.value = text), this._onInput(true);
+        this._error(e.message);
+      }
+      return;
+    }
+    this._deliver(id, { text, file, replyTo: replyTo?.id, viewOnce, mentions: mentions.length ? mentions : undefined });
+  }
+
+  /**
+   * Show the message at once, marked as sending, then swap in the real one.
+   * If it fails it stays in the thread with a way to retry, instead of vanishing.
+   */
+  async _deliver(id, content, pendingId = `pending:${crypto.randomUUID()}`) {
+    const state = this.msgs.get(id);
+    const show = (patch) => {
+      if (!state) return;
+      const pending = {
+        id: pendingId, pending: true, conversationId: id, senderId: this.chat.me.id, kind: 'text',
+        text: content.text || (content.file ? `📎 ${content.file.name}` : ''), file: null, replyTo: content.replyTo ?? null,
+        createdAt: Date.now(), reactions: {}, mentions: [], content, ...patch,
+      };
+      state.list = [...state.list.filter((m) => m.id !== pendingId), pending];
+      if (this.activeId === id) this._renderMessages({ stick: true, instant: true });
+    };
+    if (!state?.moreAfter) show({});
     try {
-      if (editing) await this.chat.edit(editing, text);
-      else await this.chat.send(id, { text, file, replyTo: replyTo?.id, viewOnce, mentions: mentions.length ? mentions : undefined });
+      const sent = await this.chat.send(id, content);
+      if (state) {
+        state.list = state.list.filter((m) => m.id !== pendingId);
+        if (!state.moreAfter && !state.list.some((m) => m.id === sent.id)) state.list.push(sent);
+        if (this.activeId === id) this._renderMessages({ stick: true, instant: true });
+      }
     } catch (e) {
-      if (this.activeId === id && !this.$input.value) (this.$input.value = text), this._onInput();
-      this._error(e.message);
+      show({ failed: e.message });
+      if (!state) this._error(e.message);
     }
   }
 
@@ -1486,6 +1704,10 @@ class PlugChatElement extends HTMLElement {
       this._dialogTitle(T('Settings')),
       toggle(T('Send read receipts'), privacy.readReceipts, (v) => this.chat.setPrivacy({ readReceipts: v }), T('Others see when you have read their messages.')),
       toggle(T('Show when I am online'), privacy.presence, (v) => this.chat.setPrivacy({ presence: v })),
+      globalThis.Notification && toggle(T('Desktop notifications'), this._notifyOn() && Notification.permission === 'granted', async (v) => {
+        if (v && (await Notification.requestPermission()) !== 'granted') throw new Error(T('Notifications are blocked in this browser.'));
+        localStorage.setItem('plugchat:notify', v ? 'on' : 'off');
+      }, T('Show a notification when a message arrives and you are not looking at the chat.')),
       h('button', { class: 'btn plain', onclick: () => this._starredDialog() }, T('Starred messages')),
       devices.length > 0 && h('div', { class: 'field' }, T('Devices that can read your encrypted chats.'),
         h('div', { class: 'people' }, devices.map((d) => h('div', { class: 'person' },

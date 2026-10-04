@@ -194,6 +194,9 @@ export function createPlugChat(options = {}) {
   const userView = (user, auth) => ({
     ...user,
     online: hub.isOnline(user.id) && (auth.admin || auth.sub === user.id || store.privacy(user.id).presence),
+    // "Last seen" follows the same switch as online status.
+    lastSeen: auth.admin || auth.sub === user.id || store.privacy(user.id).presence ? user.lastSeen : null,
+    suspended: auth.admin ? store.suspension(user.id) : undefined,
     handles: auth.admin || auth.sub === user.id || handleVisibility === 'all' ? store.handlesOf(user.id) : undefined,
   });
 

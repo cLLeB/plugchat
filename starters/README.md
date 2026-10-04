@@ -49,9 +49,8 @@ against a real PlugChat, that the token is accepted as the right person, that
 a genuine webhook is accepted, and that forged and unsigned ones are refused.
 Name starters to require them: `node starters/verify.mjs python go`.
 
-Verified on the development machine so far: **Node.js**. The others are
-written to the same contract and to each language's standard library, and are
-checked by the same script wherever the language is installed.
+All seven pass this check as of October 2026, run with Node 24, Python 3.13,
+PHP 8.5, Go 1.27, Ruby 4.0 (webrick 1.9), Java 21 and .NET 8 on Windows.
 
 ## Mobile apps
 

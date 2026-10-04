@@ -3,3 +3,5 @@ plugchat-data/
 examples/host-app/data/
 *.log
 examples/host-app/data-vendor/
+starters/csharp/bin/
+starters/csharp/obj/

@@ -198,14 +198,13 @@ Stated plainly so you can plan around them:
   (with a mirrored right-to-left layout). The translations are mine and have
   not been reviewed by native speakers. Other languages are added by the host
   through `strings`.
-- **Not yet exercised here:** the Dockerfile; the starters for Python, PHP, Go,
-  Ruby, Java and C# (the Node starter is verified end to end by
-  `starters/verify.mjs`, which runs the others too wherever their language is
-  installed); S3 storage against a live bucket (request signing is checked
-  against Amazon's published example and a stand-in bucket); the native WebView
-  bridges; and calls between two real devices on different networks (the call
-  flow is tested in one browser with synthetic media). Treat those as written
-  to spec, not proven.
+- **Not yet exercised here:** the Dockerfile (there is no Docker on the
+  development machine); S3 storage against a live bucket (request signing is
+  checked against Amazon's published example and a stand-in bucket); the mobile
+  WebView wrappers and native bridges; and calls between two real devices on
+  different networks (the call flow is tested in one browser with synthetic
+  media). Treat those as written to spec, not proven. The backend starters for
+  all seven languages are run against a real PlugChat by `starters/verify.mjs`.
 - **Not published to npm.** The package installs and runs from a tarball
   (`npm pack`); publishing it is the owner's step.
 

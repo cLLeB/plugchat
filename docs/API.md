@@ -63,6 +63,7 @@ complete list, `createdBy` optional).
 |---|---|
 | `GET /v1/conversations/:id/messages?limit=` | A page, oldest first (default 50, max 200). No range: the latest. `before=<seq>` / `after=<seq>` page backwards and forwards; `around=<seq>` returns the messages either side of one |
 | `GET /v1/messages/:id` | One message |
+| `GET /v1/conversations/:id/attachments` | Messages that carry a photo or file, newest first |
 | `PUT` / `DELETE /v1/messages/:id/star`, `GET /v1/starred` | Private bookmarks |
 | `POST /v1/conversations/:id/messages` | Send (see below) |
 | `PATCH /v1/messages/:id` `{body}` | Edit your own text message |

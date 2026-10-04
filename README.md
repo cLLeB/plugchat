@@ -62,7 +62,9 @@ announcement channels where only admins post, per-person mute, archive and pin.
 pinned messages, polls, location sharing, read receipts, typing indicators,
 online presence, unread counts, search.
 
-**Media** — photos, files, inline audio and video, voice notes.
+**Media** — photos, files, inline audio and video, voice notes, several
+attachments at once, a full-size photo viewer, and a per-conversation view of
+everything that was shared.
 
 **Ephemeral** — disappearing-message timers per conversation, view-once
 messages that are wiped after each recipient opens them, 24-hour stories.

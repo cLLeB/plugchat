@@ -184,6 +184,10 @@ audio, video.media { display: block; max-width: 260px; margin-bottom: 4px; borde
 .emojis { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; max-height: 210px; overflow-y: auto; width: min(300px, 80vw); }
 .emojis .emoji { font-size: 20px; width: 34px; height: 34px; border-radius: 8px; }
 .emojis .emoji:hover { background: var(--pc-surface); }
+.media { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; max-height: 60vh; overflow-y: auto; }
+.media .item { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; min-width: 0; }
+.media .pic { max-width: 100%; max-height: 110px; margin: 0; }
+.media audio, .media video.media { max-width: 100%; }
 .notice { display: flex; gap: 8px; align-items: center; padding: 8px 14px; font-size: 13px; background: color-mix(in srgb, #f08c00 18%, var(--pc-bg)); border-bottom: 1px solid var(--pc-border); }
 .notice span:nth-child(2) { flex: 1; }
 .notice svg { width: 16px; height: 16px; }
@@ -772,6 +776,7 @@ class PlugChatElement extends HTMLElement {
     this._below = 0;
     this._mention = null;
     this.replyTo = this.editing = this.pendingFile = null;
+    this.pendingMore = [];
     this.viewOnce = false;
     this.pins = [];
     this.opened.clear();
@@ -806,8 +811,8 @@ class PlugChatElement extends HTMLElement {
         }
       },
       onpaste: (e) => {
-        const file = [...(e.clipboardData?.files ?? [])][0];
-        if (file) (e.preventDefault(), this._attach(file));
+        const files = [...(e.clipboardData?.files ?? [])];
+        if (files.length) (e.preventDefault(), this._attach(files));
       },
     });
     this.$mentions = h('div', { class: 'menu', hidden: true, role: 'listbox', 'aria-label': T('Mention someone') });
@@ -820,8 +825,8 @@ class PlugChatElement extends HTMLElement {
       el.focus();
     }));
     this.$toBottom = h('button', { class: 'tobottom', hidden: true, type: 'button', title: T('Jump to latest'), 'aria-label': T('Jump to latest'), onclick: () => this._toLatest() });
-    this.$file = h('input', { type: 'file', hidden: true, onchange: () => {
-      this._attach(this.$file.files[0] ?? null);
+    this.$file = h('input', { type: 'file', hidden: true, multiple: true, onchange: () => {
+      this._attach(this.$file.files);
       this.$file.value = '';
     } });
     this.$menu = h('div', { class: 'menu', hidden: true, role: 'menu' });
@@ -848,8 +853,8 @@ class PlugChatElement extends HTMLElement {
     this.$main.ondragleave = () => this.$main.classList.remove('drop');
     this.$main.ondrop = (e) => {
       this.$main.classList.remove('drop');
-      const file = e.dataTransfer?.files[0];
-      if (file) (e.preventDefault(), this._attach(file));
+      const files = e.dataTransfer?.files;
+      if (files?.length) (e.preventDefault(), this._attach(files));
     };
     this.$msgs.onscroll = () => this._onScroll();
 
@@ -1069,6 +1074,19 @@ class PlugChatElement extends HTMLElement {
       box.scrollTop = nearBottom ? box.scrollHeight : box.scrollHeight - keep;
     }
     this._onScroll();
+  }
+
+  /** Everything that was shared in a conversation: photos, voice notes, files. */
+  async _mediaDialog(conv) {
+    const list = (await this.chat.attachments(conv.id).catch(() => [])).filter((m) => m.file && !m.undecryptable);
+    this._openDialog(h('div', { class: 'panel' },
+      this._dialogTitle(T('Media and files')),
+      list.length === 0 && h('div', { class: 'hint' }, T('Nothing has been shared here yet.')),
+      h('div', { class: 'media' }, list.map((m) => h('div', { class: 'item' },
+        this._attachment(m),
+        h('button', { class: 'linkbtn', onclick: () => (this.$dialog.close(), this._jumpTo(m.id)) },
+          `${first(this._memberName(conv, m.senderId))} · ${shortWhen(m.createdAt)}`)))),
+    ));
   }
 
   /** A person's card: who they are, whether they are around, and what you can do. */
@@ -1325,8 +1343,11 @@ class PlugChatElement extends HTMLElement {
     }
   }
 
-  _attach(file) {
-    this.pendingFile = file;
+  /** Queue one or several files (up to 10) to go out with the next send, one message each. */
+  _attach(files) {
+    const list = (files instanceof File ? [files] : [...(files ?? [])]).slice(0, 10);
+    this.pendingFile = list[0] ?? null;
+    this.pendingMore = list.slice(1);
     this._renderBanner();
     this._onInput(true);
     this.$input.focus();
@@ -1427,7 +1448,7 @@ class PlugChatElement extends HTMLElement {
     this.replyTo = mode?.replyTo ?? null;
     this.editing = mode?.editing ?? null;
     if (this.editing) this.$input.value = this.editing.text;
-    else if (!mode) (this.pendingFile = null), (this.viewOnce = false);
+    else if (!mode) (this.pendingFile = null), (this.pendingMore = []), (this.viewOnce = false);
     this._renderBanner();
     this._onInput();
     this.$input.focus();
@@ -1438,7 +1459,7 @@ class PlugChatElement extends HTMLElement {
     const parts = [];
     if (this.editing) parts.push(T('Editing message'));
     if (this.replyTo) parts.push(T('Replying to {name}: {text}', { name: this._memberName(conv, this.replyTo.senderId), text: this._snippet(this.replyTo) }));
-    if (this.pendingFile) parts.push(`📎 ${this.pendingFile.name} (${size(this.pendingFile.size)})`);
+    if (this.pendingFile) parts.push(`📎 ${this.pendingFile.name} (${size(this.pendingFile.size)})${this.pendingMore.length ? ` +${this.pendingMore.length}` : ''}`);
     if (this.viewOnce) parts.push(T('View once'));
     this.$banner.hidden = !parts.length;
     if (!parts.length) return;
@@ -1454,6 +1475,7 @@ class PlugChatElement extends HTMLElement {
   async _submit() {
     const text = this.$input.value.trim();
     const { editing, replyTo, pendingFile: file, activeId: id, viewOnce } = this;
+    const more = this.pendingMore ?? [];
     if (!text && !file) return;
     const conv = this.convs.get(id);
     // Writing "@Ama" notifies Ama even if she muted the group.
@@ -1473,7 +1495,9 @@ class PlugChatElement extends HTMLElement {
       }
       return;
     }
-    this._deliver(id, { text, file, replyTo: replyTo?.id, viewOnce, mentions: mentions.length ? mentions : undefined });
+    // The text travels with the first file; any further files follow in order.
+    await this._deliver(id, { text, file, replyTo: replyTo?.id, viewOnce, mentions: mentions.length ? mentions : undefined });
+    for (const extra of more) await this._deliver(id, { text: '', file: extra, viewOnce });
   }
 
   /**
@@ -1729,6 +1753,7 @@ class PlugChatElement extends HTMLElement {
       h('label', { class: 'field' }, T('Disappearing messages'), $timer),
       conv.encrypted && h('label', { class: 'field' }, T('Safety code — compare with the other members in person. If it matches, nobody has tampered with your keys.'), $code),
       $err,
+      h('button', { class: 'btn plain', onclick: () => this._mediaDialog(conv) }, T('Media and files')),
       h('button', { class: 'btn plain', onclick: (e) => run(this._exportChat(conv, e.target)) }, T('Export chat')),
       isGroup && h('button', { class: 'btn warn', onclick: () => run(this.chat.leave(conv.id), true) }, T('Leave group')),
       other && h('button', { class: 'btn warn', onclick: () => run(blocked ? this.chat.unblock(other.userId) : this.chat.block(other.userId), true) }, blocked ? T('Unblock {name}', { name: other.name }) : T('Block {name}', { name: other.name })),

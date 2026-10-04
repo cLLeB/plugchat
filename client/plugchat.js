@@ -682,6 +682,13 @@ export class PlugChat {
     return this.send(toConversationId, { text: message.text, file, forwarded: true });
   }
 
+  /** The messages in a conversation that carry a photo or file, newest first. */
+  async attachments(conversationId) {
+    const conv = await this._conv(conversationId);
+    const { messages } = await this._req('GET', `/conversations/${conversationId}/attachments`);
+    return Promise.all(messages.map((m) => this._hydrate(m, conv)));
+  }
+
   /** One message by id (you must be in its conversation). */
   async message(messageId) {
     return this._hydrate(await this._req('GET', `/messages/${messageId}`));

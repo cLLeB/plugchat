@@ -897,6 +897,24 @@ test('moderation console: served locked down, reports carry names and can be dis
   assert.equal((await bob.user('mod-alice')).suspended, undefined, 'other users do not');
 });
 
+test('a conversation lists what was shared in it, without view-once or deleted files', async () => {
+  const a = await client('media-a');
+  const b = await client('media-b');
+  const outsider = await client('media-c');
+  const dm = await a.openDm('media-b');
+  await a.send(dm.id, { text: 'no file here' });
+  const photo = await a.send(dm.id, { file: new File(['png'], 'photo.png', { type: 'image/png' }) });
+  const doc = await b.send(dm.id, { text: 'the minutes', file: new File(['pdf'], 'minutes.pdf', { type: 'application/pdf' }) });
+  await a.send(dm.id, { file: new File(['secret'], 'once.png', { type: 'image/png' }), viewOnce: true });
+  const gone = await a.send(dm.id, { file: new File(['x'], 'gone.txt') });
+  await a.remove(gone.id);
+
+  const shared = await b.attachments(dm.id);
+  assert.deepEqual(shared.map((m) => m.file.name), ['minutes.pdf', 'photo.png']);
+  assert.deepEqual(shared.map((m) => m.id), [doc.id, photo.id]);
+  await assert.rejects(outsider.attachments(dm.id), { status: 404 });
+});
+
 test('platform notices arrive in a read-only inbox', async () => {
   const user = await client('notify-1', 'Nana');
   const arrived = next(user, 'message');

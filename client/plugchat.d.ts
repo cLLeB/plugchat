@@ -233,6 +233,8 @@ export class PlugChat {
   // messages
   messages(conversationId: string, range?: { before?: number; after?: number; around?: number; limit?: number }): Promise<Message[]>;
   message(messageId: string): Promise<Message>;
+  /** Messages in a conversation that carry a photo or file, newest first. */
+  attachments(conversationId: string): Promise<Message[]>;
   send(conversationId: string, content: { text?: string; file?: Blob; replyTo?: string; mentions?: string[]; viewOnce?: boolean }): Promise<Message>;
   sendPoll(conversationId: string, poll: { question: string; options: string[]; multi?: boolean }): Promise<Message>;
   sendLocation(conversationId: string, location: { lat: number; lng: number; label?: string }): Promise<Message>;

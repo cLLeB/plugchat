@@ -785,6 +785,11 @@ export function createPlugChat(options = {}) {
       return { messages: page({ before: num('before'), after: num('after') }) };
     }],
 
+    ['GET', '/v1/conversations/:id/attachments', (ctx) => {
+      access(ctx, ctx.params.id);
+      return { messages: store.listAttachments(ctx.params.id) };
+    }],
+
     ['GET', '/v1/messages/:id', (ctx) => {
       const { message } = messageAccess(ctx, ctx.params.id);
       return { ...message, starred: store._starred(ctx.auth.sub, [message.id]).has(message.id) };

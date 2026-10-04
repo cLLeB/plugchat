@@ -710,6 +710,16 @@ export class Store {
     return rows.map((r) => ({ ...this._messageOut(r, reactions), ...(starred && { starred: starred.has(r.id) }) }));
   }
 
+  /** Messages that carry a file, newest first, for a conversation's media view. */
+  listAttachments(conversationId, limit = 100) {
+    const rows = this.all(
+      `SELECT * FROM messages WHERE conversation_id = ? AND attachment IS NOT NULL AND view_once = 0
+         AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > ?) ORDER BY seq DESC LIMIT ?`,
+      conversationId, Date.now(), limit,
+    );
+    return rows.map((r) => this._messageOut(r));
+  }
+
   // ---- starred messages: a private bookmark list ----
 
   _starred(userId, messageIds) {

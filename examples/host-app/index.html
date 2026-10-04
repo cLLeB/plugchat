@@ -4,105 +4,46 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Alumni Association — Members</title>
-  <style>
-    :root { --brand: #14213d; --accent: #e8452c; --page: #f2f4f3; --card: #fff; --ink: #14201b; --soft: #5f6f68; --line: #dfe5e2; }
-    :root[data-theme="dark"] { --brand: #0f1a30; --accent: #ff6a4d; --page: #0f1211; --card: #191d1b; --ink: #e8eeeb; --soft: #9aa8a2; --line: #2a302d; }
-    * { box-sizing: border-box; }
-    body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--page); color: var(--ink); }
-
-    /* The site's own top bar: brand on the left, who is signed in on the right, sections beneath. */
-    header { background: var(--brand); color: #fff; }
-    .top { max-width: 1040px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
-    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; flex: 1; min-width: 0; white-space: nowrap; }
-    .brand i { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, #ffb02e, #e8452c); flex: none; display: grid; place-items: center; font-style: normal; font-size: 15px; }
-    .brand span { overflow: hidden; text-overflow: ellipsis; }
-    .account { display: flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, .12); border-radius: 22px; padding: 4px 6px 4px 12px; font-size: 14px; flex: none; }
-    .account label { color: rgba(255, 255, 255, .75); }
-    .account select { font: inherit; font-weight: 600; color: #fff; background: transparent; border: 0; padding: 4px 2px; max-width: 150px; cursor: pointer; }
-    .account select option { color: #111; }
-    .badge { background: #ffb02e; color: #14213d; color: #fff; border-radius: 10px; font-size: 12px; font-weight: 700; padding: 1px 7px; }
-    .badge:empty { display: none; }
-    nav { max-width: 1040px; margin: 0 auto; padding: 0 12px; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
-    nav::-webkit-scrollbar { display: none; }
-    nav a { color: rgba(255, 255, 255, .78); text-decoration: none; padding: 9px 12px; border-bottom: 3px solid transparent; white-space: nowrap; font-size: 14px; font-weight: 500; }
-    nav a:hover { color: #fff; }
-    nav a[aria-current] { color: #fff; border-bottom-color: #ffb02e; }
-
-    main { max-width: 1040px; margin: 16px auto; padding: 0 16px; }
-    .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; }
-    .card h2 { margin: 0 0 6px; }
-    .card p { margin: 0 0 14px; color: var(--soft); }
-    .members { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
-    .members a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); color: inherit; text-decoration: none; font-weight: 600; }
-    .members a:hover { border-color: var(--accent); }
-    .members i { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-style: normal; font-size: 13px; background: var(--accent); flex: none; }
-    [data-state="out"] .members-only, [data-state="in"] .guests-only { display: none; }
-    plug-chat { height: min(760px, calc(100dvh - 124px)); }
-
-    /* On a phone the chat gets the whole screen under the site's bar. */
-    @media (max-width: 700px) {
-      .top { padding: 10px 12px; }
-      .account label { display: none; }
-      body { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
-      main { margin: 0; padding: 0; flex: 1; min-height: 0; width: 100%; }
-      main > .members-only { height: 100%; }
-      plug-chat { height: 100%; }
-      .guests-only { margin: 12px; }
-    }
-  </style>
+  <link rel="stylesheet" href="/site.css">
 </head>
-<body>
-  <header>
-    <div class="top">
-      <div class="brand"><i>🎓</i><span>Alumni Association</span></div>
-      <div class="account members-only">
-        <label for="who">Signed in as</label>
-        <select id="who" data-current="{{member}}" aria-label="Switch member">
-          <option value="ama">Ama Owusu</option>
+<body class="app">
+  {{header}}
+  <main>
+    <!-- Not signed in: the association's own sign-in. PlugChat has no accounts or passwords of its own. -->
+    <form class="card signin guests-only" method="post" action="/login">
+      <h2>Members' sign-in</h2>
+      <p>This site stands in for a platform that already exists, with its own members and its own sign-in. Chat appears once you are signed in.</p>
+      {{error}}
+      <label>Member
+        <select name="member" required>
+          <option value="ama">Ama Owusu (staff)</option>
           <option value="kofi">Kofi Mensah</option>
           <option value="esi">Esi Appiah</option>
           <option value="yaw">Yaw Boateng</option>
         </select>
-        <span class="badge" id="unread" title="Unread messages"></span>
-      </div>
-    </div>
-    <nav class="members-only" aria-label="Ways to embed the chat">
-      <a href="/" aria-current="page">Messages</a>
-      <a href="/widget">Floating button</a>
-      <a href="/iframe">Iframe</a>
-      <a href="/moderation">Moderation</a>
-      <a href="/plugchat/studio">Setup studio</a>
-    </nav>
-  </header>
-  <main>
-    <div class="card guests-only">
-      <h2>Members' area</h2>
-      <p>This page stands in for an existing platform with its own accounts. Sign in as a member; open a private window as someone else to chat between them.</p>
-      <div class="members">
-        <a href="/login?as=ama"><i>AO</i>Ama Owusu</a>
-        <a href="/login?as=kofi"><i>KM</i>Kofi Mensah</a>
-        <a href="/login?as=esi"><i>EA</i>Esi Appiah</a>
-        <a href="/login?as=yaw"><i>YB</i>Yaw Boateng</a>
-      </div>
-    </div>
+      </label>
+      <label>Password
+        <input type="password" name="password" required autocomplete="current-password">
+      </label>
+      <button type="submit">Sign in</button>
+      <p class="hint">Demo password for every member: <code>{{password}}</code>. To chat between two members, sign in as the second one in a private window or another browser.</p>
+    </form>
+
     <div class="members-only">
-      <!-- Everything the host adds to its front end: -->
+      <!-- Everything the association added to its front end: -->
       <script type="module" src="/plugchat/client/element.js"></script>
       <plug-chat server="/plugchat" token-url="/api/chat-token" heading="Member messages"></plug-chat>
     </div>
   </main>
   <script>
-    // The site's own account switcher (a real platform has its own sign-in).
-    const who = document.getElementById('who');
-    who.value = [...who.options].find((o) => o.text === who.dataset.current)?.value ?? who.value;
-    who.addEventListener('change', () => (location.href = `/login?as=${who.value}`));
-
-    const chatEl = document.querySelector('plug-chat');
-    // The page around the chat follows the chat's light/dark switch.
     document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    const chatEl = document.querySelector('plug-chat');
+    if (chatEl) {
+    // The page around the chat follows the chat's light/dark switch.
     chatEl.addEventListener('plugchat:theme', (e) => (document.documentElement.dataset.theme = e.detail.theme));
     chatEl.addEventListener('plugchat:unread', (e) => {
-      document.getElementById('unread').textContent = e.detail.count || '';
+      const badge = document.getElementById('unread');
+      if (badge) badge.textContent = e.detail.count || '';
     });
 
     // Optional: things only this platform has. Here, members can share a dues
@@ -121,6 +62,7 @@
         return card;
       },
     };
+    }
   </script>
 </body>
 </html>

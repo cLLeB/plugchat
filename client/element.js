@@ -412,6 +412,26 @@ class PlugChatElement extends ElementBase {
     ];
   }
 
+  /**
+   * Start afresh: forget everything on screen and connect again as whoever the
+   * platform now says is signed in. It happens by itself when the token names a
+   * different person or your token endpoint answers 401; call it yourself if
+   * your app changes user in some other way without reloading the page.
+   */
+  restart() {
+    if (!this.shadowRoot.firstChild) return;
+    this.disconnectedCallback();
+    Object.assign(this, {
+      convs: new Map(), msgs: new Map(), pins: [], feed: [], hits: [], query: '', showArchived: false, activeId: null, filter: 'all',
+      typing: new Map(), lastSeen: new Map(), players: new Map(), cards: new Map(), replyTo: null, editing: null, pendingFile: null, pendingMore: [],
+      viewOnce: false, _below: 0, _popEl: null, _mention: null, _lastUnread: undefined, _pushed: false,
+    });
+    this.opened.clear();
+    this.shadowRoot.replaceChildren();
+    this.dispatchEvent(new CustomEvent('plugchat:unread', { detail: { count: 0 } }));
+    if (this.isConnected) this.connectedCallback();
+  }
+
   /** Is a feature offered? The platform's server decides; the page can only narrow it further. */
   _can(feature) {
     return this._featureProp?.[feature] !== false && this.chat?.me?.features?.[feature] !== false;
@@ -455,7 +475,8 @@ class PlugChatElement extends ElementBase {
 
   connectedCallback() {
     if (!this.shadowRoot.firstChild) this._build();
-    this._onVisible = () => document.visibilityState === 'visible' && this._markRead();
+    // Coming back to the page: mark what is on screen as read, or try again if the chat could not start (not signed in yet).
+    this._onVisible = () => document.visibilityState === 'visible' && (this._started ? this._markRead() : this._maybeStart());
     document.addEventListener('visibilitychange', this._onVisible);
     this._onPop = () => {
       if (!this._pushed) return;
@@ -502,7 +523,8 @@ class PlugChatElement extends ElementBase {
     if (tokenUrl) {
       return async () => {
         const res = await fetch(tokenUrl, { credentials: 'include', headers: { accept: 'application/json' } });
-        if (!res.ok) throw new Error(`token endpoint returned ${res.status}`);
+        // 401 or 403 from your endpoint means "nobody is signed in": the chat then clears itself.
+        if (!res.ok) throw Object.assign(new Error(`token endpoint returned ${res.status}`), { code: res.status === 401 || res.status === 403 ? 'signed_out' : 'unavailable' });
         return (await res.json()).token;
       };
     }
@@ -729,6 +751,9 @@ class PlugChatElement extends ElementBase {
       this._renderList();
     });
     for (const type of ['story.new', 'story.deleted', 'story.viewed']) chat.on(type, () => this._loadStories());
+    // Someone else signed in on this device, or the person signed out: nothing of theirs stays on screen.
+    chat.on('identity', () => this.restart());
+    chat.on('auth', (e) => e.error?.code === 'signed_out' && this.restart());
     chat.on('connection', (e) => {
       // Say so while the link to the server is down; messages typed meanwhile wait with a retry.
       this.$net.hidden = e.state === 'connected';
@@ -2857,9 +2882,7 @@ class PlugChatElement extends ElementBase {
           } }, label))),
         this._can('personalization') && this._personalControls()),
 
-      (this._can('readReceipts') || this._can('presence')) && h('div', { class: 'group' }, h('h4', {}, T('Privacy')),
-        this._can('readReceipts') && row(T('Send read receipts'), privacy.readReceipts, (v) => this.chat.setPrivacy({ readReceipts: v }), T('Others see when you have read their messages.')),
-        this._can('presence') && row(T('Show when I am online'), privacy.presence, (v) => this.chat.setPrivacy({ presence: v }))),
+      h('div', { class: 'group' }, link('lock', T('Privacy'), () => this._privacyDialog())),
 
       globalThis.Notification && h('div', { class: 'group' }, h('h4', {}, T('Notifications')),
         row(T('Desktop notifications'), this._notifyOn() && Notification.permission === 'granted', async (v) => {
@@ -2886,6 +2909,39 @@ class PlugChatElement extends ElementBase {
       (this._can('stars') || this._can('export')) && h('div', { class: 'group' }, h('h4', {}, T('Your data')),
         this._can('stars') && link('star', T('Starred messages'), () => this._starredDialog()),
         this._can('export') && link('download', T('Download my data'), () => run(download()))),
+      $err,
+    ));
+  }
+
+  /** Privacy, on a page of its own: what others can see, who is blocked, and who can read your messages. */
+  async _privacyDialog() {
+    const me = this.chat.me;
+    const privacy = me.privacy ?? { readReceipts: true, presence: true };
+    const $err = h('div', { class: 'error', hidden: true, role: 'alert' });
+    const fail = (e) => (($err.textContent = e.message), ($err.hidden = false));
+    const row = (label, checked, change, hint) => {
+      const box = h('input', { type: 'checkbox', role: 'switch', checked, onchange: () => change(box.checked).catch((e) => ((box.checked = !box.checked), fail(e))) });
+      return h('label', { class: 'setrow' }, h('span', {}, label, hint && h('small', {}, hint)), box);
+    };
+    const blocked = this._can('blocking') ? await this.chat.blocked().catch(() => []) : [];
+    const people = await Promise.all(blocked.map((id) => this.chat.user(id).catch(() => ({ id, name: this._knownName(id), avatar: null }))));
+    const policy = this._ui().privacyUrl;
+    this._openPage(h('div', { class: 'panel' },
+      this._dialogTitle(T('Privacy')),
+      (this._can('readReceipts') || this._can('presence')) && h('div', { class: 'group' }, h('h4', {}, T('What others can see')),
+        this._can('readReceipts') && row(T('Send read receipts'), privacy.readReceipts, (v) => this.chat.setPrivacy({ readReceipts: v }), T('Others see when you have read their messages.')),
+        this._can('presence') && row(T('Show when I am online'), privacy.presence, (v) => this.chat.setPrivacy({ presence: v })),
+        h('p', { class: 'note' }, T('Other people see your name, your picture and your about line. They see when you are online, and when you have read their messages, only if you allow it here.'))),
+      this._can('blocking') && h('div', { class: 'group' }, h('h4', {}, T('Blocked people')),
+        people.length === 0 && h('p', { class: 'note' }, T('Nobody is blocked.')),
+        people.map((user) => h('div', { class: 'setrow' }, this._avatar(user.name, user.avatar, { small: true }), h('span', {}, user.name),
+          h('button', { class: 'linkbtn', onclick: (e) => this.chat.unblock(user.id).then(() => e.target.closest('.setrow').remove(), fail) }, T('Unblock {name}', { name: first(user.name) })))),
+        h('p', { class: 'note' }, T('Blocking someone stops them from messaging or calling you.'))),
+      h('div', { class: 'group' }, h('h4', {}, T('Your messages')),
+        h('p', { class: 'note' }, T('Your messages can be read by the people in the conversation and, unless the conversation is end-to-end encrypted, by the platform that runs this chat.')),
+        this._can('encryption') && this._on('e2ee') && h('p', { class: 'note' }, h('span', { class: 'lockline' }, h('span', { icon: 'lock' })), ' ', T('End-to-end encrypted conversations can only be read on the devices of the people in them.'))),
+      // The platform's own privacy policy, when it has told the chat where it is.
+      typeof policy === 'string' && /^(https?:\/\/|\/)/.test(policy) && h('a', { class: 'linkrow', href: policy, target: '_blank', rel: 'noopener' }, T('Privacy policy')),
       $err,
     ));
   }

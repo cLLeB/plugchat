@@ -52,6 +52,8 @@ export class PlugChatElement extends HTMLElement {
   features: Partial<Record<FeatureName, boolean>>;
   /** Extra CSS applied inside the chat. */
   css: string;
+  /** Forget everything on screen and connect again as whoever your platform now says is signed in. */
+  restart(): void;
   addEventListener<K extends keyof PlugChatElementEvents>(type: K, listener: (event: PlugChatElementEvents[K]) => void, options?: boolean | AddEventListenerOptions): void;
   addEventListener(type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void;
 }

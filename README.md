@@ -88,12 +88,13 @@ npm install
 npm run demo
 ```
 
-Open http://localhost:3000, sign in as one member, then open a private window
-and sign in as another. The demo is a pretend alumni-association site; the only
+Open http://localhost:3000 and sign in as one member (the demo password is on
+the sign-in page), then open a private window and sign in as another. The demo is a pretend alumni-association site; the only
 chat-specific code in it is one endpoint and one tag
 ([examples/host-app](examples/host-app/server.js)).
 
-Then open http://localhost:3000/plugchat/studio, the **setup studio**: the real
+Then press the gear in the site's top bar and open the **setup studio**
+(http://localhost:3000/plugchat/studio): the real
 chat in the middle, controls for its look and features beside it, and the
 settings, backend endpoint and embed code that produce what you see, ready to
 copy. [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) walks through adding

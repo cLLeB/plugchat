@@ -62,6 +62,8 @@ export interface UiConfig {
   css?: string;
   reactions?: string[];
   heading?: string;
+  /** Your own privacy policy, linked from the chat's Privacy page. */
+  privacyUrl?: string;
 }
 
 export interface Bus {

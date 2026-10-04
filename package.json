@@ -1,6 +1,6 @@
 {
   "name": "plugchat",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Self-hosted in-app messaging you add to a platform that already exists: one endpoint, one tag, your own servers.",
   "keywords": [
     "chat",

@@ -31,6 +31,7 @@ switched off cannot be switched back on from a page.
     "heading": "Member messages",
     "strings": { "New chat": "New conversation" },
     "reactions": ["👍", "🎓", "❤️", "😂"],
+    "privacyUrl": "/privacy",
     "css": ".bubble { box-shadow: none; }"
   }
 }
@@ -102,6 +103,13 @@ bubbles or the flat style, comfortable or compact spacing, a plain, dotted or
 grid backdrop, the text size, and how round the corners are. "Reset
 appearance" returns them to your look. Switch all of it off with
 `features: { personalization: false }` if your brand must look the same for everyone.
+
+## The Privacy page
+
+Settings has a Privacy page for each person: who can see when they are online
+and what they have read, the people they have blocked, and a plain statement
+of who can read their messages. Set `ui.privacyUrl` to your own privacy
+policy (an `https://` address or a path on your site) and the page links to it.
 
 ## Design tokens
 

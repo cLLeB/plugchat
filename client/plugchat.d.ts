@@ -67,6 +67,8 @@ export interface UiConfig {
   reactions?: string[];
   /** Title above the chat list. */
   heading?: string;
+  /** Your own privacy policy: an https:// address or a path on your site. Linked from the chat's Privacy page. */
+  privacyUrl?: string;
 }
 
 export interface Device {

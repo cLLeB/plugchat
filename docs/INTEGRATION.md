@@ -194,6 +194,27 @@ The token is a standard HS256 JWT. Any JWT library works; the claims are:
 | `handles` | no | Custom identifiers, e.g. `{"member_no": "AA-0042"}` |
 | `admin` | no | `true` makes a server-to-server token. Never give one to a browser |
 
+### Signing out, and shared devices
+
+Who is signed in is your platform's business; PlugChat follows it, and makes
+sure one person's messages never stay on screen for the next.
+
+- **Answer 401 from your token endpoint when nobody is signed in.** The chat
+  then clears itself instead of showing the last person's conversations, and
+  starts again when the page is next looked at.
+- **If the token names a different person than before**, the chat drops
+  everything it was showing and starts afresh as the new person. Nothing typed
+  in the meantime is sent under the wrong name.
+- A normal sign-out that reloads or leaves the page needs nothing more. If
+  your app switches user without a reload and does not want to wait for the
+  next token refresh, call `chatElement.restart()`.
+- Keep tokens short-lived (5 to 10 minutes): that is how long a session you
+  have ended can still reach the chat.
+
+On the device, PlugChat keeps unsent drafts, appearance choices and encryption
+keys per person; another person signing in on the same browser gets none of
+them.
+
 Names, avatars and handles are picked up from the token each time, so there is
 nothing to sync. To make people findable before they first open chat, register
 them with the admin API (`PUT /v1/users/:id`, see [API.md](API.md)).

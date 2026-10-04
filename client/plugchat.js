@@ -18,6 +18,14 @@ const tokenExpiry = (token) => {
   }
 };
 
+const tokenSubject = (token) => {
+  try {
+    return JSON.parse(decodeURIComponent(escape(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))))).sub ?? null;
+  } catch {
+    return null;
+  }
+};
+
 export class PlugChat {
   /**
    * @param {object} options
@@ -64,7 +72,29 @@ export class PlugChat {
   }
 
   async _freshToken(force) {
-    if (force || !this._token || tokenExpiry(this._token) < Date.now() + 5000) this._token = await this.getToken();
+    if (force || !this._token || tokenExpiry(this._token) < Date.now() + 5000) {
+      let token;
+      try {
+        token = await this.getToken();
+      } catch (e) {
+        // The platform no longer vouches for anyone (signed out, session expired).
+        if (this.me) this._emit('auth', { signedIn: false, error: e });
+        throw e;
+      }
+      // The platform now vouches for someone else: on a shared phone or computer another person
+      // signed in. Nothing of the previous person's may be shown to, or sent as, the new one.
+      const subject = tokenSubject(token);
+      if (this.me && subject && subject !== this.me.id) {
+        const previous = this.me.id;
+        this.close();
+        this._convs.clear();
+        this._keys.clear();
+        this._token = null;
+        this._emit('identity', { userId: subject, previousUserId: previous });
+        throw new PlugChatError(0, 'identity_changed', 'another person signed in');
+      }
+      this._token = token;
+    }
     return this._token;
   }
 

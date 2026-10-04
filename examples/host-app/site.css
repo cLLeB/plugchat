@@ -1,0 +1,55 @@
+/* The association's own site. None of this is PlugChat. */
+:root { --brand: #14213d; --accent: #e8452c; --page: #f2f4f3; --card: #fff; --ink: #14201b; --soft: #5f6f68; --line: #dfe5e2; }
+:root[data-theme="dark"] { --brand: #0f1a30; --accent: #ff6a4d; --page: #0f1211; --card: #191d1b; --ink: #e8eeeb; --soft: #9aa8a2; --line: #2a302d; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--page); color: var(--ink); }
+a { color: var(--accent); }
+
+header { background: var(--brand); color: #fff; }
+.top { max-width: 1040px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 10px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; flex: 1; min-width: 0; white-space: nowrap; color: #fff; text-decoration: none; }
+.brand i { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, #ffb02e, #e8452c); flex: none; display: grid; place-items: center; font-style: normal; font-size: 15px; }
+.brand span { overflow: hidden; text-overflow: ellipsis; }
+.who { color: rgba(255, 255, 255, .85); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.badge { background: #ffb02e; color: #14213d; border-radius: 10px; font-size: 12px; font-weight: 700; padding: 1px 7px; }
+.badge:empty { display: none; }
+.tool { display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; color: #fff; background: rgba(255, 255, 255, .12); border: 0; cursor: pointer; flex: none; text-decoration: none; }
+.tool:hover, .tool[aria-current] { background: rgba(255, 255, 255, .24); }
+.tool svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+header form { margin: 0; }
+.signout { font: inherit; font-size: 14px; color: #fff; background: rgba(255, 255, 255, .12); border: 0; border-radius: 19px; padding: 8px 14px; cursor: pointer; white-space: nowrap; }
+.signout:hover { background: rgba(255, 255, 255, .24); }
+
+main { max-width: 1040px; margin: 16px auto; padding: 0 16px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; margin-bottom: 14px; }
+.card h2 { margin: 0 0 6px; font-size: 19px; }
+.card h3 { margin: 0 0 2px; font-size: 16px; }
+.card p { margin: 0 0 12px; color: var(--soft); }
+.card p:last-child { margin-bottom: 0; }
+.tag { display: inline-block; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--soft); margin-bottom: 6px; }
+.links { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.links a { display: block; padding: 10px 12px; border-radius: 10px; text-decoration: none; color: inherit; }
+.links a:hover { background: var(--page); }
+.links strong { display: block; color: var(--accent); }
+.links span { color: var(--soft); font-size: 14px; }
+
+.signin { max-width: 420px; margin: 40px auto; display: flex; flex-direction: column; gap: 12px; }
+.signin label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--soft); }
+.signin select, .signin input { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--page); color: var(--ink); }
+.signin button { font: inherit; font-weight: 600; padding: 11px; border-radius: 10px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
+.signin .error { color: #c92a2a; margin: 0; }
+.hint { font-size: 13px; }
+code { background: var(--page); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+
+[data-state="out"] .members-only, [data-state="in"] .guests-only { display: none; }
+plug-chat { height: min(760px, calc(100dvh - 92px)); }
+
+/* On a phone the chat gets the whole screen under the site's bar. */
+@media (max-width: 700px) {
+  .who { display: none; }
+  body.app[data-in] { height: 100dvh; }
+  [data-state="in"] body.app { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+  [data-state="in"] body.app main { margin: 0; padding: 0; flex: 1; min-height: 0; width: 100%; }
+  [data-state="in"] body.app main > .members-only { height: 100%; }
+  [data-state="in"] body.app plug-chat { height: 100%; --pc-radius: 0; }
+}

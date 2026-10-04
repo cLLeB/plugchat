@@ -511,6 +511,11 @@ dialog.drawer { position: absolute; inset-block: 0; inset-inline: auto 0; margin
 slot[name="empty"] { display: contents; }
 ::slotted([slot="sidebar-top"]), ::slotted([slot="sidebar-bottom"]), ::slotted([slot="thread-top"]) { flex: none; }
 
+.group > .setrow:first-child { border-top: 0; }
+.group .setrow .avatar { flex: none; }
+.group .setrow .avatar + span { flex: 1; min-width: 0; }
+a.linkrow { display: block; text-decoration: none; }
+
 /* ---- a person's own look: Settings, Appearance ---- */
 .swatches { display: flex; flex-wrap: wrap; gap: 10px; padding: 2px 0 10px; }
 .swatch { width: 30px; height: 30px; border-radius: 50%; border: 3px solid var(--pc-surface); box-shadow: 0 0 0 1px var(--pc-border); padding: 0; cursor: pointer; }

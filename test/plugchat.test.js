@@ -1181,3 +1181,40 @@ test('webhook signatures verify with the shared secret', () => {
   assert.match(signWebhook(body, SECRET), /^sha256=[0-9a-f]{64}$/);
   assert.notEqual(signWebhook(body, SECRET), signWebhook(body + ' ', SECRET));
 });
+
+test('when a different person signs in on the same device, nothing is sent or shown as the previous one', async () => {
+  let who = 'shared-ama';
+  const c = new PlugChat({ url, getToken: async () => signToken({ sub: who, name: who }, SECRET, 2) });
+  await c.connect();
+  clients.push(c);
+  await client('shared-kofi');
+  const dm = await c.openDm('shared-kofi');
+  await c.send(dm.id, { text: 'from ama' });
+
+  // The platform's session now belongs to someone else; the short-lived token runs out.
+  who = 'shared-esi';
+  const changed = new Promise((resolve) => c.on('identity', resolve));
+  await new Promise((r) => setTimeout(r, 2100));
+  await assert.rejects(c.send(dm.id, { text: 'must not be sent as esi into ama\'s chat' }), (e) => e.code === 'identity_changed');
+  assert.deepEqual(await changed, { userId: 'shared-esi', previousUserId: 'shared-ama' });
+  await assert.rejects(c.conversations(), (e) => e.code === 'identity_changed', 'the old client stays shut');
+
+  const esi = await client('shared-esi');
+  assert.deepEqual(await esi.conversations(), [], 'the new person starts with their own, empty, list');
+  const kofi = await client('shared-kofi');
+  assert.deepEqual((await kofi.messages(dm.id)).map((m) => m.text), ['from ama']);
+
+  // Signing out: the token source fails, and the client says so.
+  let signedIn = true;
+  const d = new PlugChat({ url, getToken: async () => {
+    if (!signedIn) throw Object.assign(new Error('not signed in'), { code: 'signed_out' });
+    return signToken({ sub: 'shared-yaw', name: 'Yaw' }, SECRET, 2);
+  } });
+  await d.connect();
+  clients.push(d);
+  const lost = new Promise((resolve) => d.on('auth', resolve));
+  signedIn = false;
+  await new Promise((r) => setTimeout(r, 2100));
+  await assert.rejects(d.conversations());
+  assert.equal((await lost).error.code, 'signed_out');
+});

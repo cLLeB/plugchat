@@ -4,6 +4,17 @@ Versions follow semantic versioning. What counts as a breaking change is set
 out in [docs/STABILITY.md](docs/STABILITY.md). Until 1.0, a minor version may
 contain breaking changes, and they are listed here.
 
+## 0.1.2
+
+- Shared devices: if the host's token names a different person than before,
+  the chat drops everything on screen and starts afresh as the new person; if
+  the token endpoint answers 401, it clears itself. `restart()` does the same
+  on request. The client reports both as `identity` and `auth` events.
+- A Privacy page in Settings: what others can see, blocked people, and who can
+  read your messages, with a link to the host's own policy (`ui.privacyUrl`).
+- The demo site has a real sign-in and sign-out with a signed session, a gear
+  menu that explains its staff and developer pages, and a privacy page.
+
 ## 0.1.1
 
 - Machine-readable API description: `docs/openapi.json`, also served at

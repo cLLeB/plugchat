@@ -16,6 +16,45 @@ plug in.
 PlugChat is software you run on your own server. There is no hosted service
 behind it, no account to create, and nothing is metered.
 
+## Get it
+
+**Your backend is Node** — add it to your project:
+
+```bash
+npm install github:cLLeB/plugchat
+```
+
+**Your backend is anything else** — run it beside your app. With Node installed:
+
+```bash
+npx github:cLLeB/plugchat init
+```
+
+```bash
+npx github:cLLeB/plugchat start
+```
+
+or, with no Node at all, as a container:
+
+```bash
+docker run -p 4400:4400 -v plugchat-data:/data -e PLUGCHAT_SECRET=your-secret ghcr.io/clleb/plugchat
+```
+
+**Just looking** — clone it and run the demo:
+
+```bash
+git clone https://github.com/cLLeB/plugchat.git && cd plugchat && npm install && npm run demo
+```
+
+Then follow [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md): one endpoint on
+your backend (ready-made in seven languages under [starters/](starters)) and
+one tag on your page. Needs Node 22.13 or newer; no other software, no
+account, nothing hosted by anyone else.
+
+Once the package is published to npm, `github:cLLeB/plugchat` in the commands
+above shortens to `plugchat`. The container image exists from the first
+tagged release onwards.
+
 ## Why this exists
 
 | | Hosted chat APIs (Stream, Sendbird, CometChat, TalkJS) | Self-hosted chat servers (Matrix, Rocket.Chat, Tinode) | PlugChat |
@@ -200,8 +239,8 @@ Stated plainly so you can plan around them:
   call the REST/WebSocket API.
 - **Push notifications are yours to send**, driven by the webhook.
 - **The interface ships in English, French, Spanish, Portuguese and Arabic**
-  (with a mirrored right-to-left layout). The translations are mine and have
-  not been reviewed by native speakers. Other languages are added by the host
+  (with a mirrored right-to-left layout). The translations have not been
+  reviewed by native speakers. Other languages are added by the host
   through `strings`.
 - **Never run on Linux.** Everything was developed and tested on Windows.
   `.github/workflows/ci.yml` runs the tests (both databases), all starters,
@@ -214,9 +253,10 @@ Stated plainly so you can plan around them:
   different networks (the call flow is tested in one browser with synthetic
   media). Treat those as written to spec, not proven. The backend starters for
   all seven languages are run against a real PlugChat by `starters/verify.mjs`.
-- **Not published to npm.** The package installs and runs from a tarball
-  (`npm pack`); publishing it is the owner's step.
+- **Not on npm yet.** It installs straight from GitHub (see "Get it"). The
+  release workflow publishes to npm once an `NPM_TOKEN` secret is added to the
+  repository.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

@@ -6,3 +6,6 @@ examples/host-app/data-vendor/
 starters/csharp/bin/
 starters/csharp/obj/
 examples/frameworks/dist/
+.env
+plugchat.config.json
+*.tgz

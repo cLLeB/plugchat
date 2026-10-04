@@ -1,0 +1,9 @@
+PlugChat
+Copyright 2026 cLLeB
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product depends on the following third-party software at run time:
+
+  ws (https://github.com/websockets/ws), MIT License
+  pg (https://github.com/brianc/node-postgres), MIT License, only when PostgreSQL is used

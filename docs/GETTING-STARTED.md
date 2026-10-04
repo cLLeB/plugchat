@@ -23,6 +23,12 @@ a password and has no user table to sync.
 ## Step 0. Try it before you touch your code
 
 ```bash
+git clone https://github.com/cLLeB/plugchat.git
+```
+
+then, inside the `plugchat` folder:
+
+```bash
 npm install
 ```
 
@@ -43,6 +49,7 @@ Pick the line that matches your backend.
 **Your backend is Node** — mount it inside your existing server:
 
 ```js
+// npm install github:cLLeB/plugchat
 import { createPlugChat } from 'plugchat';
 
 const chat = createPlugChat({ secret: process.env.PLUGCHAT_SECRET, origins: ['https://alumni.example'] });
@@ -58,15 +65,17 @@ chat.attach(server); // realtime
 as its own process and send `/plugchat` to it from your web server:
 
 ```bash
-npx plugchat init
+npx github:cLLeB/plugchat init
 ```
 
 writes `plugchat.config.json` (every setting, as plain JSON) and a `.env` with
 a fresh secret. Then:
 
 ```bash
-npx plugchat start
+npx github:cLLeB/plugchat start
 ```
+
+(or the container: `docker run -p 4400:4400 -v plugchat-data:/data --env-file .env ghcr.io/clleb/plugchat`)
 
 and in nginx (Apache and Caddy have the same two ideas: proxy the path, allow
 WebSocket upgrades):
@@ -160,7 +169,7 @@ All of these are in [CONNECTORS.md](CONNECTORS.md).
 ## Step 6. Go live
 
 ```bash
-npx plugchat doctor
+npx github:cLLeB/plugchat doctor
 ```
 
 checks the settings and says what must be fixed. The short list:

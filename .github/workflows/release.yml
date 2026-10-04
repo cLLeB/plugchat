@@ -1,0 +1,52 @@
+# Publishes a release when a version tag is pushed:
+#
+#   npm version patch        (or minor / major; updates package.json and creates the tag)
+#   git push --follow-tags
+#
+# It then: runs the tests, publishes the package to npm (only if the NPM_TOKEN
+# secret is set), builds the container image and pushes it to GitHub's registry
+# as ghcr.io/<owner>/plugchat, and creates a GitHub release.
+#
+# Not yet executed: expect to adjust it on its first run.
+name: release
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm test
+      - run: npm run check:types
+
+      - name: Publish to npm
+        if: env.NPM_TOKEN != ''
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Container image
+        run: |
+          image="ghcr.io/$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')/plugchat"
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker build -t "$image:${GITHUB_REF_NAME#v}" -t "$image:latest" .
+          docker push "$image:${GITHUB_REF_NAME#v}"
+          docker push "$image:latest"
+
+      - name: GitHub release
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes --notes "See CHANGELOG.md."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

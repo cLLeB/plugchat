@@ -13,7 +13,7 @@
     "in-app-chat"
   ],
   "type": "module",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "engines": {
     "node": ">=22.13"
   },
@@ -30,7 +30,15 @@
     "Dockerfile",
     "LICENSE",
     "README.md",
-    "examples"
+    "examples",
+    "NOTICE",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "!examples/host-app/data",
+    "!examples/host-app/data-vendor",
+    "!examples/frameworks/dist",
+    "!starters/csharp/bin",
+    "!starters/csharp/obj"
   ],
   "exports": {
     ".": {
@@ -96,5 +104,14 @@
     "vue": {
       "optional": true
     }
+  },
+  "author": "cLLeB (https://github.com/cLLeB)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cLLeB/plugchat.git"
+  },
+  "homepage": "https://github.com/cLLeB/plugchat#readme",
+  "bugs": {
+    "url": "https://github.com/cLLeB/plugchat/issues"
   }
 }

@@ -1,9 +1,11 @@
 // End-to-end encryption primitives, WebCrypto only (browsers and Node >= 20).
 //
-// Each device holds a non-extractable ECDH P-256 identity key. Every encrypted
-// conversation has one random AES-256-GCM key; it is wrapped separately for
-// each member with a key derived from ECDH(wrapper, member) + HKDF. The server
-// stores only wrapped keys and ciphertext.
+// Each device holds a non-extractable ECDH P-256 identity key. An encrypted
+// conversation has one random AES-256-GCM key per epoch; it is wrapped
+// separately for every device of every member with a key derived from
+// ECDH(wrapper, device) + HKDF. The server stores only wrapped keys and
+// ciphertext. When someone leaves, the next sender starts a new epoch that the
+// person who left is never given.
 
 const subtle = globalThis.crypto.subtle;
 const enc = new TextEncoder();
@@ -53,7 +55,10 @@ export async function loadIdentity(keyStore, slot) {
   let identity = await keyStore.get(slot);
   if (!identity) {
     const pair = await subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
-    identity = { privateKey: pair.privateKey, publicKey: b64(await subtle.exportKey('raw', pair.publicKey)) };
+    identity = { deviceId: crypto.randomUUID(), privateKey: pair.privateKey, publicKey: b64(await subtle.exportKey('raw', pair.publicKey)) };
+    await keyStore.set(slot, identity);
+  } else if (!identity.deviceId) {
+    identity.deviceId = crypto.randomUUID();
     await keyStore.set(slot, identity);
   }
   return identity;
@@ -105,8 +110,11 @@ export async function unwrapKey(identity, wrapped, conversationId) {
 
 // The conversation id is bound in as associated data, so ciphertext can't be
 // replayed into a different conversation.
-export const encryptText = async (key, text, conversationId) => 'e1.' + b64(await seal(key, enc.encode(text), conversationId));
-export const decryptText = async (key, body, conversationId) => dec.decode(await open(key, unb64(body.slice(3)), conversationId));
+// Wire format: "e1.<key epoch>.<base64>". The epoch says which conversation key
+// was used; it goes up each time the key is replaced.
+export const encryptText = async (key, text, conversationId, epoch) => `e1.${epoch}.` + b64(await seal(key, enc.encode(text), conversationId));
+export const decryptText = async (key, body, conversationId) => dec.decode(await open(key, unb64(body.slice(body.indexOf('.', 3) + 1)), conversationId));
+export const epochOf = (body) => Number(/^e1\.(\d+)\./.exec(body ?? '')?.[1] ?? 0);
 export const encryptBytes = (key, bytes, conversationId) => seal(key, bytes, conversationId);
 export const decryptBytes = (key, bytes, conversationId) => open(key, new Uint8Array(bytes), conversationId);
 

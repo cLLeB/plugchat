@@ -39,7 +39,8 @@ export class PlugChat {
     this._token = null;
     this._listeners = new Map();
     this._convs = new Map();
-    this._keys = new Map(); // conversationId -> Promise<{ raw, key } | null>
+    this._keys = new Map(); // "conversationId:epoch" -> Promise<{ epoch, raw, key } | null>
+    this._sharing = new Set();
     this._closed = false;
     this._retry = 0;
   }
@@ -90,9 +91,7 @@ export class PlugChat {
     this.me = await this._req('GET', '/me');
     if (this.useE2ee) {
       this.identity = await e2ee.loadIdentity(this.keyStore, `identity:${this.url}:${this.me.id}`);
-      if (this.me.publicKey !== this.identity.publicKey) {
-        this.me = await this._req('PUT', '/me/key', { json: { publicKey: this.identity.publicKey } });
-      }
+      this.me = await this._req('PUT', '/me/key', { json: { deviceId: this.identity.deviceId, publicKey: this.identity.publicKey } });
     }
     await this._openSocket();
     return this.me;
@@ -185,7 +184,7 @@ export class PlugChat {
         return this._emit('conversation', await this._hydrateConversation(event.conversation));
       case 'conversation.removed':
         this._convs.delete(event.conversationId);
-        this._keys.delete(event.conversationId);
+        for (const slot of this._keys.keys()) if (slot.startsWith(event.conversationId + ':')) this._keys.delete(slot);
         return this._emit('conversation.removed', event);
       case 'presence':
         if (event.online) this.online.add(event.userId);
@@ -207,43 +206,111 @@ export class PlugChat {
 
   // ---- encryption plumbing ----
 
-  _conversationKey(conv) {
-    if (!conv.encrypted) return Promise.resolve(null);
-    let p = this._keys.get(conv.id);
+  /** The key for one epoch of a conversation, or null if this device was never given it. */
+  _epochKey(conv, epoch) {
+    const slot = `${conv.id}:${epoch}`;
+    let p = this._keys.get(slot);
     if (!p) {
       p = (async () => {
-        if (!this.identity || !conv.wrappedKey) return null;
+        const wrapped = this.identity && conv.wrappedKeys?.[this.identity.deviceId]?.[epoch];
+        if (!wrapped) return null;
         try {
-          return await e2ee.unwrapKey(this.identity, conv.wrappedKey, conv.id);
+          return { epoch, ...(await e2ee.unwrapKey(this.identity, wrapped, conv.id)) };
         } catch {
-          return null; // wrapped for a different device
+          return null;
         }
       })();
-      this._keys.set(conv.id, p);
+      this._keys.set(slot, p);
+      // A miss can be filled later, when another device shares the key with this one.
+      p.then((k) => k || this._keys.delete(slot));
     }
     return p;
   }
 
+  /** Every epoch key this device holds for a conversation. */
+  async _heldKeys(conv) {
+    const epochs = Object.keys(conv.wrappedKeys?.[this.identity?.deviceId] ?? {}).map(Number);
+    return (await Promise.all(epochs.map((e) => this._epochKey(conv, e)))).filter(Boolean);
+  }
+
+  /** The key to encrypt with right now. Replaces the key first if someone has left. */
   async _requireKey(conv) {
-    const k = await this._conversationKey(conv);
-    if (!k) throw new PlugChatError(0, 'no_key', 'This device does not hold the key for this encrypted conversation');
+    if (conv.rotatePending) conv = await this.rotateKey(conv.id);
+    const k = await this._epochKey(conv, conv.keyEpoch);
+    if (!k) throw new PlugChatError(0, 'no_key', 'This device has not been given the key for this conversation yet. It arrives as soon as another member is online.');
     return k;
   }
 
-  async _wrapFor(conversationId, raw, userIds) {
-    if (!this.identity) throw new PlugChatError(0, 'e2ee_disabled', 'End-to-end encryption is not enabled on this client');
-    const keys = {};
+  async _devicesOf(userIds) {
+    const out = [];
     for (const id of userIds) {
-      const { publicKey } = id === this.me.id ? this.identity : await this._req('GET', `/users/${encodeURIComponent(id)}/key`);
-      if (!publicKey) {
+      const { devices } = await this._req('GET', `/users/${encodeURIComponent(id)}/devices`);
+      if (!devices.length) {
         const name = await this.user(id).then((u) => u.name, () => 'This person');
         throw new PlugChatError(409, 'no_public_key', `${name} has not opened chat yet, so encryption cannot be set up with them`);
       }
-      keys[id] = await e2ee.wrapKey(this.identity, this.me.id, publicKey, conversationId, raw);
+      out.push(...devices.map((d) => ({ userId: id, ...d })));
+    }
+    return out;
+  }
+
+  /** Wrap each held key for each device: [{ userId, deviceId, epoch, by, byKey, data }]. */
+  async _wrapForDevices(conversationId, held, devices) {
+    if (!this.identity) throw new PlugChatError(0, 'e2ee_disabled', 'End-to-end encryption is not enabled on this client');
+    const keys = [];
+    for (const d of devices) {
+      for (const k of held) {
+        keys.push({ userId: d.userId, deviceId: d.deviceId, epoch: k.epoch, ...(await e2ee.wrapKey(this.identity, this.me.id, d.publicKey, conversationId, k.raw)) });
+      }
     }
     return keys;
   }
 
+  // Give the keys this device holds to member devices that have none yet: a
+  // person's new phone, or a device that was offline when the key changed.
+  async _shareKeys(conv) {
+    if (!conv.encrypted || !this.identity || this._sharing.has(conv.id)) return;
+    const needy = conv.members.flatMap((m) => (m.devices ?? []).filter((d) => !d.keyed && d.deviceId !== this.identity.deviceId).map((d) => ({ userId: m.userId, ...d })));
+    if (!needy.length) return;
+    const held = await this._heldKeys(conv);
+    if (!held.some((k) => k.epoch === conv.keyEpoch)) return;
+    this._sharing.add(conv.id);
+    try {
+      await this._req('POST', `/conversations/${conv.id}/keys`, { json: { keys: await this._wrapForDevices(conv.id, held, needy) } });
+    } finally {
+      this._sharing.delete(conv.id);
+    }
+  }
+
+  /**
+   * Replace a conversation's key. Happens automatically before the first
+   * message after someone leaves; call it yourself to rotate on a schedule.
+   */
+  async rotateKey(conversationId) {
+    const conv = await this.conversation(conversationId);
+    if (!conv.encrypted) return conv;
+    const fresh = await e2ee.newConversationKey();
+    const epoch = conv.keyEpoch + 1;
+    const devices = conv.members.flatMap((m) => m.devices.map((d) => ({ userId: m.userId, ...d })));
+    const keys = await this._wrapForDevices(conv.id, [{ epoch, raw: fresh.raw }], devices);
+    let updated;
+    try {
+      updated = await this._req('POST', `/conversations/${conv.id}/rotate`, { json: { epoch, keys } });
+    } catch (e) {
+      if (e.code === 'stale_epoch') return this.conversation(conversationId); // another member got there first
+      throw e;
+    }
+    this._keys.set(`${conv.id}:${epoch}`, Promise.resolve({ epoch, ...fresh }));
+    return this._hydrateConversation(updated);
+  }
+
+  /** This person's registered devices; remove one that is lost or no longer used. */
+  devices() {
+    return this._req('GET', '/me/devices').then((r) => r.devices);
+  }
+  removeDevice(deviceId) {
+    return this._req('DELETE', `/me/devices/${encodeURIComponent(deviceId)}`);
+  }
   async _hydrate(message, conv) {
     const out = { ...message, text: message.body, file: message.attachment, encrypted: false, undecryptable: false };
     if (message.deleted || message.kind === 'system') return out;
@@ -260,8 +327,9 @@ export class PlugChat {
     try {
       let payload;
       if (conv.encrypted) {
-        const { key } = await this._requireKey(conv);
-        payload = JSON.parse(await e2ee.decryptText(key, message.body, conv.id));
+        const k = await this._epochKey(conv, e2ee.epochOf(message.body));
+        if (!k) throw new Error('no key for this epoch on this device');
+        payload = JSON.parse(await e2ee.decryptText(k.key, message.body, conv.id));
         out.text = payload.t ?? '';
         out.file = message.attachment && { ...message.attachment, name: payload.f?.name ?? 'file', mime: payload.f?.mime ?? 'application/octet-stream' };
       } else if (message.kind !== 'text') {
@@ -289,6 +357,7 @@ export class PlugChat {
   async _hydrateConversation(conv) {
     this._convs.set(conv.id, conv);
     if (conv.lastMessage) conv.lastMessage = await this._hydrate(conv.lastMessage, conv);
+    this._shareKeys(conv).catch(() => {});
     return conv;
   }
 
@@ -341,11 +410,11 @@ export class PlugChat {
       json.id = crypto.randomUUID();
       json.encrypted = true;
       fresh = await e2ee.newConversationKey();
-      json.keys = await this._wrapFor(json.id, fresh.raw, [this.me.id, ...memberIds]);
+      json.keys = await this._wrapForDevices(json.id, [{ epoch: 1, raw: fresh.raw }], await this._devicesOf([this.me.id, ...memberIds]));
     }
     const conv = await this._req('POST', '/conversations', { json });
     // An existing DM is returned as-is, in which case our new key was not used.
-    if (fresh && conv.id === json.id) this._keys.set(conv.id, Promise.resolve(fresh));
+    if (fresh && conv.id === json.id) this._keys.set(`${conv.id}:1`, Promise.resolve({ epoch: 1, ...fresh }));
     return this._hydrateConversation(conv);
   }
 
@@ -370,7 +439,8 @@ export class PlugChat {
   async addMembers(conversationId, userIds) {
     const conv = await this._conv(conversationId);
     const json = { userIds };
-    if (conv.encrypted) json.keys = await this._wrapFor(conv.id, (await this._requireKey(conv)).raw, userIds);
+    // Newcomers get every key this device holds, so they can read the history too.
+    if (conv.encrypted) json.keys = await this._wrapForDevices(conv.id, await this._heldKeys(conv), await this._devicesOf(userIds));
     return this._hydrateConversation(await this._req('POST', `/conversations/${conversationId}/members`, { json }));
   }
 
@@ -408,7 +478,7 @@ export class PlugChat {
   /** Short code members compare in person to rule out key tampering. */
   async safetyCode(conversationId) {
     const conv = await this.conversation(conversationId);
-    return e2ee.safetyCode(conv.members.map((m) => `${m.userId}:${m.publicKey}`));
+    return e2ee.safetyCode(conv.members.flatMap((m) => m.devices.map((d) => `${m.userId}:${d.publicKey}`)));
   }
 
   // ---- messages ----
@@ -454,10 +524,19 @@ export class PlugChat {
   // Encrypted conversations carry one JSON payload as ciphertext; plain ones
   // carry the readable body the REST API documents.
   async _post(conv, k, kind, payload, plainBody, extra = {}) {
-    const body = k ? await e2ee.encryptText(k.key, JSON.stringify(payload), conv.id) : plainBody;
-    const message = await this._req('POST', `/conversations/${conv.id}/messages`, {
-      json: { kind, body, clientId: crypto.randomUUID(), ...extra },
+    const clientId = crypto.randomUUID();
+    const post = async (key) => this._req('POST', `/conversations/${conv.id}/messages`, {
+      json: { kind, body: key ? await e2ee.encryptText(key.key, JSON.stringify(payload), conv.id, key.epoch) : plainBody, clientId, ...extra },
     });
+    let message;
+    try {
+      message = await post(k);
+    } catch (e) {
+      // The key changed under us (someone left, or another device rotated). An
+      // attachment was encrypted with the old key, so only plain sends can retry.
+      if (!k || (e.code !== 'rotation_required' && e.code !== 'stale_epoch') || extra.attachment) throw e;
+      message = await post(await this._requireKey(await this.conversation(conv.id)));
+    }
     const out = await this._hydrate(message, conv);
     // The sender never gets a view-once body back, so keep what we just wrote.
     if (message.viewOnce) out.text = payload.t ?? '';
@@ -593,9 +672,11 @@ export class PlugChat {
     const conv = await this._conv(message.conversationId);
     let body = text;
     if (conv.encrypted) {
-      const { key } = await this._requireKey(conv);
+      // An edit keeps the message's original key, which its attachment was encrypted with.
+      const k = await this._epochKey(conv, e2ee.epochOf(message.body));
+      if (!k) throw new PlugChatError(0, 'no_key', 'This device does not hold the key this message was written with');
       const f = message.file ? { name: message.file.name, mime: message.file.mime } : undefined;
-      body = await e2ee.encryptText(key, JSON.stringify({ t: text, f }), conv.id);
+      body = await e2ee.encryptText(k.key, JSON.stringify({ t: text, f }), conv.id, k.epoch);
     }
     return this._hydrate(await this._req('PATCH', `/messages/${message.id}`, { json: { body } }), conv);
   }
@@ -625,7 +706,9 @@ export class PlugChat {
     let bytes = await this._req('GET', `/files/${message.file.fileId}`, { blob: true });
     if (message.encrypted) {
       const conv = await this._conv(message.conversationId);
-      bytes = await e2ee.decryptBytes((await this._requireKey(conv)).key, bytes, conv.id);
+      const k = await this._epochKey(conv, e2ee.epochOf(message.body));
+      if (!k) throw new PlugChatError(0, 'no_key', 'This device does not hold the key for this attachment');
+      bytes = await e2ee.decryptBytes(k.key, bytes, conv.id);
     }
     return new Blob([bytes], { type: message.file.mime });
   }

@@ -174,6 +174,55 @@ test('end-to-end encryption: the server only ever stores ciphertext', async () =
   assert.equal(row.name, 'encrypted', 'the real file name is not visible to the server');
 });
 
+test('encryption: a second device gets the keys; the key is replaced when someone leaves', async () => {
+  const ann = await client('md-ann');
+  const ben = await client('md-ben');
+  const cat = await client('md-cat');
+  const group = await ann.createGroup({ title: 'Board', memberIds: ['md-ben', 'md-cat'], encrypted: true });
+  await ann.send(group.id, { text: 'before the phone' });
+
+  // Ben signs in on a second device. It has no keys until a device that does hands them over.
+  const shared = next(ann, 'conversation', (c) => c.id === group.id && c.members.find((m) => m.userId === 'md-ben').devices.length === 2);
+  const benPhone = await client('md-ben');
+  assert.notEqual(benPhone.identity.deviceId, ben.identity.deviceId);
+  await shared;
+  await next(benPhone, 'conversation', (c) => c.id === group.id && !!c.wrappedKeys[benPhone.identity.deviceId]?.[1]);
+  assert.equal((await benPhone.messages(group.id))[0].text, 'before the phone', 'history is readable on the new device');
+  assert.equal(await ann.safetyCode(group.id), await benPhone.safetyCode(group.id));
+
+  // Cat is removed. She still knows key 1, so the next message must use a new key she never gets.
+  await ann.removeMember(group.id, 'md-cat');
+  assert.equal((await ann.conversation(group.id)).rotatePending, true);
+  const stale = chat.store.get('SELECT body FROM messages WHERE conversation_id = ?', group.id).body;
+  const replay = await api(`/conversations/${group.id}/messages`, { token: signToken({ sub: 'md-ann' }, SECRET), method: 'POST', json: { body: stale } });
+  assert.equal(replay.status, 409, 'the old key is refused once someone has left');
+
+  const got = next(benPhone, 'message', (m) => m.conversationId === group.id);
+  const after = await ann.send(group.id, { text: 'after cat left' });
+  assert.match(after.body, /^e1\.2\./, 'sent under the new key');
+  assert.equal((await got).text, 'after cat left');
+  assert.equal((await ben.messages(group.id)).at(-1).text, 'after cat left');
+  assert.equal(chat.store.all('SELECT 1 FROM member_keys WHERE conversation_id = ? AND user_id = ?', group.id, 'md-cat').length, 0);
+  assert.equal(chat.store.get('SELECT key_epoch, rotate_pending FROM conversations WHERE id = ?', group.id).key_epoch, 2);
+  await assert.rejects(cat.messages(group.id), { status: 404 });
+
+  // Old messages stay readable, and editing one keeps its original key.
+  const first = (await ben.messages(group.id))[0];
+  assert.equal(first.text, 'before the phone');
+  assert.match((await ann.edit((await ann.messages(group.id))[0], 'before the phone (edited)')).body, /^e1\.1\./);
+
+  // Keys can only be handed to real devices of members.
+  const bogus = await api(`/conversations/${group.id}/keys`, {
+    token: signToken({ sub: 'md-ann' }, SECRET), method: 'POST',
+    json: { keys: [{ userId: 'md-cat', deviceId: cat.identity.deviceId, epoch: 2, by: 'md-ann', byKey: 'x', data: 'y' }] },
+  });
+  assert.equal(bogus.status, 400);
+
+  // A lost device can be removed.
+  await ben.removeDevice(benPhone.identity.deviceId);
+  assert.equal((await ben.devices()).length, 1);
+});
+
 test('files are only downloadable by conversation members', async () => {
   const alice = await client('alice');
   const bob = await client('bob');
@@ -629,7 +678,7 @@ test('writes are rate limited per user', async () => {
   const statuses = [];
   for (let i = 0; i < 5; i++) {
     const res = await fetch(`http://localhost:${srv.address().port}/plugchat/v1/me/key`, {
-      method: 'PUT', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: '{"publicKey":"k"}',
+      method: 'PUT', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: '{"deviceId":"d","publicKey":"k"}',
     });
     statuses.push(res.status);
   }

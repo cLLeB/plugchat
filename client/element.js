@@ -453,6 +453,11 @@ class PlugChatElement extends HTMLElement {
     chat.on('presence', () => (this._renderList(), this._renderHeader()));
     chat.on('conversation', (c) => {
       this.convs.set(c.id, c);
+      // Keys may just have arrived from another device: retry what could not be read.
+      if (this.msgs.get(c.id)?.list.some((m) => m.undecryptable)) {
+        this.msgs.delete(c.id);
+        if (c.id === this.activeId) this._select(c.id);
+      }
       this._renderList();
       this._announceUnread();
       if (c.id === this.activeId) (this._renderHeader(), this._renderComposerState());
@@ -786,7 +791,7 @@ class PlugChatElement extends HTMLElement {
 
       let bubble;
       if (m.deleted) bubble = h('div', { class: 'bubble ghost' }, 'Message deleted');
-      else if (m.undecryptable) bubble = h('div', { class: 'bubble ghost' }, 'This message was encrypted for a different device.');
+      else if (m.undecryptable) bubble = h('div', { class: 'bubble ghost' }, 'Waiting for this device to receive the key for this message.');
       else {
         const parent = m.replyTo && byId.get(m.replyTo);
         bubble = h('div', { class: `bubble${m.mentions?.includes(me) ? ' mention' : ''}` },

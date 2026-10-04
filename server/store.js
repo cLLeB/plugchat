@@ -101,6 +101,40 @@ CREATE TABLE IF NOT EXISTS calls (
   video INTEGER NOT NULL,
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS devices (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  device_id TEXT NOT NULL,
+  public_key TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  last_seen INTEGER NOT NULL,
+  PRIMARY KEY (user_id, device_id)
+);
+CREATE TABLE IF NOT EXISTS member_keys (
+  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  device_id TEXT NOT NULL,
+  epoch INTEGER NOT NULL,
+  wrapped TEXT NOT NULL,
+  PRIMARY KEY (conversation_id, user_id, device_id, epoch)
+);
+CREATE TABLE IF NOT EXISTS stars (
+  user_id TEXT NOT NULL,
+  message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, message_id)
+);
+CREATE TABLE IF NOT EXISTS bus (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  instance TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS presence (
+  user_id TEXT NOT NULL,
+  instance TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, instance)
+);
 CREATE TABLE IF NOT EXISTS invites (
   code TEXT PRIMARY KEY,
   conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
@@ -163,11 +197,26 @@ const handleCandidates = (value) =>
 
 const userOut = (r) => r && { id: r.id, name: r.name, avatar: r.avatar, publicKey: r.public_key, lastSeen: r.last_seen };
 
+// Columns added after the first release. Applied to existing databases on start.
+const ADDED_COLUMNS = [
+  ['conversations', 'key_epoch', 'INTEGER NOT NULL DEFAULT 0'],
+  ['conversations', 'rotate_pending', 'INTEGER NOT NULL DEFAULT 0'],
+  ['users', 'hide_read', 'INTEGER NOT NULL DEFAULT 0'],
+  ['users', 'hide_presence', 'INTEGER NOT NULL DEFAULT 0'],
+  ['users', 'suspended', 'TEXT'],
+];
+
+const MAX_DEVICES = 10;
+
 export class Store {
   constructor(file) {
     this.db = new DatabaseSync(file);
     this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
     this.db.exec(SCHEMA);
+    for (const [table, column, ddl] of ADDED_COLUMNS) {
+      const has = this.db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
+      if (!has) this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+    }
     this._stmts = new Map();
   }
 
@@ -251,8 +300,69 @@ export class Store {
     return r ? this.getUser(r.user_id) : null;
   }
 
-  setPublicKey(id, key) {
-    this.run('UPDATE users SET public_key = ? WHERE id = ?', key, id);
+  // ---- devices: one encryption key per browser or phone a person uses ----
+
+  /** Returns true when this is a device (or key) the server has not seen before. */
+  registerDevice(userId, deviceId, publicKey) {
+    const t = Date.now();
+    const known = this.get('SELECT public_key FROM devices WHERE user_id = ? AND device_id = ?', userId, deviceId);
+    if (known?.public_key === publicKey) {
+      this.run('UPDATE devices SET last_seen = ? WHERE user_id = ? AND device_id = ?', t, userId, deviceId);
+      return false;
+    }
+    this.tx(() => {
+      // A changed key means the old wrapped keys are useless to this device.
+      this.run('DELETE FROM member_keys WHERE user_id = ? AND device_id = ?', userId, deviceId);
+      this.run(
+        `INSERT INTO devices (user_id, device_id, public_key, created_at, last_seen) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, device_id) DO UPDATE SET public_key = excluded.public_key, last_seen = excluded.last_seen`,
+        userId, deviceId, publicKey, t, t,
+      );
+      const stale = this.all('SELECT device_id FROM devices WHERE user_id = ? ORDER BY last_seen DESC LIMIT -1 OFFSET ?', userId, MAX_DEVICES);
+      for (const d of stale) this.removeDevice(userId, d.device_id);
+      this.run('UPDATE users SET public_key = ? WHERE id = ?', publicKey, userId);
+    });
+    return true;
+  }
+
+  removeDevice(userId, deviceId) {
+    this.run('DELETE FROM member_keys WHERE user_id = ? AND device_id = ?', userId, deviceId);
+    return this.run('DELETE FROM devices WHERE user_id = ? AND device_id = ?', userId, deviceId).changes > 0;
+  }
+
+  devicesOf(userId) {
+    return this.all('SELECT device_id, public_key, created_at, last_seen FROM devices WHERE user_id = ? ORDER BY created_at', userId)
+      .map((r) => ({ deviceId: r.device_id, publicKey: r.public_key, createdAt: r.created_at, lastSeen: r.last_seen }));
+  }
+
+  hasDevice(userId, deviceId) {
+    return !!this.get('SELECT 1 FROM devices WHERE user_id = ? AND device_id = ?', userId, deviceId);
+  }
+
+  encryptedConversationIds(userId, limit = 200) {
+    return this.all(
+      'SELECT c.id FROM conversations c JOIN members m ON m.conversation_id = c.id WHERE m.user_id = ? AND c.encrypted = 1 LIMIT ?',
+      userId, limit,
+    ).map((r) => r.id);
+  }
+
+  /** Store wrapped conversation keys. Existing entries are never overwritten. */
+  addMemberKeys(conversationId, keys) {
+    for (const k of keys) {
+      this.run('INSERT OR IGNORE INTO member_keys (conversation_id, user_id, device_id, epoch, wrapped) VALUES (?, ?, ?, ?, ?)',
+        conversationId, k.userId, k.deviceId, k.epoch, JSON.stringify({ by: k.by, byKey: k.byKey, data: k.data }));
+    }
+  }
+
+  /** Move a conversation to a fresh key. Fails (returns false) if someone else rotated first. */
+  rotateKey(conversationId, epoch, keys) {
+    return this.tx(() => {
+      const c = this.get('SELECT key_epoch FROM conversations WHERE id = ?', conversationId);
+      if (c.key_epoch + 1 !== epoch) return false;
+      this.run('UPDATE conversations SET key_epoch = ?, rotate_pending = 0 WHERE id = ?', epoch, conversationId);
+      this.addMemberKeys(conversationId, keys);
+      return true;
+    });
   }
 
   touchUser(id) {
@@ -329,9 +439,13 @@ export class Store {
       for (const uid of memberIds) {
         const role = type === 'group' && uid === creator ? 'owner' : 'member';
         this.run(
-          'INSERT INTO members (conversation_id, user_id, role, wrapped_key, joined_at) VALUES (?, ?, ?, ?, ?)',
-          cid, uid, role, keys?.[uid] ? JSON.stringify(keys[uid]) : null, t,
+          'INSERT INTO members (conversation_id, user_id, role, joined_at) VALUES (?, ?, ?, ?)',
+          cid, uid, role, t,
         );
+      }
+      if (encrypted) {
+        this.run('UPDATE conversations SET key_epoch = 1 WHERE id = ?', cid);
+        this.addMemberKeys(cid, keys);
       }
     });
     return cid;
@@ -354,7 +468,7 @@ export class Store {
     const c = this.rawConversation(id);
     if (!c) return null;
     const rows = this.all(
-      `SELECT m.user_id, m.role, m.last_read_seq, m.wrapped_key, m.muted, m.archived, m.pinned, u.name, u.avatar, u.public_key
+      `SELECT m.user_id, m.role, m.last_read_seq, m.muted, m.archived, m.pinned, u.name, u.avatar, u.hide_read
        FROM members m JOIN users u ON u.id = m.user_id WHERE m.conversation_id = ? ORDER BY m.joined_at, u.name`,
       id,
     );
@@ -380,13 +494,34 @@ export class Store {
       updatedAt: c.updated_at,
       lastSeq: c.last_seq,
       unread: me ? Math.max(0, c.last_seq - me.last_read_seq) : 0,
-      wrappedKey: me?.wrapped_key ? JSON.parse(me.wrapped_key) : null,
+      ...(c.encrypted && this._keyView(c, userId)),
       members: rows.map((r) => ({
         userId: r.user_id, name: r.name, avatar: r.avatar, role: r.role,
-        lastReadSeq: r.last_read_seq, publicKey: r.public_key,
+        // People who turned read receipts off look permanently unread to everyone else.
+        lastReadSeq: r.hide_read && r.user_id !== userId ? 0 : r.last_read_seq,
+        ...(c.encrypted && { devices: this._memberDevices(c, r.user_id) }),
       })),
       lastMessage: last ? this._messageOut(last, this._reactions([last.id])) : null,
     };
+  }
+
+  /** The encryption state one user needs: every wrapped key held for any of their devices. */
+  _keyView(c, userId) {
+    const wrappedKeys = {};
+    for (const k of this.all('SELECT device_id, epoch, wrapped FROM member_keys WHERE conversation_id = ? AND user_id = ?', c.id, userId)) {
+      (wrappedKeys[k.device_id] ??= {})[k.epoch] = JSON.parse(k.wrapped);
+    }
+    return { keyEpoch: c.key_epoch, rotatePending: !!c.rotate_pending, wrappedKeys };
+  }
+
+  /** A member's devices, and whether each can already read at the current key. */
+  _memberDevices(c, userId) {
+    return this.all(
+      `SELECT d.device_id, d.public_key, EXISTS (
+         SELECT 1 FROM member_keys k WHERE k.conversation_id = ? AND k.user_id = d.user_id AND k.device_id = d.device_id AND k.epoch = ?
+       ) AS keyed FROM devices d WHERE d.user_id = ? ORDER BY d.created_at`,
+      c.id, c.key_epoch, userId,
+    ).map((d) => ({ deviceId: d.device_id, publicKey: d.public_key, keyed: !!d.keyed }));
   }
 
   listConversations(userId, limit = 200) {
@@ -420,15 +555,21 @@ export class Store {
     this.tx(() => {
       for (const uid of userIds) {
         this.run(
-          'INSERT OR IGNORE INTO members (conversation_id, user_id, role, wrapped_key, joined_at) VALUES (?, ?, ?, ?, ?)',
-          conversationId, uid, 'member', keys?.[uid] ? JSON.stringify(keys[uid]) : null, t,
+          'INSERT OR IGNORE INTO members (conversation_id, user_id, role, joined_at) VALUES (?, ?, ?, ?)',
+          conversationId, uid, 'member', t,
         );
       }
+      if (keys) this.addMemberKeys(conversationId, keys);
     });
   }
 
   removeMember(conversationId, userId) {
-    this.run('DELETE FROM members WHERE conversation_id = ? AND user_id = ?', conversationId, userId);
+    this.tx(() => {
+      this.run('DELETE FROM members WHERE conversation_id = ? AND user_id = ?', conversationId, userId);
+      this.run('DELETE FROM member_keys WHERE conversation_id = ? AND user_id = ?', conversationId, userId);
+      // Whoever left still knows the current key, so the next sender must replace it.
+      this.run('UPDATE conversations SET rotate_pending = 1 WHERE id = ? AND encrypted = 1', conversationId);
+    });
   }
 
   setRole(conversationId, userId, role) {

@@ -19,7 +19,7 @@
   "scripts": {
     "start": "node bin/plugchat.js start",
     "demo": "node examples/host-app/server.js",
-    "test": "node --test"
+    "test": "node --test --test-timeout=20000 --test-force-exit"
   },
   "dependencies": {
     "ws": "^8.18.0"

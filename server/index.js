@@ -287,16 +287,35 @@ export function createPlugChat(options = {}) {
     for (const id of ids) if (!store.getUser(id)) throw new HttpError(404, 'user_not_found', `unknown user "${id}" (provision users with PUT /v1/users/:id)`);
   }
 
-  function requireKeys(ids, keys) {
-    const out = {};
-    for (const id of ids) {
-      if (!store.getUser(id).publicKey) throw new HttpError(409, 'no_public_key', `user "${id}" has not set up encryption yet`);
-      if (!keys?.[id]) throw bad(`missing wrapped key for "${id}"`);
-      out[id] = wrappedKey(keys[id]);
+  /**
+   * Validate wrapped conversation keys sent by a client. Every key must be for
+   * a registered device of a conversation member; `mustCover` lists the people
+   * who need at least one, so nobody is added to a chat they cannot read.
+   */
+  function memberKeys(memberIds, keys, { epoch, maxEpoch, mustCover = [] } = {}) {
+    if (!Array.isArray(keys) || keys.length > 10_000) throw bad('keys must be an array');
+    const members = new Set(memberIds);
+    const out = keys.map((k) => {
+      const key = { userId: str(k?.userId, 'keys.userId', 128), deviceId: str(k.deviceId, 'keys.deviceId', 64), epoch: epoch ?? k.epoch, ...wrappedKey(k) };
+      if (!Number.isInteger(key.epoch) || key.epoch < 1 || (maxEpoch && key.epoch > maxEpoch)) throw bad('keys.epoch is out of range');
+      if (!members.has(key.userId) || !store.hasDevice(key.userId, key.deviceId)) throw bad('keys must be for devices of conversation members');
+      return key;
+    });
+    for (const id of mustCover) {
+      if (!store.devicesOf(id).length) throw new HttpError(409, 'no_public_key', `user "${id}" has not set up encryption yet`);
+      if (!out.some((k) => k.userId === id)) throw bad(`missing wrapped key for "${id}"`);
     }
     return out;
   }
 
+  // Ciphertext is "e1.<key epoch>.<data>". The server cannot read it, but it can
+  // insist on the current key, which is what locks out people who have left.
+  function checkCipher(conv, body) {
+    const epoch = /^e1\.(\d{1,9})\./.exec(body)?.[1];
+    if (!epoch) throw bad('this conversation only accepts encrypted messages');
+    if (conv.rotate_pending) throw new HttpError(409, 'rotation_required', 'the conversation key must be replaced before sending');
+    if (Number(epoch) !== conv.key_epoch) throw new HttpError(409, 'stale_epoch', 'the conversation key has changed; refresh and resend');
+  }
   const adminOnly = (ctx) => {
     if (!ctx.auth.admin) throw forbidden('admin token required');
   };
@@ -318,12 +337,21 @@ export function createPlugChat(options = {}) {
       return userView(user, ctx.auth);
     }],
 
+    // Each browser or phone registers its own key. Other members' devices then
+    // hand it the conversation keys, so a new device can read existing chats.
     ['PUT', '/v1/me/key', async (ctx) => {
-      const { publicKey } = await ctx.json();
-      store.setPublicKey(ctx.auth.sub, str(publicKey, 'publicKey', 256));
+      const b = await ctx.json();
+      const fresh = store.registerDevice(ctx.auth.sub, str(b.deviceId, 'deviceId', 64), str(b.publicKey, 'publicKey', 256));
+      if (fresh) for (const id of store.encryptedConversationIds(ctx.auth.sub)) pushConversation(id);
       return { ...userView(store.getUser(ctx.auth.sub), ctx.auth), directory, features: { directory, stories, requireEncryption, calls: callMode } };
     }],
 
+    ['GET', '/v1/me/devices', (ctx) => ({ devices: store.devicesOf(ctx.auth.sub) })],
+    ['DELETE', '/v1/me/devices/:deviceId', (ctx) => {
+      if (!store.removeDevice(ctx.auth.sub, ctx.params.deviceId)) throw notFound('device not found');
+      for (const id of store.encryptedConversationIds(ctx.auth.sub)) pushConversation(id);
+      return { removed: true };
+    }],
     ['GET', '/v1/users', (ctx) => {
       if (!directory && !ctx.auth.admin) throw forbidden('user directory is disabled');
       const users = store.searchUsers(ctx.url.searchParams.get('q') ?? '', ctx.auth.sub);
@@ -332,10 +360,9 @@ export function createPlugChat(options = {}) {
 
     // Needed to set up encryption with someone before any conversation exists.
     // Reveals nothing beyond what starting a chat with that id already would.
-    ['GET', '/v1/users/:id/key', (ctx) => {
-      const user = store.getUser(ctx.params.id);
-      if (!user) throw notFound('user not found');
-      return { publicKey: user.publicKey };
+    ['GET', '/v1/users/:id/devices', (ctx) => {
+      if (!store.getUser(ctx.params.id)) throw notFound('user not found');
+      return { devices: store.devicesOf(ctx.params.id).map(({ deviceId, publicKey }) => ({ deviceId, publicKey })) };
     }],
 
     ['GET', '/v1/users/:id', (ctx) => {
@@ -417,7 +444,7 @@ export function createPlugChat(options = {}) {
         memberIds,
         encrypted,
         ttlSeconds: b.ttlSeconds === undefined ? null : ttl(b.ttlSeconds),
-        keys: encrypted ? requireKeys(memberIds, b.keys) : null,
+        keys: encrypted ? memberKeys(memberIds, b.keys, { epoch: 1, mustCover: memberIds }) : null,
         announce: b.type === 'group' && b.announce === true,
         description: str(b.description, 'description', 500, { optional: true, allowEmpty: true }),
       });
@@ -521,6 +548,31 @@ export function createPlugChat(options = {}) {
       return store.conversationFor(conv.id, ctx.auth.sub);
     }],
 
+    // Hand existing conversation keys to member devices that lack them (a
+    // person's new phone, or someone just added). Never overwrites.
+    ['POST', '/v1/conversations/:id/keys', async (ctx) => {
+      const { conv, member } = access(ctx, ctx.params.id);
+      if (!conv.encrypted || !member) throw bad('not an encrypted conversation you belong to');
+      const keys = memberKeys(store.memberIds(conv.id), (await ctx.json()).keys, { maxEpoch: conv.key_epoch });
+      store.addMemberKeys(conv.id, keys);
+      for (const uid of new Set(keys.map((k) => k.userId))) {
+        if (hub.isOnline(uid)) hub.emit([uid], { type: 'conversation.updated', conversation: store.conversationFor(conv.id, uid) });
+      }
+      return store.conversationFor(conv.id, ctx.auth.sub);
+    }],
+
+    // Replace the conversation key. Required after someone leaves, so they
+    // cannot read what is said next; any member may also do it at will.
+    ['POST', '/v1/conversations/:id/rotate', async (ctx) => {
+      const { conv, member } = access(ctx, ctx.params.id);
+      if (!conv.encrypted || !member) throw bad('not an encrypted conversation you belong to');
+      const b = await ctx.json();
+      const memberIds = store.memberIds(conv.id);
+      const keys = memberKeys(memberIds, b.keys, { epoch: b.epoch, mustCover: [ctx.auth.sub] });
+      if (!store.rotateKey(conv.id, b.epoch, keys)) throw new HttpError(409, 'stale_epoch', 'someone else already replaced the key; refresh');
+      pushConversation(conv.id);
+      return store.conversationFor(conv.id, ctx.auth.sub);
+    }],
     ['GET', '/v1/conversations/:id/pins', (ctx) => {
       access(ctx, ctx.params.id);
       return { messages: store.listPins(ctx.params.id) };
@@ -543,7 +595,7 @@ export function createPlugChat(options = {}) {
       const userIds = idList(b.userIds, 'userIds').filter((id) => !current.has(id));
       if (current.size + userIds.length > MAX_MEMBERS) throw bad('group is full');
       requireUsers(userIds);
-      store.addMembers(conv.id, userIds, conv.encrypted ? requireKeys(userIds, b.keys) : null);
+      store.addMembers(conv.id, userIds, conv.encrypted ? memberKeys([...current, ...userIds], b.keys, { maxEpoch: conv.key_epoch, mustCover: userIds }) : null);
       pushConversation(conv.id);
       return store.conversationFor(conv.id, ctx.auth.sub);
     }],
@@ -617,7 +669,7 @@ export function createPlugChat(options = {}) {
       }
       let body = str(b.body ?? '', 'body', MAX_BODY_CHARS, { allowEmpty: !!attachment });
       // Refuse plaintext in an encrypted conversation so a buggy client can't leak content.
-      if (conv.encrypted && kind !== 'system' && !body.startsWith('e1.')) throw bad('this conversation only accepts encrypted messages');
+      if (conv.encrypted && kind !== 'system') checkCipher(conv, body);
 
       const meta = {};
       const viewOnce = b.viewOnce === true;
@@ -737,7 +789,9 @@ export function createPlugChat(options = {}) {
       if (message.senderId !== ctx.auth.sub) throw forbidden('you can only edit your own messages');
       if (message.deleted || message.kind !== 'text' || message.viewOnce) throw bad('this message cannot be edited');
       const body = str((await ctx.json()).body, 'body', MAX_BODY_CHARS);
-      if (conv.encrypted && !body.startsWith('e1.')) throw bad('this conversation only accepts encrypted messages');
+      // An edit stays on the key the message was written with (its attachment depends on it).
+      const epoch = (s) => /^e1\.(\d{1,9})\./.exec(s)?.[1];
+      if (conv.encrypted && (!epoch(body) || epoch(body) !== epoch(message.body))) throw bad('an edit must be encrypted with the original message key');
       const updated = store.editMessage(message.id, body);
       hub.emit(store.memberIds(conv.id), { type: 'message.updated', message: updated });
       return updated;

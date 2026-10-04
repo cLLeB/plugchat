@@ -670,6 +670,44 @@ test('secret rotation keeps old tokens working; over-long tokens are refused', a
   }
 });
 
+test('two instances sharing a database behave as one', async () => {
+  const d = mkdtempSync(join(tmpdir(), 'plugchat-cluster-'));
+  const opts = { secret: SECRET, dataDir: d, log: { error() {} }, cluster: true };
+  const one = createPlugChat(opts);
+  const two = createPlugChat(opts);
+  const [s1, s2] = [await one.listen(0), await two.listen(0)];
+  const mk = async (srv, sub) => {
+    const c = new PlugChat({ url: `http://localhost:${srv.address().port}/plugchat`, getToken: async () => signToken({ sub }, SECRET) });
+    await c.connect();
+    return c;
+  };
+  const ann = await mk(s1, 'ann'); // connected to instance one
+  const bob = await mk(s2, 'bob'); // connected to instance two
+  try {
+    const dm = await ann.openDm('bob');
+    const got = next(bob, 'message');
+    await ann.send(dm.id, { text: 'across instances' });
+    assert.equal((await got).text, 'across instances');
+
+    assert.equal((await ann.user('bob')).online, true, 'presence is shared');
+    const typing = next(ann, 'typing');
+    bob.typing(dm.id);
+    assert.equal((await typing).userId, 'bob');
+
+    const offline = next(ann, 'presence', (e) => e.userId === 'bob' && !e.online);
+    bob.close();
+    await offline;
+    assert.equal((await ann.user('bob')).online, false);
+  } finally {
+    ann.close();
+    bob.close();
+    for (const s of [s1, s2]) (s.close(), s.closeAllConnections());
+    one.close();
+    two.close();
+    rmSync(d, { recursive: true, force: true });
+  }
+});
+
 test('writes are rate limited per user', async () => {
   const d = mkdtempSync(join(tmpdir(), 'plugchat-rl-'));
   const limited = createPlugChat({ secret: SECRET, dataDir: d, log: { error() {} }, rateLimit: { perSecond: 1, burst: 3 } });

@@ -11,6 +11,7 @@
 import { createReadStream, mkdirSync } from 'node:fs';
 import { writeFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { signWebhook } from './auth.js';
 
 /** Default file storage: a directory on the host's own server. */
@@ -23,7 +24,59 @@ export function diskStorage(dir) {
   };
 }
 
-export const HOOK_EVENTS = ['message.before', 'conversation.before', 'upload.before', 'call.join'];
+/**
+ * Lets several PlugChat instances that share one database behave as one:
+ * an event raised on any instance reaches sockets connected to the others.
+ * This default needs no extra infrastructure; it passes events through the
+ * shared database, polling a few times a second.
+ *
+ * A host with Redis, NATS or similar can supply its own object with the same
+ * shape: { publish(msg), subscribe(fn), setPresence?(userId, online),
+ * isOnline?(userId), close?() }.
+ */
+export function databaseBus(store, { pollMs = 150 } = {}) {
+  const instance = randomUUID();
+  const STALE_MS = 45_000;
+  let last = store.get('SELECT COALESCE(MAX(id), 0) AS id FROM bus').id;
+  let handler = () => {};
+  const guard = (fn) => () => {
+    try {
+      fn();
+    } catch {
+      // the database was closed while shutting down
+    }
+  };
+  const poll = setInterval(guard(() => {
+    for (const row of store.all('SELECT id, instance, payload FROM bus WHERE id > ? ORDER BY id', last)) {
+      last = row.id;
+      if (row.instance !== instance) handler(JSON.parse(row.payload));
+    }
+  }), pollMs);
+  const beat = setInterval(guard(() => {
+    const t = Date.now();
+    store.run('UPDATE presence SET at = ? WHERE instance = ?', t, instance);
+    store.run('DELETE FROM presence WHERE at < ?', t - STALE_MS); // instances that died without saying goodbye
+    store.run('DELETE FROM bus WHERE at < ?', t - 60_000);
+  }), 15_000);
+  poll.unref();
+  beat.unref();
+  return {
+    publish: (msg) => void store.run('INSERT INTO bus (instance, payload, at) VALUES (?, ?, ?)', instance, JSON.stringify(msg), Date.now()),
+    subscribe: (fn) => void (handler = fn),
+    setPresence(userId, online) {
+      if (online) store.run('INSERT OR REPLACE INTO presence (user_id, instance, at) VALUES (?, ?, ?)', userId, instance, Date.now());
+      else store.run('DELETE FROM presence WHERE user_id = ? AND instance = ?', userId, instance);
+    },
+    isOnline: (userId) => !!store.get('SELECT 1 FROM presence WHERE user_id = ? AND instance != ? AND at > ?', userId, instance, Date.now() - STALE_MS),
+    close: guard(() => {
+      clearInterval(poll);
+      clearInterval(beat);
+      store.run('DELETE FROM presence WHERE instance = ?', instance);
+    }),
+  };
+}
+
+export const HOOK_EVENTS =['message.before', 'conversation.before', 'upload.before', 'call.join'];
 
 /**
  * Build `run(event, payload)`. Resolves to the host's answer, or `undefined`

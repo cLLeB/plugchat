@@ -9,8 +9,14 @@ const HEARTBEAT_MS = 30_000;
  * The single exception is the typing indicator, which is too chatty for HTTP.
  */
 export class Hub {
-  constructor({ store, authenticate, allowOrigin }) {
+  constructor({ store, authenticate, allowOrigin, bus }) {
     this.store = store;
+    // With several PlugChat instances, the bus carries events to sockets held by the others.
+    this.bus = bus;
+    bus?.subscribe((msg) => {
+      if (msg.disconnect) this._disconnectLocal(msg.disconnect);
+      else this._deliver(msg.userIds, msg.event);
+    });
     this.authenticate = authenticate;
     this.allowOrigin = allowOrigin;
     this.sockets = new Map(); // userId -> Set<WebSocket>
@@ -30,12 +36,18 @@ export class Hub {
   }
 
   isOnline(userId) {
-    return this.sockets.has(userId);
+    return this.sockets.has(userId) || !!this.bus?.isOnline?.(userId);
   }
 
   emit(userIds, event) {
+    const ids = [...new Set(userIds)];
+    this._deliver(ids, event);
+    if (ids.length) this.bus?.publish({ userIds: ids, event });
+  }
+
+  _deliver(userIds, event) {
     const data = JSON.stringify(event);
-    for (const uid of new Set(userIds)) {
+    for (const uid of userIds) {
       for (const ws of this.sockets.get(uid) ?? []) {
         if (ws.readyState === ws.OPEN) ws.send(data);
       }
@@ -44,6 +56,11 @@ export class Hub {
 
   /** Drop every socket a user has, e.g. after the host erases or bans them. */
   disconnect(userId) {
+    this._disconnectLocal(userId);
+    this.bus?.publish({ disconnect: userId });
+  }
+
+  _disconnectLocal(userId) {
     for (const ws of this.sockets.get(userId) ?? []) ws.close(4403, 'removed');
   }
 
@@ -115,6 +132,7 @@ export class Hub {
       let set = this.sockets.get(ws.userId);
       if (!set) this.sockets.set(ws.userId, (set = new Set()));
       set.add(ws);
+      this.bus?.setPresence?.(ws.userId, true);
       const peers = this.store.peers(ws.userId);
       if (!wasOnline) this.emit(peers, { type: 'presence', userId: ws.userId, online: true });
       ws.send(JSON.stringify({ type: 'ready', userId: ws.userId, online: peers.filter((p) => this.isOnline(p)) }));
@@ -139,7 +157,10 @@ export class Hub {
     if (set && set.size === 0) {
       this.sockets.delete(ws.userId);
       try {
+        this.bus?.setPresence?.(ws.userId, false);
         this.store.touchUser(ws.userId);
+        // Still connected through another instance: not offline yet.
+        if (this.isOnline(ws.userId)) return;
         this.emit(this.store.peers(ws.userId), { type: 'presence', userId: ws.userId, online: false, lastSeen: Date.now() });
       } catch {
         // store already closed during shutdown

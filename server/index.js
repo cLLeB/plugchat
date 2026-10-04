@@ -7,9 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { Store } from './store.js';
 import { Hub } from './hub.js';
 import { signToken, verifyToken, signWebhook } from './auth.js';
-import { diskStorage, createHooks } from './connectors.js';
+import { diskStorage, createHooks, databaseBus } from './connectors.js';
 
-export { signToken, verifyToken, signWebhook, diskStorage };
+export { signToken, verifyToken, signWebhook, diskStorage, databaseBus };
 
 const CLIENT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'client');
 const CLIENT_FILES = new Set(['plugchat.js', 'e2ee.js', 'calls.js', 'element.js', 'launcher.js', 'embed.js']);
@@ -128,6 +128,9 @@ export function createPlugChat(options = {}) {
     hookFailOpen = false,
     previousSecrets = [],
     maxTokenLifetimeSeconds = 86_400,
+    cluster = false,
+    bus: customBus,
+    userStorageBytes = 0,
     log = console,
   } = options;
 
@@ -194,7 +197,8 @@ export function createPlugChat(options = {}) {
   });
 
   const allowOrigin = (origin) => !origin || origins === '*' || origins.includes(origin);
-  const hub = new Hub({ store, authenticate, allowOrigin });
+  const bus = customBus ?? (cluster ? databaseBus(store) : undefined);
+  const hub = new Hub({ store, authenticate, allowOrigin, bus });
 
   const sweeper = setInterval(() => {
     try {
@@ -1118,6 +1122,7 @@ export function createPlugChat(options = {}) {
   function close() {
     clearInterval(sweeper);
     hub.close();
+    bus?.close?.();
     store.close();
   }
 

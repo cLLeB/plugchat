@@ -80,6 +80,13 @@ menu actions (payments, orders, bookings).
 **Identity** — people are found by whatever your platform uses: user id, email,
 phone number, username, or custom kinds such as a membership number.
 
+**Looks and feels like the messengers people know** — profile pictures for
+people and groups (initials only as a fallback) with an "about" line; voice
+notes with a recording bar and waveform player; grouped bubbles with ticks;
+`*bold*`, `_italic_`, `~strike~` and `` `code` `` formatting; large emoji;
+full-screen stories; on phones, full-screen pages, the device's back button,
+swipe to reply, double-tap to like, and press-and-hold menus.
+
 **Everyday comfort** — scheduled messages, drafts kept per conversation, an @-mention picker,
 messages that appear instantly and offer a retry if they fail, drag-and-drop
 and paste for attachments, a "new messages" line where you left off, desktop

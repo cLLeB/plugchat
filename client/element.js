@@ -48,6 +48,9 @@ const ICON = {
   download: svg('<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>'),
   image: svg('<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 15l-5-4-7 7"/>'),
   bubbles: svg('<path d="M4 5h11v8H9l-3 3v-3H4zM15 9h5v8h-2v3l-3-3h-4v-2"/>'),
+  camera: svg('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>'),
+  clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+  archive: svg('<path d="M3 5h18v4H3zM5 9v10h14V9M10 13h4"/>'),
   copy: svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/>'),
   star: svg('<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z"/>'),
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>'),
@@ -66,7 +69,15 @@ const ICON = {
   file: svg('<path d="M7 3h7l4 4v14H7zM14 3v4h4"/>'),
 };
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
-const EMOJI = [...'😀😃😄😁😆😅🤣😂🙂😉😊😇🥰😍😘😋😜🤪🤗🤔🤨😐😏😒🙄😬😌😴🤒🤯🥳😎😢😭😤😡🤬😱😳🥺🤝👍👎👏🙌🙏💪👌✌🤞👋👀💯🔥✨🎉🎂🎁🏆⚽🎵📌📎📷📞💬💡✅❌❓❗⏰📅💰🛒🚀🚗🏠🌍☀🌧⭐🌹🍀🍕🍔☕🍺❤🧡💛💚💙💜🖤💔'];
+const EMOJI_SETS = {
+  smileys: [...'😀😃😄😁😆😅🤣😂🙂🙃😉😊😇🥰😍🤩😘😗😋😛😜🤪😝🤗🤭🤫🤔🤐🤨😐😑😶😏😒🙄😬😌😔😪😴😷🤒🤕🤢🤮🥵🥶😵🤯🤠🥳😎🤓😕😟🙁😮😯😲😳🥺😦😧😨😰😥😢😭😱😖😣😞😓😩😫🥱😤😡😠🤬😈💀💩🤡👻👽🤖'],
+  gestures: [...'👍👎👊✊🤛🤜👏🙌👐🤲🤝🙏✍💅🤳💪👈👉👆👇✋🤚🖐🖖👋🤙👌🤏✌🤞🤟🤘👀👁👅👄👂👃🧠🫶'],
+  hearts: [...'❤🧡💛💚💙💜🖤🤍🤎💔❣💕💞💓💗💖💘💝💟💌💋💍💎'],
+  celebration: [...'🎉🎊🎈🎂🎁🎀🏆🥇🥈🥉🏅🎖🎯🎮🎲🎵🎶🎤🎧🎸🎹🥁🎬🎨🔥✨⭐🌟💫💥💯✅❌❓❗💤💢'],
+  nature: [...'🐶🐱🐭🐹🐰🦊🐻🐼🐨🐯🦁🐮🐷🐸🐵🐔🐧🐦🦆🦉🦄🐝🦋🐢🐍🐙🐬🐳🌸🌹🌺🌻🌼🌷🌱🌲🌴🍀🍁🍂🌍🌙☀⛅🌧⛈🌈❄⚡💧🌊'],
+  food: [...'🍏🍎🍐🍊🍋🍌🍉🍇🍓🍒🍑🥭🍍🥥🥑🍅🥕🌽🍞🧀🍳🥞🍗🍖🌭🍔🍟🍕🥪🌮🍝🍜🍚🍣🍰🧁🍫🍬🍭🍩🍪☕🍵🥤🍺🍷🥂'],
+  things: [...'📱💻⌨🖥📷📹🎥📞☎📺📻⏰⏳💡🔦💰💳🛒🎒📚📖✏📝📌📎✂🔑🔒🔓🔔📣📢💬💭🗓📅📁🗑🚗🚕🚌🚲✈🚀🏠🏢🏥🏫⚽🏀🏈🎾🏐'],
+};
 const INLINE_IMAGES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 const PLAYABLE = /^(audio\/(webm|ogg|mpeg|mp4|wav|x-wav|aac)|video\/(mp4|webm))$/;
 const TIMERS = [[0, 'Off'], [60, '1 minute'], [3600, '1 hour'], [86400, '1 day'], [604800, '1 week']];
@@ -106,12 +117,27 @@ const debounce = (fn, ms) => {
   return (...a) => (clearTimeout(t), (t = setTimeout(() => fn(...a), ms)));
 };
 
+// Who can be @mentioned in the conversation on screen (lower-cased first names).
+let mentionable = new Set();
+// One to three emoji and nothing else: shown large, without a bubble.
+const JUMBO = /^(?:\p{Extended_Pictographic}(?:\ufe0f|\u200d\p{Extended_Pictographic}|\p{Emoji_Modifier})*\s?){1,3}$/u;
+
+/**
+ * Message text as nodes: links become links, *bold* _italic_ ~strike~ `code`
+ * are styled the way messengers do, and @names of members are highlighted.
+ * Everything else stays plain text; nothing is ever parsed as HTML.
+ */
 function linkify(text) {
   const out = [];
   let last = 0;
-  for (const m of text.matchAll(/https?:\/\/[^\s<>"']+/g)) {
-    out.push(text.slice(last, m.index));
-    out.push(h('a', { href: m[0], target: '_blank', rel: 'noopener noreferrer nofollow' }, m[0]));
+  const pattern = /(https?:\/\/[^\s<>"']+)|(?<![\p{L}\p{N}])([*_~`])(?=\S)([^\n]*?\S)\2(?![\p{L}\p{N}])|@([\p{L}\p{N}_]+)/gu;
+  for (const m of text.matchAll(pattern)) {
+    let node;
+    if (m[1]) node = h('a', { href: m[1], target: '_blank', rel: 'noopener noreferrer nofollow' }, m[1]);
+    else if (m[2]) node = h({ '*': 'strong', _: 'em', '~': 's', '`': 'code' }[m[2]], {}, m[2] === '`' ? m[3] : linkify(m[3]));
+    else if (mentionable.has(m[4].toLowerCase())) node = h('span', { class: 'at' }, m[0]);
+    else continue;
+    out.push(text.slice(last, m.index), node);
     last = m.index + m[0].length;
   }
   out.push(text.slice(last));
@@ -174,11 +200,21 @@ class PlugChatElement extends HTMLElement {
     if (!this.shadowRoot.firstChild) this._build();
     this._onVisible = () => document.visibilityState === 'visible' && this._markRead();
     document.addEventListener('visibilitychange', this._onVisible);
+    this._onPop = () => {
+      if (!this._pushed) return;
+      this._pushed = false;
+      if (this.$dialog.open) this.$dialog.close();
+      this.$root.querySelector('.storyfs')?.remove();
+      if (this.activeId) this._select(null);
+    };
+    window.addEventListener('popstate', this._onPop);
     this._maybeStart();
   }
 
   disconnectedCallback() {
     document.removeEventListener('visibilitychange', this._onVisible);
+    window.removeEventListener('popstate', this._onPop);
+    clearTimeout(this._storyTimer);
     this.calls?.close();
     this._stopRecording(true);
     for (const player of this.players.values()) player.audio.pause();
@@ -269,11 +305,18 @@ class PlugChatElement extends HTMLElement {
         (this.$chips = h('div', { class: 'chips', hidden: true })),
         this.$stories,
         this.$list,
+        h('button', { class: 'fab', icon: 'edit', title: T('New chat'), 'aria-label': T('New chat'), onclick: () => this._newChatDialog() }),
       ),
       this.$main,
     );
     this.$root.dir = this._dir;
     this.$dialog = h('dialog', { dir: this._dir });
+    this.$toast = h('div', { class: 'toast', hidden: true, role: 'status' });
+    this.$root.append(this.$toast);
+    this._holdable(this.$list, (e) => {
+      const conv = this.convs.get(e.target.closest('.conv[data-id]')?.dataset.id);
+      if (conv) this._chatSheet(conv);
+    });
     this.$dialog.addEventListener('click', (e) => e.target === this.$dialog && this.$dialog.close());
     // Clicking anywhere else puts the pop-up menus away.
     this.shadowRoot.addEventListener('click', (e) => {
@@ -328,6 +371,11 @@ class PlugChatElement extends HTMLElement {
       this._reload().then(() => this.activeId && this._select(this.activeId));
     });
     chat.on('scheduled.failed', (e) => this._error(T('Could not be sent: {reason}', { reason: e.error })));
+    chat.on('user.updated', () => {
+      this._renderList();
+      this._renderHeader();
+      if (this.activeId) this._renderMessages();
+    });
     chat.on('star', (e) => this._patch(e.conversationId, e.messageId, (m) => ({ ...m, starred: e.starred })));
     chat.on('reaction', (e) => this._patch(e.conversationId, e.messageId, (m) => ({ ...m, reactions: e.reactions })));
     chat.on('read', (e) => {
@@ -409,11 +457,24 @@ class PlugChatElement extends HTMLElement {
   _role(conv) {
     return conv.members.find((m) => m.userId === this.chat.me.id)?.role;
   }
-  _avatar(name, url, { small = false, online = false } = {}) {
+  /**
+   * A person's or group's picture. Shows their uploaded photo (or the one the
+   * platform supplied); the coloured initials are only the fallback, and stay
+   * visible until a picture has actually loaded.
+   */
+  _avatar(name, picture, { small = false, online = false } = {}) {
     const el = h('div', { class: `avatar${small ? ' sm' : ''}`, 'aria-hidden': 'true' });
-    if (url && /^https?:\/\//.test(url)) el.style.backgroundImage = `url("${encodeURI(url)}")`;
-    else el.textContent = initials(name);
+    const letters = document.createTextNode(initials(name));
+    el.append(letters);
     el.style.backgroundColor = `hsl(${hue(name)} 45% 45%)`;
+    if (picture && this.chat) {
+      this.chat.avatarUrl(picture).then((url) => {
+        if (!url) return;
+        el.style.backgroundImage = `url("${url}")`;
+        el.classList.add('photo-on');
+        letters.remove();
+      });
+    }
     if (online) el.append(h('span', { class: 'dot' }));
     return el;
   }
@@ -424,7 +485,9 @@ class PlugChatElement extends HTMLElement {
     if (m.kind === 'poll') return T('Poll: {question}', { question: m.text });
     if (m.kind === 'location') return T('Shared a location');
     if (m.kind === 'call') return m.call.video ? T('Video call') : T('Voice call');
-    return m.text || (m.file ? this._fileLabel(m.file) : '');
+    // Previews show the words, not the *formatting* marks around them.
+    const words = (m.text ?? '').replace(/(?<![\p{L}\p{N}])([*_~`])(?=\S)([^\n]*?\S)\1(?![\p{L}\p{N}])/gu, '$2');
+    return words || (m.file ? this._fileLabel(m.file) : '');
   }
   _preview(conv, m) {
     if (!m) return conv.encrypted ? T('Encrypted conversation') : T('No messages yet');
@@ -454,28 +517,52 @@ class PlugChatElement extends HTMLElement {
 
   /**
    * How a message's actions are reached without the hover buttons: press and
-   * hold on a touch screen, right-click with a mouse, Enter or Space from the keyboard.
+   * hold on a touch screen, right-click with a mouse, Enter or Space from the
+   * keyboard. On a touch screen a message can also be swiped to reply and
+   * double-tapped to like.
    */
   _pressable(bubble, row, m, mine, conv) {
-    let timer = null;
-    const cancel = () => clearTimeout(timer);
     bubble.tabIndex = 0;
-    bubble.addEventListener('pointerdown', (e) => {
-      if (e.pointerType === 'mouse' || e.target.closest('a, button, .wave')) return;
-      timer = setTimeout(() => this._messageSheet(m, mine, conv), 450);
-    });
-    for (const type of ['pointerup', 'pointermove', 'pointercancel', 'pointerleave']) bubble.addEventListener(type, cancel);
-    bubble.addEventListener('contextmenu', (e) => {
-      if (e.target.closest('a')) return; // keep the browser's own menu for links
-      e.preventDefault();
-      cancel();
+    this._holdable(bubble, (e) => {
       const more = row.querySelector('.acts .mini:last-child');
-      if (more && getComputedStyle(more.parentElement).display !== 'none') this._pop(more, 'menu', m, mine, conv);
+      const hoverUi = e.type === 'contextmenu' && more && getComputedStyle(more.parentElement).display !== 'none';
+      if (hoverUi) this._pop(more, 'menu', m, mine, conv);
       else this._messageSheet(m, mine, conv);
     });
     bubble.addEventListener('keydown', (e) => {
       if (e.target === bubble && (e.key === 'Enter' || e.key === ' ')) (e.preventDefault(), this._messageSheet(m, mine, conv));
     });
+    bubble.addEventListener('dblclick', (e) => {
+      if (!e.target.closest('a, button, .wave')) this._toggleReaction(m, '❤️');
+    });
+
+    // Swipe towards the centre of the screen to reply.
+    let from = null;
+    let dx = 0;
+    const settle = () => {
+      row.style.transition = 'transform .15s';
+      row.style.transform = '';
+      from = null;
+      dx = 0;
+    };
+    row.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'mouse' && !e.target.closest('.wave, button, a')) from = [e.clientX, e.clientY];
+    });
+    row.addEventListener('pointermove', (e) => {
+      if (!from) return;
+      const x = e.clientX - from[0];
+      if (Math.abs(e.clientY - from[1]) > 24) return settle();
+      dx = Math.max(0, Math.min(72, this._dir === 'rtl' ? -x : x));
+      if (dx > 8) {
+        row.style.transition = 'none';
+        row.style.transform = `translateX(${this._dir === 'rtl' ? -dx : dx}px)`;
+      }
+    });
+    row.addEventListener('pointerup', () => {
+      if (dx > 52) (navigator.vibrate?.(8), this._setDraftMode({ replyTo: m }));
+      settle();
+    });
+    row.addEventListener('pointercancel', settle);
   }
 
   /** Everything that can be done with a message, in the order people look for it. */
@@ -486,7 +573,7 @@ class PlugChatElement extends HTMLElement {
     const plain = m.kind === 'text' && !m.viewOnce;
     return [
       { icon: 'reply', label: T('Reply'), run: () => this._setDraftMode({ replyTo: m }) },
-      m.text && !m.viewOnce && { icon: 'copy', label: T('Copy text'), run: () => this._guard(navigator.clipboard.writeText(m.text)) },
+      m.text && !m.viewOnce && { icon: 'copy', label: T('Copy text'), run: () => this._guard(navigator.clipboard.writeText(m.text).then(() => this._toast(T('Copied')))) },
       !m.viewOnce && m.kind !== 'call' && { icon: 'forward', label: T('Forward'), run: () => this._forwardDialog(m) },
       { icon: 'star', label: m.starred ? T('Unstar') : T('Star'), run: () => this._guard(m.starred ? this.chat.unstar(m.id) : this.chat.star(m.id)) },
       canPin && { icon: 'pin', label: m.pinned ? T('Unpin') : T('Pin'), run: () => this._guard(m.pinned ? this.chat.unpin(m.id) : this.chat.pin(m.id)) },
@@ -651,6 +738,96 @@ class PlugChatElement extends HTMLElement {
     if (navigator.mediaDevices && globalThis.MediaRecorder) this._startRecording();
   }
 
+  /** Is the single-pane (phone) layout showing? */
+  _narrow() {
+    return this.$root.clientWidth <= 700;
+  }
+
+  /** Leave the open chat. On a phone this is also what the device's back button does. */
+  _back() {
+    if (this._pushed) history.back();
+    else this._select(null);
+  }
+
+  /** A brief confirmation at the bottom of the chat: "Copied", "Saved"... */
+  _toast(text) {
+    clearTimeout(this._toastTimer);
+    this.$toast.textContent = text;
+    this.$toast.hidden = false;
+    this._toastTimer = setTimeout(() => (this.$toast.hidden = true), 1800);
+  }
+
+  /** Call `open` when an element is pressed and held (touch) or right-clicked (mouse). */
+  _holdable(el, open) {
+    let timer = null;
+    let start = null;
+    const cancel = () => clearTimeout(timer);
+    el.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse') return;
+      start = [e.clientX, e.clientY];
+      timer = setTimeout(() => {
+        navigator.vibrate?.(8);
+        el.dataset.held = '1'; // swallow the click that follows the release
+        open(e);
+      }, 450);
+    });
+    el.addEventListener('pointermove', (e) => start && Math.hypot(e.clientX - start[0], e.clientY - start[1]) > 8 && cancel());
+    for (const type of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(type, cancel);
+    el.addEventListener('click', (e) => {
+      if (el.dataset.held) (delete el.dataset.held, e.stopPropagation(), e.preventDefault());
+    }, true);
+    el.addEventListener('contextmenu', (e) => {
+      if (e.target.closest('a')) return; // keep the browser's own menu for links
+      e.preventDefault();
+      cancel();
+      open(e);
+    });
+  }
+
+  /** Quick actions for a chat in the list: what a long press or right-click offers. */
+  _chatSheet(conv) {
+    const close = () => this.$dialog.close();
+    const item = (icon, label, run) => h('button', { role: 'menuitem', onclick: () => (close(), this._guard(Promise.resolve(run()))) }, h('span', { icon }), label);
+    this._openDialog(h('div', { class: 'panel' },
+      h('div', { class: 'hero compact' }, this._avatar(this._title(conv), conv.type === 'dm' ? this._other(conv)?.avatar : conv.avatar), h('strong', {}, this._title(conv))),
+      h('div', { class: 'sheetlist', role: 'menu' },
+        item('pin', conv.pinned ? T('Unpin') : T('Pin to top'), () => this.chat.settings(conv.id, { pinned: !conv.pinned })),
+        item('mute', conv.muted ? T('Unmute notifications') : T('Mute notifications'), () => this.chat.settings(conv.id, { muted: !conv.muted })),
+        item('archive', conv.archived ? T('Unarchive') : T('Archive'), () => this.chat.settings(conv.id, { archived: !conv.archived })),
+        conv.unread > 0 && item('checks', T('Mark as read'), () => this.chat.read(conv.id, conv.lastSeq).then(() => ((conv.unread = 0), this._renderList(), this._announceUnread()))),
+        item('info', conv.type === 'group' ? T('Group info') : T('Contact info'), () => this._detailsDialog(conv)),
+      ),
+    ));
+  }
+
+  /** Let the person choose a photo, crop it to a centred square and shrink it for use as a picture. */
+  _pickPicture() {
+    return new Promise((resolve) => {
+      const input = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif' });
+      input.onchange = async () => {
+        const file = input.files[0];
+        if (!file) return resolve(null);
+        try {
+          const bitmap = await createImageBitmap(file);
+          const side = Math.min(bitmap.width, bitmap.height);
+          const canvas = h('canvas', { width: '320', height: '320' });
+          canvas.getContext('2d').drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, 320, 320);
+          canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.86);
+        } catch {
+          this._error(T('That file is not a picture this browser can read.'));
+          resolve(null);
+        }
+      };
+      input.click();
+    });
+  }
+
+  /** A whole screen rather than a small prompt: on a phone it fills the display and has a back arrow. */
+  _openPage(...content) {
+    this._openDialog(...content);
+    this.$dialog.className = 'page';
+  }
+
   _renderList() {
     if (!this.chat?.me) return;
     const q = this.query.trim().toLowerCase();
@@ -675,8 +852,8 @@ class PlugChatElement extends HTMLElement {
       const typing = this.typing.get(c.id)?.size > 0;
       const draft = c.id !== this.activeId && this._draft(c.id);
       const mineLast = last && last.senderId === me && last.kind !== 'system' && !last.deleted;
-      nodes.push(h('button', { class: `conv${unread ? ' unread' : ''}`, role: 'listitem', 'aria-current': String(c.id === this.activeId), onclick: () => this._select(c.id) },
-        this._avatar(title, other?.avatar, { online: !!other && this.chat.online.has(other.userId) }),
+      nodes.push(h('button', { class: `conv${unread ? ' unread' : ''}`, role: 'listitem', 'data-id': c.id, 'aria-current': String(c.id === this.activeId), onclick: () => this._select(c.id) },
+        this._avatar(title, other ? other.avatar : c.avatar, { online: !!other && this.chat.online.has(other.userId) }),
         h('div', { class: 'body' },
           h('div', { class: 'line' },
             h('span', { class: 'name' }, title),
@@ -703,7 +880,7 @@ class PlugChatElement extends HTMLElement {
         const c = this.convs.get(m.conversationId);
         if (!c) continue;
         nodes.push(h('button', { class: 'conv', onclick: () => this._select(c.id, m.id) },
-          this._avatar(this._title(c), null),
+          this._avatar(this._title(c), c.type === 'dm' ? this._other(c)?.avatar : c.avatar),
           h('div', { class: 'body' },
             h('div', { class: 'line' }, h('span', { class: 'name' }, this._title(c)), h('span', { class: 'when' }, shortWhen(m.createdAt))),
             h('div', { class: 'line' }, h('span', { class: 'preview' }, `${first(this._memberName(c, m.senderId))}: ${m.text}`)),
@@ -821,6 +998,12 @@ class PlugChatElement extends HTMLElement {
 
   async _select(id, focusMessageId) {
     if (this.activeId && this.$input?.isConnected && !this.editing) this._saveDraft(this.activeId, this.$input.value);
+    // On a phone, opening a chat is a step the device's back button can undo.
+    if (id && !this._pushed && this._narrow() && this._on('history')) {
+      history.pushState({ ...history.state, plugchat: true }, '');
+      this._pushed = true;
+    }
+    if (!id) this._pushed = false;
     this.activeId = id;
     this._below = 0;
     this._mention = null;
@@ -844,7 +1027,7 @@ class PlugChatElement extends HTMLElement {
     this.$live = h('div', { class: 'sr', 'aria-live': 'polite' });
     this.$typing = h('div', { class: 'typing' });
     this.$error = h('div', { class: 'error', hidden: true, role: 'alert' });
-    this.$banner = h('div', { class: 'banner', hidden: true });
+    this.$banner = h('div', { class: 'extras', hidden: true });
     this.$input = h('textarea', { rows: '1', placeholder: T('Message'), 'aria-label': T('Message'),
       oninput: () => (this._onInput(), this._mentionLookup()),
       onkeydown: (e) => {
@@ -965,10 +1148,10 @@ class PlugChatElement extends HTMLElement {
       : other ? (this.chat.online.has(other.userId) ? T('Online') : seen ? T('Last seen {when}', { when: shortWhen(seen) }) : T('Offline'))
       : T('{n} members', { n: conv.members.length }) + (conv.announce ? T(' · announcements') : '');
     fill(this.$header,
-      h('button', { class: 'icon backbtn', icon: 'back', title: T('Back'), 'aria-label': T('Back to conversations'), onclick: () => this._select(null) }),
+      h('button', { class: 'icon backbtn', icon: 'back', title: T('Back'), 'aria-label': T('Back to conversations'), onclick: () => this._back() }),
       // The name and picture open the conversation's details, as people expect.
       h('button', { class: 'who', 'aria-label': T('Conversation details'), onclick: () => this._detailsDialog(conv) },
-        this._avatar(this._title(conv), other?.avatar, { online: !!other && this.chat.online.has(other.userId) }),
+        this._avatar(this._title(conv), other ? other.avatar : conv.avatar, { online: !!other && this.chat.online.has(other.userId) }),
         h('div', { class: 'title' },
           h('span', { class: 'name' }, this._title(conv)),
           h('div', { class: `sub${typists.length ? ' live' : ''}` },
@@ -1051,6 +1234,7 @@ class PlugChatElement extends HTMLElement {
     const state = this.msgs.get(this.activeId);
     if (!conv || !state || !this.$msgs) return;
     this._closePop();
+    mentionable = new Set(conv.members.map((x) => first(x.name).toLowerCase()));
     const box = this.$msgs;
     const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
     const me = this.chat.me.id;
@@ -1090,7 +1274,8 @@ class PlugChatElement extends HTMLElement {
         const shown = m.viewOnce ? this.opened.get(m.id) : m;
         // A photo on its own fills the bubble edge to edge, with the time laid over it.
         const photoOnly = shown?.file && INLINE_IMAGES.has(shown.file.mime) && !shown.text && !m.replyTo && !m.forwarded && !(showAvatars && isFirst);
-        bubble = h('div', { class: `bubble${m.mentions?.includes(me) ? ' mention' : ''}${photoOnly ? ' media' : ''}${m.pending ? ' pending' : ''}` },
+        const jumbo = m.kind === 'text' && !m.file && !m.replyTo && !m.viewOnce && !m.forwarded && JUMBO.test(m.text ?? '');
+        bubble = h('div', { class: `bubble${m.mentions?.includes(me) ? ' mention' : ''}${photoOnly ? ' media' : ''}${jumbo ? ' jumbo' : ''}${m.pending ? ' pending' : ''}` },
           showAvatars && isFirst && h('button', { class: 'sender', onclick: () => this._profileDialog(m.senderId) }, name),
           m.forwarded && h('div', { class: 'tag' }, h('span', { icon: 'forward' }), T('Forwarded')),
           m.replyTo && h('button', { class: 'quote', onclick: () => this._jumpTo(m.replyTo) }, parent ? `${this._memberName(conv, parent.senderId)}: ${this._snippet(parent)}` : T('Earlier message')),
@@ -1100,7 +1285,8 @@ class PlugChatElement extends HTMLElement {
             m.pinned && h('span', { icon: 'pin', title: T('Pinned') }),
             m.expiresAt && h('span', { icon: 'timer', title: T('Disappearing message') }),
             m.editedAt && T('edited ·'),
-            m.pending && !m.failed ? T('Sending…') : clock(m.createdAt),
+            clock(m.createdAt),
+            m.pending && !m.failed && h('span', { icon: 'clock', title: T('Sending…') }),
             mine && !m.pending && this._ticks(m.seq <= othersRead),
           ),
         );
@@ -1108,7 +1294,7 @@ class PlugChatElement extends HTMLElement {
 
       const reacts = Object.entries(m.reactions ?? {});
       const usable = !m.deleted && !m.undecryptable && !m.pending;
-      const row = h('div', { class: `row${mine ? ' mine' : ''}${isFirst ? ' first' : ''}${isLast ? ' last' : ''}`, 'data-id': m.id },
+      const row = h('div', { class: `row${mine ? ' mine' : ''}${isFirst ? ' first' : ''}${isLast ? ' last' : ''}${state.shown && !state.shown.has(m.id) ? ' new' : ''}`, 'data-id': m.id },
         showAvatars && (isLast ? this._avatar(name, conv.members.find((x) => x.userId === m.senderId)?.avatar, { small: true }) : h('div', { class: 'spacer' })),
         h('div', { class: 'col' },
           bubble,
@@ -1128,6 +1314,8 @@ class PlugChatElement extends HTMLElement {
       nodes.push(row);
     });
 
+    // Only messages that were not on screen last time animate in.
+    state.shown = new Set(state.list.map((m) => m.id));
     if (state.moreAfter) {
       nodes.push(h('button', { class: 'more', onclick: () => this._guard(this._loadNewer()) }, T('Load newer messages')));
       nodes.push(h('button', { class: 'more', onclick: () => (this.msgs.delete(this.activeId), this._select(this.activeId)) }, T('Jump to latest')));
@@ -1173,7 +1361,7 @@ class PlugChatElement extends HTMLElement {
   /** Everything that was shared in a conversation: photos, voice notes, files. */
   async _mediaDialog(conv) {
     const list = (await this.chat.attachments(conv.id).catch(() => [])).filter((m) => m.file && !m.undecryptable);
-    this._openDialog(h('div', { class: 'panel' },
+    this._openPage(h('div', { class: 'panel' },
       this._dialogTitle(T('Media and files')),
       list.length === 0 && h('div', { class: 'hint' }, T('Nothing has been shared here yet.')),
       h('div', { class: 'media' }, list.map((m) => h('div', { class: 'item' },
@@ -1195,11 +1383,12 @@ class PlugChatElement extends HTMLElement {
     const blocked = (await this.chat.blocked().catch(() => [])).includes(userId);
     const $err = h('div', { class: 'error', hidden: true, role: 'alert' });
     const run = (p) => p.then(() => this.$dialog.close(), (e) => (($err.textContent = e.message), ($err.hidden = false)));
-    this._openDialog(h('div', { class: 'panel' },
+    this._openPage(h('div', { class: 'panel' },
       this._dialogTitle(T('Profile')),
-      h('div', { class: 'storyview' },
+      h('div', { class: 'hero' },
         this._avatar(user.name, user.avatar, { online: user.online }),
         h('strong', {}, user.name),
+        user.about && h('small', { class: 'about' }, user.about),
         h('small', {}, user.online ? T('Online') : user.lastSeen ? T('Last seen {when}', { when: shortWhen(user.lastSeen) }) : T('Offline')),
         // Shown only when the platform chose to make identifiers visible.
         Object.values(user.handles ?? {}).map((value) => h('small', {}, value))),
@@ -1213,9 +1402,36 @@ class PlugChatElement extends HTMLElement {
     ));
   }
 
+  /** Emoji by category, with the ones this person uses most recently first. */
   _emojiGrid(onPick) {
-    return h('div', { class: 'emojis', role: 'listbox', 'aria-label': T('Emoji') },
-      EMOJI.map((emoji) => h('button', { type: 'button', class: 'emoji', role: 'option', 'aria-label': emoji, onclick: () => onPick(emoji) }, emoji)));
+    const recent = () => {
+      try {
+        return JSON.parse(localStorage.getItem('plugchat:emoji') ?? '[]').filter((e) => typeof e === 'string').slice(0, 16);
+      } catch {
+        return [];
+      }
+    };
+    const remember = (emoji) => {
+      try {
+        localStorage.setItem('plugchat:emoji', JSON.stringify([emoji, ...recent().filter((e) => e !== emoji)].slice(0, 16)));
+      } catch {
+        // no storage: nothing to remember
+      }
+    };
+    const $grid = h('div', { class: 'emojis', role: 'listbox', 'aria-label': T('Emoji') });
+    const show = (key) => {
+      const list = key === 'recent' ? recent() : EMOJI_SETS[key];
+      fill($grid, list.length ? list.map((emoji) => h('button', { type: 'button', class: 'emoji', role: 'option', 'aria-label': emoji, onclick: () => (remember(emoji), onPick(emoji)) }, emoji))
+        : h('div', { class: 'hint' }, T('The emoji you use will appear here.')));
+      for (const tab of $tabs.children) tab.setAttribute('aria-pressed', String(tab.dataset.key === key));
+    };
+    const $tabs = h('div', { class: 'emojitabs' }, [['recent', '🕘'], ...Object.keys(EMOJI_SETS).map((key) => [key, EMOJI_SETS[key][0]])].map(([key, face]) => {
+      const tab = h('button', { type: 'button', class: 'emoji', 'aria-label': key, onclick: () => show(key) }, face);
+      tab.dataset.key = key;
+      return tab;
+    }));
+    show(recent().length ? 'recent' : 'smileys');
+    return h('div', { class: 'emojipicker' }, $tabs, $grid);
   }
 
   /** Who in a group has read one of your messages. */
@@ -1489,7 +1705,10 @@ class PlugChatElement extends HTMLElement {
 
   /** Queue one or several files (up to 10) to go out with the next send, one message each. */
   _attach(files) {
-    const list = (files instanceof File ? [files] : [...(files ?? [])]).slice(0, 10);
+    const added = files instanceof File ? [files] : [...(files ?? [])];
+    // The + in the tray adds to what is already there; a fresh pick, drop or paste replaces it.
+    const list = (this._appending ? [this.pendingFile, ...(this.pendingMore ?? []), ...added].filter(Boolean) : added).slice(0, 10);
+    this._appending = false;
     this.pendingFile = list[0] ?? null;
     this.pendingMore = list.slice(1);
     this._renderBanner();
@@ -1600,22 +1819,58 @@ class PlugChatElement extends HTMLElement {
     this.$input.focus();
   }
 
+  /**
+   * What is about to be sent, above the message box: the message being
+   * answered or edited, and a strip of thumbnails for attached files, each
+   * with its own remove button.
+   */
   _renderBanner() {
     const conv = this.convs.get(this.activeId);
-    const parts = [];
-    if (this.editing) parts.push(T('Editing message'));
-    if (this.replyTo) parts.push(T('Replying to {name}: {text}', { name: this._memberName(conv, this.replyTo.senderId), text: this._snippet(this.replyTo) }));
-    if (this.pendingFile) parts.push(`📎 ${this.pendingFile.name} (${size(this.pendingFile.size)})${this.pendingMore.length ? ` +${this.pendingMore.length}` : ''}`);
-    if (this.viewOnce) parts.push(T('View once'));
-    this.$banner.hidden = !parts.length;
-    if (!parts.length) return;
-    fill(this.$banner, 
-      h('span', {}, parts.join(' · ')),
-      h('button', { class: 'icon', icon: 'close', title: T('Cancel'), 'aria-label': T('Cancel'), onclick: () => {
-        if (this.editing) this.$input.value = '';
-        this._setDraftMode(null);
-      } }),
-    );
+    const files = [this.pendingFile, ...(this.pendingMore ?? [])].filter(Boolean);
+    const nodes = [];
+    if (this.editing || this.replyTo) {
+      const target = this.editing ?? this.replyTo;
+      nodes.push(h('div', { class: 'banner' },
+        h('div', { class: 'bannertext' },
+          h('strong', {}, this.editing ? T('Editing message') : T('Replying to {name}', { name: this._memberName(conv, target.senderId) })),
+          h('span', {}, this._snippet(target))),
+        h('button', { class: 'icon', icon: 'close', type: 'button', title: T('Cancel'), 'aria-label': T('Cancel'), onclick: () => {
+          if (this.editing) this.$input.value = '';
+          this.replyTo = this.editing = null;
+          this._renderBanner();
+          this._onInput(true);
+        } })));
+    }
+    if (files.length || this.viewOnce) {
+      nodes.push(h('div', { class: 'tray' },
+        files.map((file, i) => {
+          const isImage = INLINE_IMAGES.has(file.type);
+          const thumb = h('div', { class: `thumb${isImage ? '' : ' doc'}`, title: `${file.name} (${size(file.size)})` },
+            isImage ? h('img', { alt: file.name }) : [h('span', { icon: 'file' }), h('small', {}, file.name)],
+            h('button', { class: 'x', icon: 'close', type: 'button', 'aria-label': T('Remove {name}', { name: file.name }), onclick: () => {
+              const rest = files.filter((_, j) => j !== i);
+              this.pendingFile = rest[0] ?? null;
+              this.pendingMore = rest.slice(1);
+              this._renderBanner();
+              this._onInput(true);
+            } }));
+          if (isImage) {
+            const url = URL.createObjectURL(file);
+            const img = thumb.querySelector('img');
+            img.src = url;
+            img.onload = () => URL.revokeObjectURL(url);
+          }
+          return thumb;
+        }),
+        files.length > 0 && files.length < 10 && h('button', { class: 'thumb add', icon: 'plus', type: 'button', title: T('Attach'), 'aria-label': T('Attach'), onclick: () => ((this._appending = true), this.$file.click()) }),
+        this.viewOnce && h('button', { class: 'chip on', type: 'button', onclick: () => ((this.viewOnce = false), this._renderBanner()) }, h('span', { icon: 'eye' }), T('View once')),
+      ));
+    }
+    const box = this.$msgs;
+    const atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 160;
+    this.$banner.hidden = !nodes.length;
+    fill(this.$banner, nodes);
+    if (atEnd) box.scrollTop = box.scrollHeight; // keep the latest message in view as the composer grows
   }
 
   async _submit() {
@@ -1767,12 +2022,17 @@ class PlugChatElement extends HTMLElement {
   // ---- dialogs ----
 
   _openDialog(...content) {
+    this.$dialog.className = '';
     fill(this.$dialog, ...content);
     if (!this.$dialog.open) this.$dialog.showModal();
   }
 
   _dialogTitle(text) {
-    return h('h3', {}, h('span', {}, text), h('button', { class: 'icon', icon: 'close', type: 'button', 'aria-label': T('Close'), onclick: () => this.$dialog.close() }));
+    const close = () => this.$dialog.close();
+    return h('h3', {},
+      h('button', { class: 'icon pageback', icon: 'back', type: 'button', 'aria-label': T('Back'), onclick: close }),
+      h('span', {}, text),
+      h('button', { class: 'icon pageclose', icon: 'close', type: 'button', 'aria-label': T('Close'), onclick: close }));
   }
 
   /** A searchable people list. `onPick(user, row)` fires when one is chosen. */
@@ -1823,7 +2083,7 @@ class PlugChatElement extends HTMLElement {
     };
     render.merge = (users) => [...[...picked.values()].filter((p) => !users.some((u) => u.id === p.id)), ...users];
     const { $search, $people } = this._peoplePicker({ render });
-    this._openDialog(h('form', { onsubmit: async (e) => {
+    this._openPage(h('form', { onsubmit: async (e) => {
       e.preventDefault();
       $go.disabled = true;
       try {
@@ -1911,11 +2171,16 @@ class PlugChatElement extends HTMLElement {
         this._avatar(u.name, u.avatar, { small: true }), h('span', {}, u.name), h('small', {}, T('Add'))),
     });
 
-    this._openDialog(h('div', { class: 'panel' },
+    this._openPage(h('div', { class: 'panel' },
       this._dialogTitle(isGroup ? T('Group info') : T('Contact info')),
       // The familiar top of an info screen: a large picture, the name, and a line about them.
       h('div', { class: 'hero' },
-        this._avatar(this._title(conv), other?.avatar, { online: !!other && this.chat.online.has(other.userId) }),
+        isGroup && canManage
+          ? h('button', { class: 'photo', title: T('Change photo'), 'aria-label': T('Change photo'), onclick: async () => {
+            const picture = await this._pickPicture();
+            if (picture) run(this.chat.setGroupAvatar(conv.id, picture).then(() => this._toast(T('Photo updated'))), true);
+          } }, this._avatar(this._title(conv), conv.avatar), h('span', { class: 'cam', icon: 'camera' }))
+          : this._avatar(this._title(conv), other ? other.avatar : conv.avatar, { online: !!other && this.chat.online.has(other.userId) }),
         h('strong', {}, this._title(conv)),
         h('small', {}, isGroup ? T('{n} members', { n: conv.members.length }) : this.chat.online.has(other.userId) ? T('Online') : T('Offline')),
         conv.encrypted && h('small', { class: 'lockline' }, h('span', { icon: 'lock' }), T('End-to-end encrypted'))),
@@ -2025,36 +2290,67 @@ class PlugChatElement extends HTMLElement {
     ));
   }
 
+  /**
+   * Stories play full screen: progress bars along the top that fill and move
+   * on by themselves, tap the right side for the next and the left for the
+   * previous, the author's picture and name above.
+   */
   _storyDialog(group, index = Math.max(0, group.stories.findIndex((s) => !s.seen))) {
+    this.$root.querySelector('.storyfs')?.remove();
+    clearTimeout(this._storyTimer);
     const story = group.stories[index];
-    if (!story) return this.$dialog.close();
+    if (!story) return;
     const mine = group.user.id === this.chat.me.id;
+    const SECONDS = 6;
     if (!story.seen) {
       story.seen = true;
       this.chat.viewStory(story.id).then(() => this._loadStories(), () => {});
     }
-    const $view = h('div', { class: 'storyview' });
+    const close = () => {
+      clearTimeout(this._storyTimer);
+      view.remove();
+    };
+    const go = (i) => (i < 0 ? this._storyDialog(group, 0) : i >= group.stories.length ? close() : this._storyDialog(group, i));
+
+    const $body = h('div', { class: 'storybody' });
+    $body.style.background = `linear-gradient(160deg, hsl(${hue(group.user.name)} 55% 38%), hsl(${(hue(group.user.name) + 60) % 360} 60% 24%))`;
     if (story.attachment && INLINE_IMAGES.has(story.attachment.mime)) {
       const img = h('img', { alt: T('Story photo') });
       let url = this.blobs.get(story.attachment.fileId);
       if (!url) this.blobs.set(story.attachment.fileId, (url = this.chat.storyFile(story).then((b) => URL.createObjectURL(b))));
       url.then((u) => (img.src = u), () => (img.alt = T('Photo unavailable')));
-      $view.append(img);
+      $body.append(img);
     }
-    if (story.text) $view.append(h('div', {}, linkify(story.text)));
-    const go = (i) => () => this._storyDialog(group, i);
-    this._openDialog(h('div', { class: 'panel' },
-      h('div', { class: 'steps' }, group.stories.map((_, i) => h('i', { class: i <= index ? 'on' : '' }))),
-      this._dialogTitle(`${mine ? T('My story') : group.user.name} · ${shortWhen(story.createdAt)}`),
-      $view,
-      mine && h('small', { class: 'field' }, story.views.length ? T('Seen by {names}', { names: story.views.map((v) => this._knownName(v.userId)).join(', ') }) : T('No views yet')),
-      h('div', { class: 'inline' },
-        h('button', { class: 'btn plain', disabled: index === 0, onclick: go(index - 1) }, T('Previous')),
-        h('button', { class: 'btn plain', disabled: index === group.stories.length - 1, onclick: go(index + 1) }, T('Next')),
-        mine && h('button', { class: 'btn plain', onclick: () => this._newStoryDialog() }, T('Add')),
-        mine && h('button', { class: 'btn warn', onclick: () => this.chat.deleteStory(story.id).then(() => (this.$dialog.close(), this._loadStories()), (e) => this._error(e.message)) }, T('Delete')),
-      ),
-    ));
+    if (story.text) $body.append(h('p', { class: story.attachment ? 'caption' : '' }, linkify(story.text)));
+
+    const view = h('div', { class: 'storyfs', role: 'dialog', 'aria-label': T('Story') },
+      h('div', { class: 'steps' }, group.stories.map((_, i) => {
+        const bar = h('i', { class: i < index ? 'on' : i === index ? 'now' : '' }, h('b'));
+        if (i === index) bar.firstChild.style.animationDuration = `${SECONDS}s`;
+        return bar;
+      })),
+      h('div', { class: 'storyhead' },
+        this._avatar(group.user.name, group.user.avatar, { small: true }),
+        h('strong', {}, mine ? T('My story') : group.user.name),
+        h('small', {}, shortWhen(story.createdAt)),
+        h('button', { class: 'icon', icon: 'close', 'aria-label': T('Close'), onclick: close })),
+      $body,
+      h('button', { class: 'tap prev', 'aria-label': T('Previous'), onclick: () => go(index - 1) }),
+      h('button', { class: 'tap next', 'aria-label': T('Next'), onclick: () => go(index + 1) }),
+      mine && h('div', { class: 'storyfoot' },
+        h('span', {}, h('span', { icon: 'eye' }), story.views.length ? T('Seen by {names}', { names: story.views.map((v) => this._knownName(v.userId)).join(', ') }) : T('No views yet')),
+        h('button', { class: 'icon', icon: 'plus', title: T('Add to your story'), 'aria-label': T('Add to your story'), onclick: () => (close(), this._newStoryDialog()) }),
+        h('button', { class: 'icon', icon: 'trash', title: T('Delete'), 'aria-label': T('Delete'), onclick: () => this.chat.deleteStory(story.id).then(() => (close(), this._loadStories()), (e) => this._error(e.message)) })),
+    );
+    view.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') close();
+      if (e.key === 'ArrowRight') go(index + 1);
+      if (e.key === 'ArrowLeft') go(index - 1);
+    });
+    this.$root.append(view);
+    view.tabIndex = -1;
+    view.focus();
+    this._storyTimer = setTimeout(() => view.isConnected && go(index + 1), SECONDS * 1000);
   }
 
   _knownName(userId) {
@@ -2067,64 +2363,87 @@ class PlugChatElement extends HTMLElement {
 
   // ---- personal settings ----
 
+  /** The person's own screen: their picture and about line, then privacy, notifications, security and data. */
   async _settingsDialog() {
     if (!this.chat?.me) return;
+    const me = this.chat.me;
     const $err = h('div', { class: 'error', hidden: true, role: 'alert' });
-    const run = (p) => p.catch((e) => {
+    const run = (p) => Promise.resolve(p).catch((e) => {
       $err.textContent = e.message;
       $err.hidden = false;
+      $err.scrollIntoView({ block: 'nearest' });
     });
-    const toggle = (label, checked, onchange, hint) => {
+    const row = (label, checked, onchange, hint) => {
       // If the change is refused, the switch goes back to where it was instead of showing a setting that did not take.
-      const box = h('input', { type: 'checkbox', checked, onchange: () => run(Promise.resolve().then(() => onchange(box.checked)).catch((e) => {
+      const box = h('input', { type: 'checkbox', role: 'switch', checked, onchange: () => run(Promise.resolve().then(() => onchange(box.checked)).catch((e) => {
         box.checked = !box.checked;
         throw e;
       })) });
-      return h('label', { class: 'check' }, box, h('span', {}, label, hint && h('small', {}, hint)));
+      return h('label', { class: 'setrow' }, h('span', {}, label, hint && h('small', {}, hint)), box);
     };
-    const privacy = this.chat.me.privacy ?? { readReceipts: true, presence: true };
+    const link = (icon, label, onclick, cls = '') => h('button', { class: `setrow link ${cls}`, onclick }, h('span', { icon }), h('span', {}, label), h('span', { class: 'go', icon: 'next' }));
+    const privacy = me.privacy ?? { readReceipts: true, presence: true };
     const mine = this.chat.identity?.deviceId;
-    const devices = mine ? await this.chat.devices().catch(() => []) : [];
-    const backup = mine ? await this.chat.backupStatus().catch(() => null) : null;
+    const [devices, backup] = mine ? await Promise.all([this.chat.devices().catch(() => []), this.chat.backupStatus().catch(() => null)]) : [[], null];
     const $pass = h('input', { type: 'password', placeholder: T('Passphrase'), 'aria-label': T('Passphrase'), autocomplete: 'off' });
+    const $about = h('input', { type: 'text', value: me.about ?? '', maxlength: '140', placeholder: T('About: a line others see under your name'), 'aria-label': T('About') });
     const download = async () => {
       const blob = new Blob([JSON.stringify(await this.chat.exportMyData(), null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       h('a', { href: url, download: 'my-chat-data.json' }).click();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
     };
-    this._openDialog(h('div', { class: 'panel' },
+    const changePhoto = async () => {
+      const picture = await this._pickPicture();
+      if (picture) await run(this.chat.setAvatar(picture).then(() => (this._toast(T('Photo updated')), this._settingsDialog())));
+    };
+
+    this._openPage(h('div', { class: 'panel' },
       this._dialogTitle(T('Settings')),
-      toggle(T('Send read receipts'), privacy.readReceipts, (v) => this.chat.setPrivacy({ readReceipts: v }), T('Others see when you have read their messages.')),
-      toggle(T('Show when I am online'), privacy.presence, (v) => this.chat.setPrivacy({ presence: v })),
-      globalThis.Notification && toggle(T('Desktop notifications'), this._notifyOn() && Notification.permission === 'granted', async (v) => {
-        if (v && (await Notification.requestPermission()) !== 'granted') throw new Error(T('Notifications are blocked in this browser.'));
-        localStorage.setItem('plugchat:notify', v ? 'on' : 'off');
-      }, T('Show a notification when a message arrives and you are not looking at the chat.')),
-      globalThis.Notification && toggle(T('Show message text in notifications'), this._previewsOn(), async (v) => {
-        localStorage.setItem('plugchat:notify-preview', v ? 'on' : 'off');
-      }),
-      h('button', { class: 'btn plain', onclick: () => this._starredDialog() }, T('Starred messages')),
-      devices.length > 0 && h('div', { class: 'field' }, T('Devices that can read your encrypted chats.'),
-        h('div', { class: 'people' }, devices.map((d) => h('div', { class: 'person' },
-          h('span', {}, d.deviceId === mine ? T('This device') : new Date(d.lastSeen).toLocaleDateString(LOCALE, { dateStyle: 'medium' })),
-          d.deviceId !== mine && h('button', { class: 'linkbtn', onclick: (e) => run(this.chat.removeDevice(d.deviceId).then(() => e.target.closest('.person').remove())) }, T('Remove')))))),
-      backup && h('div', { class: 'field' }, T('Encrypted chat backup'),
-        backup.enabledHere
-          ? [h('small', {}, T('Backup is on. Your encrypted chats can be restored with your passphrase.')),
-            h('button', { class: 'btn warn', onclick: () => run(this.chat.disableBackup().then(() => this._settingsDialog())) }, T('Turn off and delete backup'))]
-          : [h('small', {}, backup.exists ? T('Enter your passphrase to read your encrypted chats on this device.') : T('Choose a long passphrase. Without it the backup cannot be opened, by you or anyone else.')),
-            $pass,
-            h('button', { class: 'btn', onclick: () => run((backup.exists ? this.chat.restoreBackup($pass.value) : this.chat.enableBackup($pass.value)).then(() => this._settingsDialog())) },
-              backup.exists ? T('Restore') : T('Turn on backup'))]),
-      h('button', { class: 'btn plain', onclick: () => run(download()) }, T('Download my data')),
+      h('div', { class: 'hero' },
+        h('button', { class: 'photo', title: T('Change photo'), 'aria-label': T('Change photo'), onclick: changePhoto },
+          this._avatar(me.name, me.avatar), h('span', { class: 'cam', icon: 'camera' })),
+        h('strong', {}, me.name),
+        me.avatar?.startsWith('pc:') && h('button', { class: 'linkbtn', onclick: () => run(this.chat.removeAvatar().then(() => this._settingsDialog())) }, T('Remove photo'))),
+      h('div', { class: 'inline' }, $about,
+        h('button', { class: 'btn plain', onclick: () => run(this.chat.setAbout($about.value).then(() => this._toast(T('Saved')))) }, T('Save'))),
+
+      h('div', { class: 'group' }, h('h4', {}, T('Privacy')),
+        row(T('Send read receipts'), privacy.readReceipts, (v) => this.chat.setPrivacy({ readReceipts: v }), T('Others see when you have read their messages.')),
+        row(T('Show when I am online'), privacy.presence, (v) => this.chat.setPrivacy({ presence: v }))),
+
+      globalThis.Notification && h('div', { class: 'group' }, h('h4', {}, T('Notifications')),
+        row(T('Desktop notifications'), this._notifyOn() && Notification.permission === 'granted', async (v) => {
+          if (v && (await Notification.requestPermission()) !== 'granted') throw new Error(T('Notifications are blocked in this browser.'));
+          localStorage.setItem('plugchat:notify', v ? 'on' : 'off');
+        }, T('Show a notification when a message arrives and you are not looking at the chat.')),
+        row(T('Show message text in notifications'), this._previewsOn(), async (v) => {
+          localStorage.setItem('plugchat:notify-preview', v ? 'on' : 'off');
+        })),
+
+      mine && h('div', { class: 'group' }, h('h4', {}, T('Encrypted chats')),
+        backup && (backup.enabledHere
+          ? [h('p', { class: 'note' }, T('Backup is on. Your encrypted chats can be restored with your passphrase.')),
+            link('trash', T('Turn off and delete backup'), () => run(this.chat.disableBackup().then(() => this._settingsDialog())), 'danger')]
+          : [h('p', { class: 'note' }, backup.exists ? T('Enter your passphrase to read your encrypted chats on this device.') : T('Choose a long passphrase. Without it the backup cannot be opened, by you or anyone else.')),
+            h('div', { class: 'inline' }, $pass,
+              h('button', { class: 'btn', onclick: () => run((backup.exists ? this.chat.restoreBackup($pass.value) : this.chat.enableBackup($pass.value)).then(() => this._settingsDialog())) },
+                backup.exists ? T('Restore') : T('Turn on backup')))]),
+        devices.length > 0 && [h('p', { class: 'note' }, T('Devices that can read your encrypted chats.')),
+          devices.map((d) => h('div', { class: 'setrow' },
+            h('span', {}, d.deviceId === mine ? T('This device') : new Date(d.lastSeen).toLocaleDateString(LOCALE, { dateStyle: 'medium' })),
+            d.deviceId !== mine && h('button', { class: 'linkbtn', onclick: (e) => run(this.chat.removeDevice(d.deviceId).then(() => e.target.closest('.setrow').remove())) }, T('Remove'))))]),
+
+      h('div', { class: 'group' }, h('h4', {}, T('Your data')),
+        link('star', T('Starred messages'), () => this._starredDialog()),
+        link('download', T('Download my data'), () => run(download()))),
       $err,
     ));
   }
 
   async _starredDialog() {
     const list = await this.chat.starred().catch(() => []);
-    this._openDialog(h('div', { class: 'panel' },
+    this._openPage(h('div', { class: 'panel' },
       this._dialogTitle(T('Starred messages')),
       list.length === 0 && h('div', { class: 'hint' }, T('No starred messages yet.')),
       h('div', { class: 'people' }, list.map((m) => {
@@ -2179,8 +2498,8 @@ class PlugChatElement extends HTMLElement {
     const name = this._memberName(conv, m.senderId);
     this.$root.querySelector('.call')?.remove();
     const close = () => (clearTimeout(timer), overlay.remove());
-    const overlay = h('div', { class: 'call', role: 'alertdialog', 'aria-label': T('Incoming call from {name}', { name }) },
-      h('div', { class: 'cinfo' }, this._avatar(name), h('strong', {}, name),
+    const overlay = h('div', { class: 'call ringing', role: 'alertdialog', 'aria-label': T('Incoming call from {name}', { name }) },
+      h('div', { class: 'cinfo' }, this._avatar(name, conv?.members.find((x) => x.userId === m.senderId)?.avatar), h('strong', {}, name),
         h('div', { role: 'status' }, (m.call.video ? T('Incoming video call…') : T('Incoming voice call…')) + (conv?.type === 'group' ? ` · ${conv.title}` : ''))),
       h('div', { class: 'cbtns' },
         h('button', { icon: 'phone', class: 'ok', title: T('Accept'), 'aria-label': T('Accept'), onclick: () => (close(), this._openCall(m.call.callId, conv)) }),
@@ -2207,11 +2526,11 @@ class PlugChatElement extends HTMLElement {
     const $state = h('div', { role: 'status' });
     const $btns = h('div', { class: 'cbtns' });
     const overlay = h('div', { class: 'call', role: 'dialog', 'aria-label': T('Call with {name}', { name }) },
-      $remote, h('div', { class: 'cinfo' }, this._avatar(name), h('strong', {}, name), $state), $local, $btns);
+      $remote, h('div', { class: 'cinfo' }, this._avatar(name, conv?.members.find((x) => x.userId === call.peerId)?.avatar), h('strong', {}, name), $state), $local, $btns);
     let muted = false, camera = call.video, ticker;
     const btn = (icon, label, cls, onclick) => h('button', { icon, title: label, 'aria-label': label, class: cls, onclick });
     const render = () => {
-      const kind = call.video ? 'video' : 'voice';
+      overlay.classList.toggle('ringing', call.state === 'ringing');
       $state.textContent = call.state === 'ringing' ? (call.direction === 'in' ? (call.video ? T('Incoming video call…') : T('Incoming voice call…')) : T('Ringing…'))
         : call.state === 'connecting' ? T('Connecting…')
         : call.state === 'active' ? mmss(Date.now() - call.startedAt)

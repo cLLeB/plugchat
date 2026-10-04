@@ -17,6 +17,10 @@ call signalling). That keeps a native or server-side integration to plain HTTP.
 | `PUT /v1/me/key` `{deviceId, publicKey}` | Register this device's encryption key |
 | `GET /v1/me/devices`, `DELETE /v1/me/devices/:deviceId` | The caller's devices; remove a lost one |
 | `PUT /v1/me/settings` `{readReceipts?, presence?}` | Privacy switches |
+| `PUT /v1/me/avatar` (raw image bytes), `DELETE /v1/me/avatar` | The caller's profile picture: PNG, JPEG, WebP or GIF up to 600 KB, checked by content. Replaces a picture supplied in the token |
+| `PUT /v1/me/profile` `{about}` | The line under the caller's name (140 characters) |
+| `PUT` / `DELETE /v1/conversations/:id/avatar` | A group's picture (group admins) |
+| `GET /v1/avatars/:id` | The image for an `avatar` value of the form `pc:<id>`. Any signed-in user |
 | `GET` / `PUT` / `DELETE /v1/me/backup` | The caller's passphrase-sealed key backup: `{salt, data}`, opaque to the server |
 | `GET /v1/users?q=` | Search by name (substring) or handle (exact). Needs the directory on |
 | `GET /v1/users/lookup?handle=&kind=` | Exact lookup by email, phone, username or custom kind |

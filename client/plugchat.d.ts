@@ -15,7 +15,10 @@ export interface Privacy {
 export interface User {
   id: string;
   name: string;
+  /** A picture reference: "pc:<id>" for one uploaded here, or a URL from the host. Pass it to avatarUrl(). */
   avatar: string | null;
+  /** The short line under their name. */
+  about: string | null;
   lastSeen: number | null;
   online: boolean;
   /** Only present for yourself, for admins, or when the host set handleVisibility to 'all'. */
@@ -52,6 +55,8 @@ export interface Conversation {
   id: string;
   type: 'dm' | 'group';
   title: string | null;
+  /** A group's picture, if its admins set one. */
+  avatar: string | null;
   description: string | null;
   encrypted: boolean;
   /** Disappearing-message timer, or null when off. */
@@ -208,6 +213,14 @@ export class PlugChat {
   unblock(userId: string): Promise<{ blocked: string[] }>;
   blocked(): Promise<string[]>;
   setPrivacy(settings: Partial<Privacy>): Promise<Privacy>;
+  /** Set your profile picture: a PNG, JPEG, WebP or GIF up to 600 KB (crop and shrink it first). */
+  setAvatar(picture: Blob): Promise<Me>;
+  removeAvatar(): Promise<Me>;
+  setAbout(about: string): Promise<Me>;
+  setGroupAvatar(conversationId: string, picture: Blob): Promise<Conversation>;
+  removeGroupAvatar(conversationId: string): Promise<Conversation>;
+  /** Turn an `avatar` value into a URL an <img> can show, or null when there is none. */
+  avatarUrl(avatar: string | null): Promise<string | null>;
   exportMyData(): Promise<Record<string, unknown>>;
   /** Is there a key backup on the server, and does this device keep it current? */
   backupStatus(): Promise<{ exists: boolean; enabledHere: boolean }>;

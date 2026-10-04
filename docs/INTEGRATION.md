@@ -269,6 +269,8 @@ session your site already has. Give the element a height with CSS.
 | `lang` | Interface language: `en`, `fr`, `es`, `pt` or `ar`. Defaults to the page's `<html lang>` |
 | `dir` | `rtl` or `ltr`. Right-to-left is chosen automatically for Arabic, Hebrew, Persian and Urdu `lang` values |
 | `e2ee`, `calls`, `stories` | Set to `off` to hide that feature |
+| `history` | Set to `off` if your app manages the browser's back button itself. By default, opening a chat on a phone-width layout adds a history step so the device's back button returns to the chat list |
+| `notification-icon` | An image URL to use in desktop notifications instead of the sender's picture |
 
 Theme it with CSS variables: `--pc-accent` (your brand colour: outgoing
 bubbles, buttons, badges) and `--pc-accent-fg` (text on it), `--pc-bg` (panels),

@@ -74,6 +74,7 @@ const HANDLE_KIND = /^[a-z][a-z0-9_]{0,23}$/;
 const USER_KINDS = new Set(['text', 'poll', 'location', 'custom']);
 const VIEW_ONCE_GRACE_MS = 60_000;
 const WEBHOOK_MAX_ATTEMPTS = 8;
+const MAX_PICTURE_BYTES = 600 * 1024;
 const AUDITED = /^DELETE |\/suspension$|\/export$/;
 
 class HttpError extends Error {
@@ -496,6 +497,57 @@ export function createPlugChat(options = {}) {
       const fresh = store.registerDevice(ctx.auth.sub, str(b.deviceId, 'deviceId', 64), str(b.publicKey, 'publicKey', 256));
       if (fresh) for (const id of store.encryptedConversationIds(ctx.auth.sub)) pushConversation(id);
       return { ...userView(store.getUser(ctx.auth.sub), ctx.auth), privacy: store.privacy(ctx.auth.sub), suspended: store.suspension(ctx.auth.sub), directory, features: { directory, stories, requireEncryption, calls: callMode, linkPreviews: hooks.has('link.preview') } };
+    }],
+
+    // Profile pictures. The client crops and shrinks the image first; here it is
+    // only accepted if its bytes really are a PNG, JPEG, WebP or GIF.
+    ['PUT', '/v1/me/avatar', async (ctx) => {
+      const fileId = await savePicture(ctx);
+      const old = store.setAvatar('user', ctx.auth.sub, fileId);
+      if (old) removeFile(old);
+      return announceProfile(ctx.auth.sub);
+    }],
+    ['DELETE', '/v1/me/avatar', (ctx) => {
+      const old = store.setAvatar('user', ctx.auth.sub, null);
+      if (old) removeFile(old);
+      return announceProfile(ctx.auth.sub);
+    }],
+    ['PUT', '/v1/me/profile', async (ctx) => {
+      const b = await ctx.json();
+      store.setAbout(ctx.auth.sub, str(b.about ?? '', 'about', 140, { allowEmpty: true }).trim() || null);
+      return announceProfile(ctx.auth.sub);
+    }],
+    ['PUT', '/v1/conversations/:id/avatar', async (ctx) => {
+      const { conv, member } = access(ctx, ctx.params.id);
+      if (conv.type !== 'group') throw bad('only groups have their own picture');
+      if (!ctx.auth.admin && member.role === 'member') throw forbidden('only group admins can change the picture');
+      const old = store.setAvatar('group', conv.id, await savePicture(ctx));
+      if (old) removeFile(old);
+      pushConversation(conv.id);
+      return store.conversationFor(conv.id, ctx.auth.sub);
+    }],
+    ['DELETE', '/v1/conversations/:id/avatar', (ctx) => {
+      const { conv, member } = access(ctx, ctx.params.id);
+      if (!ctx.auth.admin && (conv.type !== 'group' || member.role === 'member')) throw forbidden('only group admins can change the picture');
+      const old = store.setAvatar('group', conv.id, null);
+      if (old) removeFile(old);
+      pushConversation(conv.id);
+      return store.conversationFor(conv.id, ctx.auth.sub);
+    }],
+    // Pictures are visible to anyone signed in to the platform, like the names they sit beside.
+    ['GET', '/v1/avatars/:id', async (ctx) => {
+      const file = UUID.test(ctx.params.id) ? store.getFile(ctx.params.id) : null;
+      if (!file || file.messageId !== 'avatar') throw notFound('picture not found');
+      ctx.res.writeHead(200, {
+        'content-type': 'application/octet-stream',
+        'content-length': file.size,
+        'x-picture-type': file.mime,
+        'x-content-type-options': 'nosniff',
+        'content-security-policy': "default-src 'none'; sandbox",
+        'cache-control': 'private, max-age=86400, immutable',
+      });
+      (await storage.stream(file.id)).on('error', () => ctx.res.destroy()).pipe(ctx.res);
+      return undefined;
     }],
 
     // The person's conversation keys, sealed with a passphrase the server never sees.
@@ -1002,7 +1054,7 @@ export function createPlugChat(options = {}) {
 
     ['GET', '/v1/files/:id', async (ctx) => {
       const file = UUID.test(ctx.params.id) ? store.getFile(ctx.params.id) : null;
-      if (!file) throw notFound('file not found');
+      if (!file || file.messageId === 'avatar') throw notFound('file not found'); // pictures have their own endpoint
       const { auth } = ctx;
       let allowed = auth.admin || file.ownerId === auth.sub;
       if (file.conversationId) {
@@ -1249,6 +1301,30 @@ export function createPlugChat(options = {}) {
     return { fileId: id, name, mime, size: data.length };
   }
 
+  /** Accept an uploaded picture if its content really is an image of an allowed kind. */
+  async function savePicture(ctx) {
+    const data = await ctx.raw(MAX_PICTURE_BYTES);
+    const head = data.subarray(0, 12);
+    const mime = head.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47])) ? 'image/png'
+      : head.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff])) ? 'image/jpeg'
+      : head.subarray(0, 4).toString('latin1') === 'RIFF' && head.subarray(8, 12).toString('latin1') === 'WEBP' ? 'image/webp'
+      : head.subarray(0, 4).toString('latin1') === 'GIF8' ? 'image/gif'
+      : null;
+    if (!mime) throw bad('the picture must be a PNG, JPEG, WebP or GIF image');
+    const id = randomUUID();
+    await storage.put(id, data);
+    store.addAvatarFile({ id, ownerId: ctx.auth.sub, mime, size: data.length });
+    return id;
+  }
+
+  /** Tell the people who know this person that their name, picture or about line changed. */
+  function announceProfile(userId) {
+    const user = store.getUser(userId);
+    seen.delete(userId);
+    hub.emit([userId, ...store.peers(userId)], { type: 'user.updated', user: { id: user.id, name: user.name, avatar: user.avatar, about: user.about } });
+    return { ...userView(user, { sub: userId }), privacy: store.privacy(userId), suspended: store.suspension(userId), directory, features: { directory, stories, requireEncryption, calls: callMode, linkPreviews: hooks.has('link.preview') } };
+  }
+
   function pin(ctx, on) {
     const { message, conv, member } = messageAccess(ctx, ctx.params.id);
     if (message.deleted) throw bad('message was deleted');
@@ -1311,6 +1387,7 @@ export function createPlugChat(options = {}) {
       res.setHeader('vary', 'origin');
       res.setHeader('access-control-allow-headers', 'authorization, content-type, x-filename');
       res.setHeader('access-control-allow-methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+      res.setHeader('access-control-expose-headers', 'x-picture-type');
       res.setHeader('access-control-max-age', '600');
     }
     if (req.method === 'OPTIONS') {

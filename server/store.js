@@ -221,7 +221,9 @@ export function normalizeHandle(kind, value) {
 const handleCandidates = (value) =>
   [...new Set(['email', 'phone', 'username'].map((k) => normalizeHandle(k, value)).filter(Boolean))];
 
-const userOut = (r) => r && { id: r.id, name: r.name, avatar: r.avatar, publicKey: r.public_key, lastSeen: r.last_seen };
+// A picture someone uploaded here wins over the one their platform supplied.
+const avatarOf = (file, url) => (file ? `pc:${file}` : url ?? null);
+const userOut = (r) => r && { id: r.id, name: r.name, avatar: avatarOf(r.avatar_file, r.avatar), about: r.about ?? null, publicKey: r.public_key, lastSeen: r.last_seen };
 
 // Columns added after the first release. Applied to existing databases on start.
 const ADDED_COLUMNS = [
@@ -230,6 +232,9 @@ const ADDED_COLUMNS = [
   ['users', 'hide_read', 'INTEGER NOT NULL DEFAULT 0'],
   ['users', 'hide_presence', 'INTEGER NOT NULL DEFAULT 0'],
   ['users', 'suspended', 'TEXT'],
+  ['users', 'avatar_file', 'TEXT'],
+  ['users', 'about', 'TEXT'],
+  ['conversations', 'avatar_file', 'TEXT'],
 ];
 
 const MAX_DEVICES = 10;
@@ -324,6 +329,27 @@ export class Store {
       ? this.get('SELECT user_id FROM handles WHERE kind = ? AND value = ?', kind, normalizeHandle(kind, value))
       : this.db.prepare(`SELECT user_id FROM handles WHERE value IN (${handleCandidates(value).map(() => '?').join(',') || "''"}) LIMIT 1`).get(...handleCandidates(value));
     return r ? this.getUser(r.user_id) : null;
+  }
+
+  // ---- profile pictures and the "about" line ----
+
+  /** Point a person or a group at a new picture file. Returns the file it replaces, to be deleted. */
+  setAvatar(kind, id, fileId) {
+    const table = kind === 'user' ? 'users' : 'conversations';
+    const old = this.get(`SELECT avatar_file FROM ${table} WHERE id = ?`, id)?.avatar_file ?? null;
+    this.run(`UPDATE ${table} SET avatar_file = ? WHERE id = ?`, fileId, id);
+    if (old) this.run('DELETE FROM files WHERE id = ?', old);
+    return old;
+  }
+
+  setAbout(userId, about) {
+    this.run('UPDATE users SET about = ? WHERE id = ?', about, userId);
+  }
+
+  /** Register an uploaded picture. Marked so the sweep for abandoned uploads leaves it alone. */
+  addAvatarFile({ id, ownerId, mime, size }) {
+    this.run('INSERT INTO files (id, conversation_id, message_id, owner_id, name, mime, size, created_at) VALUES (?, NULL, ?, ?, ?, ?, ?, ?)',
+      id, 'avatar', ownerId, 'avatar', mime, size, Date.now());
   }
 
   // ---- devices: one encryption key per browser or phone a person uses ----
@@ -506,7 +532,7 @@ export class Store {
     const c = this.rawConversation(id);
     if (!c) return null;
     const rows = this.all(
-      `SELECT m.user_id, m.role, m.last_read_seq, m.muted, m.archived, m.pinned, u.name, u.avatar, u.hide_read
+      `SELECT m.user_id, m.role, m.last_read_seq, m.muted, m.archived, m.pinned, u.name, u.avatar, u.avatar_file, u.hide_read
        FROM members m JOIN users u ON u.id = m.user_id WHERE m.conversation_id = ? ORDER BY m.joined_at, u.name`,
       id,
     );
@@ -520,6 +546,7 @@ export class Store {
       id: c.id,
       type: c.type,
       title: c.title,
+      avatar: avatarOf(c.avatar_file, null),
       encrypted: !!c.encrypted,
       ttlSeconds: c.ttl_seconds,
       announce: !!c.announce,
@@ -534,7 +561,7 @@ export class Store {
       unread: me ? Math.max(0, c.last_seq - me.last_read_seq) : 0,
       ...(c.encrypted && this._keyView(c, userId)),
       members: rows.map((r) => ({
-        userId: r.user_id, name: r.name, avatar: r.avatar, role: r.role,
+        userId: r.user_id, name: r.name, avatar: avatarOf(r.avatar_file, r.avatar), role: r.role,
         // People who turned read receipts off look permanently unread to everyone else.
         lastReadSeq: r.hide_read && r.user_id !== userId ? 0 : r.last_read_seq,
         ...(c.encrypted && { devices: this._memberDevices(c, r.user_id) }),
@@ -971,7 +998,7 @@ export class Store {
   /** Live stories from this user and their peers, grouped by author, own first. */
   storyFeed(userId) {
     const rows = this.all(
-      `SELECT s.*, u.name, u.avatar FROM stories s JOIN users u ON u.id = s.user_id
+      `SELECT s.*, u.name, u.avatar, u.avatar_file FROM stories s JOIN users u ON u.id = s.user_id
        WHERE s.expires_at > ? AND (s.user_id = ? OR s.user_id IN (
          SELECT m2.user_id FROM members m1 JOIN members m2 ON m2.conversation_id = m1.conversation_id WHERE m1.user_id = ?))
        ORDER BY s.created_at`,
@@ -979,7 +1006,7 @@ export class Store {
     );
     const groups = new Map();
     for (const r of rows) {
-      if (!groups.has(r.user_id)) groups.set(r.user_id, { user: { id: r.user_id, name: r.name, avatar: r.avatar }, stories: [] });
+      if (!groups.has(r.user_id)) groups.set(r.user_id, { user: { id: r.user_id, name: r.name, avatar: avatarOf(r.avatar_file, r.avatar) }, stories: [] });
       groups.get(r.user_id).stories.push(this._storyOut(r, userId));
     }
     return [...groups.values()].sort((a, b) => (b.user.id === userId) - (a.user.id === userId));

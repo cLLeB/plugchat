@@ -41,6 +41,7 @@ export class PlugChat {
     this._convs = new Map();
     this._keys = new Map(); // "conversationId:epoch" -> Promise<{ epoch, raw, key } | null>
     this._sharing = new Set();
+    this._pictures = new Map(); // "pc:<id>" -> Promise<object URL>
     this._closed = false;
     this._retry = 0;
   }
@@ -187,6 +188,15 @@ export class PlugChat {
         this._convs.delete(event.conversationId);
         for (const slot of this._keys.keys()) if (slot.startsWith(event.conversationId + ':')) this._keys.delete(slot);
         return this._emit('conversation.removed', event);
+      case 'user.updated': {
+        // Someone changed their name, picture or about line: refresh it wherever they appear.
+        for (const conv of this._convs.values()) {
+          const member = conv.members.find((m) => m.userId === event.user.id);
+          if (member) Object.assign(member, { name: event.user.name, avatar: event.user.avatar });
+        }
+        if (event.user.id === this.me?.id) Object.assign(this.me, event.user);
+        return this._emit('user.updated', event.user);
+      }
       case 'presence':
         if (event.online) this.online.add(event.userId);
         else this.online.delete(event.userId);
@@ -462,6 +472,51 @@ export class PlugChat {
   user(id) {
     return this._req('GET', `/users/${encodeURIComponent(id)}`);
   }
+  // ---- profile ----
+
+  async _putPicture(path, blob) {
+    return this._req('PUT', path, { body: await blob.arrayBuffer(), headers: { 'content-type': blob.type || 'application/octet-stream' } });
+  }
+
+  /** Set your profile picture (a PNG, JPEG, WebP or GIF up to 600 KB; shrink it first). */
+  async setAvatar(blob) {
+    return (this.me = { ...this.me, ...(await this._putPicture('/me/avatar', blob)) });
+  }
+  async removeAvatar() {
+    return (this.me = { ...this.me, ...(await this._req('DELETE', '/me/avatar')) });
+  }
+  /** The short line under your name. */
+  async setAbout(about) {
+    return (this.me = { ...this.me, ...(await this._req('PUT', '/me/profile', { json: { about } })) });
+  }
+  async setGroupAvatar(conversationId, blob) {
+    return this._hydrateConversation(await this._putPicture(`/conversations/${conversationId}/avatar`, blob));
+  }
+  async removeGroupAvatar(conversationId) {
+    return this._hydrateConversation(await this._req('DELETE', `/conversations/${conversationId}/avatar`));
+  }
+
+  /**
+   * Turn an `avatar` value into something an <img> can show. Pictures uploaded
+   * to PlugChat come as "pc:<id>" and are fetched with the user's token;
+   * anything else is already a URL. Resolves with null when there is none.
+   */
+  avatarUrl(avatar) {
+    if (!avatar) return Promise.resolve(null);
+    if (!avatar.startsWith('pc:')) return Promise.resolve(/^https?:\/\//.test(avatar) ? avatar : null);
+    let url = this._pictures.get(avatar);
+    if (!url) {
+      url = fetch(`${this.url}/v1/avatars/${avatar.slice(3)}`, { headers: { authorization: `Bearer ${this._token}` } })
+        .then(async (res) => {
+          if (!res.ok) throw new Error('picture unavailable');
+          return URL.createObjectURL(new Blob([await res.arrayBuffer()], { type: res.headers.get('x-picture-type') ?? 'image/jpeg' }));
+        })
+        .catch(() => (this._pictures.delete(avatar), null));
+      this._pictures.set(avatar, url);
+    }
+    return url;
+  }
+
   /** Exact lookup by email, phone, username or any custom handle kind the host uses. */
   findUser(handle, kind) {
     const p = new URLSearchParams({ handle });

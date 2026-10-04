@@ -1033,6 +1033,57 @@ test('link previews come only from the host hook, are cached, and are off withou
   }
 });
 
+test('profile pictures: people and groups, real images only, letters as the fallback', async () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4, 5, 6, 7, 8]);
+  const ana = await client('pic-ana', 'Ana');
+  const ben = await client('pic-ben', 'Ben');
+  const group = await ana.createGroup({ title: 'Picnic', memberIds: ['pic-ben'] });
+  assert.equal(ana.me.avatar, null);
+  assert.equal(group.avatar, null, 'no picture yet: clients fall back to initials');
+
+  const told = next(ben, 'user.updated', (u) => u.id === 'pic-ana');
+  await ana.setAvatar(new Blob([PNG], { type: 'image/png' }));
+  assert.match(ana.me.avatar, /^pc:[0-9a-f-]{36}$/);
+  assert.equal((await told).avatar, ana.me.avatar, 'the people who know her are told');
+  assert.equal(ben._convs.get(group.id).members.find((m) => m.userId === 'pic-ana').avatar, ana.me.avatar);
+
+  const shown = await fetch(await ben.avatarUrl(ana.me.avatar));
+  assert.deepEqual(new Uint8Array(await shown.arrayBuffer()), PNG);
+  assert.equal(shown.headers.get('content-type'), 'image/png');
+
+  // not an image, whatever it claims to be
+  await assert.rejects(ana.setAvatar(new Blob(['<svg onload=alert(1)>'], { type: 'image/png' })), { status: 400 });
+  await assert.rejects(ana.setAvatar(new Blob([new Uint8Array(700 * 1024)], { type: 'image/png' })), { status: 413 });
+
+  // replacing removes the old file; removing falls back to none
+  const first = ana.me.avatar.slice(3);
+  await ana.setAvatar(new Blob([PNG], { type: 'image/png' }));
+  assert.equal(chat.store.getFile(first), null);
+  await ana.removeAvatar();
+  assert.equal(ana.me.avatar, null);
+
+  // a platform-supplied picture is used until the person uploads their own
+  const linked = new PlugChat({ url, getToken: async () => signToken({ sub: 'pic-cal', name: 'Cal', avatar: 'https://cdn.example/cal.jpg' }, SECRET) });
+  clients.push(linked);
+  await linked.connect();
+  assert.equal(linked.me.avatar, 'https://cdn.example/cal.jpg');
+  assert.equal(await linked.avatarUrl(linked.me.avatar), 'https://cdn.example/cal.jpg');
+  await linked.setAvatar(new Blob([PNG], { type: 'image/png' }));
+  assert.match(linked.me.avatar, /^pc:/);
+
+  // groups: admins only
+  await assert.rejects(ben.setGroupAvatar(group.id, new Blob([PNG], { type: 'image/png' })), { status: 403 });
+  const pictured = await ana.setGroupAvatar(group.id, new Blob([PNG], { type: 'image/png' }));
+  const groupPicture = pictured.avatar;
+  assert.match(groupPicture, /^pc:/);
+  assert.equal((await ben.conversation(group.id)).avatar, groupPicture);
+  assert.equal((await api('/files/' + groupPicture.slice(3), { token: signToken({ sub: 'pic-ben' }, SECRET) })).status, 404, 'pictures are not reachable as ordinary files');
+  assert.equal((await ana.removeGroupAvatar(group.id)).avatar, null);
+
+  await ana.setAbout('  Class of 2012  ');
+  assert.equal((await ben.user('pic-ana')).about, 'Class of 2012');
+});
+
 test('platform notices arrive in a read-only inbox', async () => {
   const user = await client('notify-1', 'Nana');
   const arrived = next(user, 'message');
